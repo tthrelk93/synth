@@ -1,0 +1,6 @@
+# Ignore macOS directory
+Builds/MacOSX/
+
+# Ignore other unnecessary files
+.DS_Store
+*.log
