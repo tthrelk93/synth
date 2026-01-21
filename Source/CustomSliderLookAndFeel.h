@@ -15,6 +15,7 @@ class CustomSliderLookAndFeel : public juce::LookAndFeel_V4 {
 public:
     bool isOscWaveformSlider = false;
     juce::String sliderKey = "";
+    bool isActive = false;
     // Override the method for drawing linear sliders
     void drawRotarySlider (juce::Graphics&,
                                int x, int y, int width, int height,

@@ -495,6 +495,30 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     createSliderKnob(outputPhonesVolKnob, "outputPhonesVolKnob", 11, 0, 10, 1.0, "outputPhonesVolKnob", true, outputPhonesVolKnobPos, cellWidth, cellHeight, false);
     
     //createSliderKnob(feedbackKnob, "feedbackKnob", 11, 0, 10, 1.0, "feedbackKnob", true, feedbackKnobPos, cellWidth, cellHeight, false);
+
+    auto configureToggleSlider = [&](WaveformSlider* slider, const juce::String& paramId, bool drivesSmoke) {
+        if (slider == nullptr) {
+            return;
+        }
+        slider->setToggleEnabled(true);
+        const bool isOn = audioProcessor.apvts.getRawParameterValue(paramId)->load() > 0.5f;
+        slider->setToggleActive(isOn);
+        if (drivesSmoke) {
+            smokeComponent.setVisible(isOn);
+        }
+        slider->setToggleCallback([this, paramId, slider, drivesSmoke](bool nextState) {
+            audioProcessor.apvts.getParameter(paramId)->setValueNotifyingHost(nextState ? 1.0f : 0.0f);
+            slider->setToggleActive(nextState);
+            if (drivesSmoke) {
+                smokeComponent.setVisible(nextState);
+            }
+        });
+    };
+
+    configureToggleSlider(osc1WaveFormKnob, "osc1OnOff", false);
+    configureToggleSlider(osc2WaveFormKnob, "osc2OnOff", false);
+    configureToggleSlider(osc3WaveFormKnob, "osc3OnOff", false);
+    configureToggleSlider(noiseVolKnob, "noiseOnOffSwitch", true);
     
     createToggleSwitch(osc1OnOffSwitch, "osc1OnOffSwitch", "osc1OnOff", osc1OnOffPos, true, cellWidth, cellHeight);
     
@@ -504,7 +528,7 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     
     createToggleSwitch(a440hzSwitch, "a440hzSwitch", "a440HzOnOff", a440OnOffPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(osc3CtrlSwitch, "osc3CtrlSwitch", "a440HzOnOff", osc3CtrlPos, false, cellWidth, cellHeight);
+    createToggleSwitch(osc3CtrlSwitch, "osc3CtrlSwitch", "osc3CtrlMode", osc3CtrlPos, false, cellWidth, cellHeight);
     
     createToggleSwitch(oscModSwitch, "oscModSwitch", "oscModSwitch", oscModSwitchPos, true, cellWidth, cellHeight);
     
@@ -523,6 +547,17 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     createToggleSwitch(decaySwitch, "decaySwitch", "decaySwitch", decaySwitchPos, true, cellWidth, cellHeight);
     
     createToggleSwitch(glideSwitch, "glideSwitch", "glideSwitch", glideSwitchPos, true, cellWidth, cellHeight);
+
+    auto hideToggle = [&](juce::ToggleButton& toggle, juce::Label& label) {
+        toggle.setVisible(false);
+        toggle.setEnabled(false);
+        label.setVisible(false);
+    };
+
+    hideToggle(osc1OnOffSwitch, osc1OnOffSwitchLabel);
+    hideToggle(osc2OnOffSwitch, osc2OnOffSwitchLabel);
+    hideToggle(osc3OnOffSwitch, osc3OnOffSwitchLabel);
+    hideToggle(noiseOnOffSwitch, noiseOnOffSwitchLabel);
 
     
     auto* button = buttonMap["overloadButton"];
@@ -607,6 +642,11 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     modWheelSlider.setBounds(pitchWheelSlider.getRight() - 15,ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
     modWheelSlider.addListener(this);
     
+    addAndMakeVisible(signalFlowOverlay);
+    signalFlowOverlay.setBounds(getLocalBounds());
+    signalFlowOverlay.setInterceptsMouseClicks(false, false);
+    signalFlowOverlay.toFront(false);
+    updateSignalFlowOverlayLayout();
     
     startTimerHz(60); // repaint at 60 Hz
     resized();
@@ -768,22 +808,6 @@ MoogMiniAudioProcessorEditor::~MoogMiniAudioProcessorEditor() {
     filterEmphasisKnob->removeListener(this);
     filterCutoffFreqKnob->removeListener(this);
     filterEmphasisKnob->removeListener(this);
-    
-    delete osc1WaveFormKnob;
-    delete osc2WaveFormKnob;
-    delete osc3WaveFormKnob;
-    delete osc1RangeKnob;
-    delete osc2RangeKnob;
-    delete osc3RangeKnob;
-    delete osc2FreqKnob;
-    delete osc3FreqKnob;
-    delete osc1VolKnob;
-    delete osc2VolKnob;
-    delete osc3VolKnob;
-    delete ctrlTuneKnob;
-    delete filterEmphasisKnob;
-    delete filterCutoffFreqKnob;
-    delete filterEmphasisKnob;
     
 }
 
@@ -1110,6 +1134,94 @@ void MoogMiniAudioProcessorEditor::pianoKeyMouseUp() {
     releaseAllKeys();
 }
 
+juce::Point<float> MoogMiniAudioProcessorEditor::getOverlayPointForComponent(juce::Component* component) const {
+    if (component == nullptr) {
+        return {};
+    }
+
+    auto centre = component->getLocalBounds().getCentre();
+    auto localPoint = signalFlowOverlay.getLocalPoint(component, centre);
+    return { static_cast<float>(localPoint.x), static_cast<float>(localPoint.y) };
+}
+
+void MoogMiniAudioProcessorEditor::updateSignalFlowOverlayLayout() {
+    signalFlowOverlay.setBounds(getLocalBounds());
+
+    if (osc1WaveFormKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc1Wave, getOverlayPointForComponent(osc1WaveFormKnob));
+    }
+    if (osc2WaveFormKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc2Wave, getOverlayPointForComponent(osc2WaveFormKnob));
+    }
+    if (osc3WaveFormKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc3Wave, getOverlayPointForComponent(osc3WaveFormKnob));
+    }
+    if (osc1VolKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc1Vol, getOverlayPointForComponent(osc1VolKnob));
+    }
+    if (osc2VolKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc2Vol, getOverlayPointForComponent(osc2VolKnob));
+    }
+    if (osc3VolKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc3Vol, getOverlayPointForComponent(osc3VolKnob));
+    }
+    if (noiseVolKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::NoiseVol, getOverlayPointForComponent(noiseVolKnob));
+    }
+    if (filterCutoffFreqKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Filter, getOverlayPointForComponent(filterCutoffFreqKnob));
+    }
+    if (outputVolKnob) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Output, getOverlayPointForComponent(outputVolKnob));
+    }
+
+    juce::Point<float> mixerSum;
+    int mixerCount = 0;
+    auto addMixerPoint = [&](juce::Component* component) {
+        if (component == nullptr) {
+            return;
+        }
+        mixerSum += getOverlayPointForComponent(component);
+        ++mixerCount;
+    };
+
+    addMixerPoint(osc1VolKnob);
+    addMixerPoint(osc2VolKnob);
+    addMixerPoint(osc3VolKnob);
+    addMixerPoint(noiseVolKnob);
+
+    if (mixerCount > 0) {
+        auto mixerPoint = mixerSum / static_cast<float>(mixerCount);
+
+        juce::Point<float> filterSum;
+        int filterCount = 0;
+        auto addFilterPoint = [&](juce::Component* component) {
+            if (component == nullptr) {
+                return;
+            }
+            filterSum += getOverlayPointForComponent(component);
+            ++filterCount;
+        };
+
+        addFilterPoint(filterCutoffFreqKnob);
+        addFilterPoint(filterEmphasisKnob);
+        addFilterPoint(filterAmtContourKnob);
+        addFilterPoint(filterAttackTimeKnob);
+        addFilterPoint(filterDecayTimeKnob);
+        addFilterPoint(filterSustainKnob);
+
+        if (filterCount > 0) {
+            auto filterCenter = filterSum / static_cast<float>(filterCount);
+            const float blendToFilter = 0.6f;
+            mixerPoint = mixerPoint + (filterCenter - mixerPoint) * blendToFilter;
+        }
+
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Mixer, mixerPoint);
+    }
+
+    signalFlowOverlay.updatePaths();
+}
+
 
 
 
@@ -1120,12 +1232,38 @@ void MoogMiniAudioProcessorEditor::paint(juce::Graphics& g) {
 }
 
 void MoogMiniAudioProcessorEditor::resized() {
-    // Assuming lowerPanel is an instance of CustomPanel or a subclass that has a paint method
-     //  lowerPanel.setBounds(getWidth() / 2 - 200, getHeight() / 2 - 200, 400, 400); // Center the panel
-      // addAndMakeVisible(lowerPanel);
-    
+    customPanel.setBounds(getLocalBounds());
+    updateSignalFlowOverlayLayout();
 }
 
 void MoogMiniAudioProcessorEditor::timerCallback() {
+    if (osc1WaveFormKnob) {
+        osc1WaveFormKnob->setToggleActive(audioProcessor.apvts.getRawParameterValue("osc1OnOff")->load() > 0.5f);
+    }
+    if (osc2WaveFormKnob) {
+        osc2WaveFormKnob->setToggleActive(audioProcessor.apvts.getRawParameterValue("osc2OnOff")->load() > 0.5f);
+    }
+    if (osc3WaveFormKnob) {
+        osc3WaveFormKnob->setToggleActive(audioProcessor.apvts.getRawParameterValue("osc3OnOff")->load() > 0.5f);
+    }
+    const bool noiseOn = audioProcessor.apvts.getRawParameterValue("noiseOnOffSwitch")->load() > 0.5f;
+    if (noiseVolKnob) {
+        noiseVolKnob->setToggleActive(noiseOn);
+    }
+    if (smokeComponent.isVisible() != noiseOn) {
+        smokeComponent.setVisible(noiseOn);
+    }
+
+    auto levels = audioProcessor.getSignalLevels();
+    SignalFlowOverlay::Levels overlayLevels;
+    overlayLevels.osc1 = levels.osc1;
+    overlayLevels.osc2 = levels.osc2;
+    overlayLevels.osc3 = levels.osc3;
+    overlayLevels.noise = levels.noise;
+    overlayLevels.mix = levels.mix;
+    overlayLevels.filter = levels.filter;
+    overlayLevels.output = levels.output;
+    signalFlowOverlay.setLevels(overlayLevels);
+    signalFlowOverlay.advance();
     repaint();
 }

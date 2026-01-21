@@ -19,6 +19,7 @@ WaveformSlider::WaveformSlider(int numDiscretePos, bool useCustomRange, double s
     isTimeKnob = isTime;
     customLookAndFeel.isOscWaveformSlider = isOscWaveform;
     customLookAndFeel.sliderKey = sliderKey;
+    customLookAndFeel.isActive = toggleActive;
     
     setLookAndFeel(&customLookAndFeel);
    
@@ -28,6 +29,7 @@ WaveformSlider::WaveformSlider(int numDiscretePos, bool useCustomRange, bool isO
     customRange = useCustomRange;
     customLookAndFeel.isOscWaveformSlider = isOscWaveform;
     customLookAndFeel.sliderKey = sliderKey;
+    customLookAndFeel.isActive = toggleActive;
     setLookAndFeel(&customLookAndFeel);
 }
 WaveformSlider::WaveformSlider() {}
@@ -97,3 +99,45 @@ double WaveformSlider::snapValue(double attemptedValue, juce::Slider::DragMode d
     }
 }
 
+void WaveformSlider::setToggleEnabled(bool shouldToggle) {
+    toggleEnabled = shouldToggle;
+}
+
+void WaveformSlider::setToggleActive(bool isActive) {
+    if (toggleActive == isActive) {
+        return;
+    }
+    toggleActive = isActive;
+    customLookAndFeel.isActive = toggleActive;
+    repaint();
+}
+
+bool WaveformSlider::isToggleActive() const {
+    return toggleActive;
+}
+
+void WaveformSlider::setToggleCallback(std::function<void(bool)> callback) {
+    toggleCallback = std::move(callback);
+}
+
+void WaveformSlider::mouseDown(const juce::MouseEvent& event) {
+    wasDragged = false;
+    juce::Slider::mouseDown(event);
+}
+
+void WaveformSlider::mouseDrag(const juce::MouseEvent& event) {
+    wasDragged = true;
+    juce::Slider::mouseDrag(event);
+}
+
+void WaveformSlider::mouseUp(const juce::MouseEvent& event) {
+    if (toggleEnabled && !wasDragged) {
+        toggleActive = !toggleActive;
+        customLookAndFeel.isActive = toggleActive;
+        if (toggleCallback) {
+            toggleCallback(toggleActive);
+        }
+        repaint();
+    }
+    juce::Slider::mouseUp(event);
+}

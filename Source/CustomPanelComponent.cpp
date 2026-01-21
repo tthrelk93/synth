@@ -9,8 +9,9 @@
 #include "CustomPanelComponent.h"
 
 CustomPanelComponent::CustomPanelComponent() {
-    juce::File woodgrainFile("/Users/thomasthrelkeld/MiniMoog/Source/woodgrain.jpeg");
-        juce::File blackPanelFile("/Users/thomasthrelkeld/MiniMoog/Source/synthBrooding.png");
+    auto baseDir = juce::File::getCurrentWorkingDirectory();
+    juce::File woodgrainFile = baseDir.getChildFile("Source").getChildFile("woodgrain.jpeg");
+    juce::File blackPanelFile = baseDir.getChildFile("Source").getChildFile("synthBrooding.png");
 
         if (woodgrainFile.existsAsFile()) {
             woodgrainImage = juce::ImageFileFormat::loadFrom(woodgrainFile);

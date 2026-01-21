@@ -81,6 +81,7 @@ private:
     
     EnvelopeGenerator contourEnvelopeGenerator;
     float contourEnvelopeAmount;
+    float lastContourEnvelopeValue = 0.0f;
 
        // New variables for the stages of the filter
        float stage[4]; // Array to hold the state of each filter stage
@@ -93,4 +94,3 @@ private:
 };
 
 #endif // LADDERFILTER_H
-

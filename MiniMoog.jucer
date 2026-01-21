@@ -4,6 +4,78 @@
               addUsingNamespaceToJuceHeader="0" displaySplashScreen="1" jucerFormatVersion="1">
   <MAINGROUP id="WpWEuZ" name="MiniMoog">
     <GROUP id="{BBC64884-50E6-6DCE-66E2-3DC178393C6A}" name="Source">
+      <FILE id="yRruZC" name="BlackBackgroundComponent.cpp" compile="1" resource="0"
+            file="Source/BlackBackgroundComponent.cpp"/>
+      <FILE id="ATjsbo" name="BlackBackgroundComponent.h" compile="0" resource="0"
+            file="Source/BlackBackgroundComponent.h"/>
+      <FILE id="TIWtq0" name="blackPlastic.jpg" compile="0" resource="1"
+            file="Source/blackPlastic.jpg"/>
+      <FILE id="uZmU2L" name="brooding.png" compile="0" resource="1" file="Source/brooding.png"/>
+      <FILE id="jvdz1X" name="CircularBuffer.cpp" compile="1" resource="0"
+            file="Source/CircularBuffer.cpp"/>
+      <FILE id="ehkY0q" name="CircularBuffer.h" compile="0" resource="0"
+            file="Source/CircularBuffer.h"/>
+      <FILE id="nrNAw6" name="CustomPanelComponent.cpp" compile="1" resource="0"
+            file="Source/CustomPanelComponent.cpp"/>
+      <FILE id="FRdUed" name="CustomPanelComponent.h" compile="0" resource="0"
+            file="Source/CustomPanelComponent.h"/>
+      <FILE id="VtRvYX" name="CustomSliderLookAndFeel.cpp" compile="1" resource="0"
+            file="Source/CustomSliderLookAndFeel.cpp"/>
+      <FILE id="NPeOoH" name="CustomSliderLookAndFeel.h" compile="0" resource="0"
+            file="Source/CustomSliderLookAndFeel.h"/>
+      <FILE id="ZkX4q3" name="dalle.png" compile="0" resource="1" file="Source/dalle.png"/>
+      <FILE id="CjmgEd" name="dalleBG.png" compile="0" resource="1" file="Source/dalleBG.png"/>
+      <FILE id="eTDNKt" name="EnvelopeGenerator.cpp" compile="1" resource="0"
+            file="Source/EnvelopeGenerator.cpp"/>
+      <FILE id="RDrhQ0" name="EnvelopeGenerator.h" compile="0" resource="0"
+            file="Source/EnvelopeGenerator.h"/>
+      <FILE id="iwFnZp" name="LadderFilter.cpp" compile="1" resource="0"
+            file="Source/LadderFilter.cpp"/>
+      <FILE id="GkSXju" name="LadderFilter.h" compile="0" resource="0" file="Source/LadderFilter.h"/>
+      <FILE id="Ks7AGR" name="ModWheel.cpp" compile="1" resource="0" file="Source/ModWheel.cpp"/>
+      <FILE id="Xp0sYc" name="ModWheel.h" compile="0" resource="0" file="Source/ModWheel.h"/>
+      <FILE id="BXDYTR" name="ModWheelSlider.cpp" compile="1" resource="0"
+            file="Source/ModWheelSlider.cpp"/>
+      <FILE id="ur2Nea" name="ModWheelSlider.h" compile="0" resource="0"
+            file="Source/ModWheelSlider.h"/>
+      <FILE id="MJXm40" name="Oscillator.cpp" compile="1" resource="0" file="Source/Oscillator.cpp"/>
+      <FILE id="ELQBjp" name="Oscillator.h" compile="0" resource="0" file="Source/Oscillator.h"/>
+      <FILE id="lmDFnn" name="PianoKey.cpp" compile="1" resource="0" file="Source/PianoKey.cpp"/>
+      <FILE id="Nt8ANm" name="PianoKey.h" compile="0" resource="0" file="Source/PianoKey.h"/>
+      <FILE id="w8ibEx" name="PitchWheelLookAndFeel.cpp" compile="1" resource="0"
+            file="Source/PitchWheelLookAndFeel.cpp"/>
+      <FILE id="yuY5aP" name="PitchWheelLookAndFeel.h" compile="0" resource="0"
+            file="Source/PitchWheelLookAndFeel.h"/>
+      <FILE id="Nb7k6J" name="PitchWheelSlider.cpp" compile="1" resource="0"
+            file="Source/PitchWheelSlider.cpp"/>
+      <FILE id="SAzi3s" name="PitchWheelSlider.h" compile="0" resource="0"
+            file="Source/PitchWheelSlider.h"/>
+      <FILE id="s7L70g" name="PresetLibrary.cpp" compile="1" resource="0"
+            file="Source/PresetLibrary.cpp"/>
+      <FILE id="K8TPyb" name="PresetLibrary.h" compile="0" resource="0" file="Source/PresetLibrary.h"/>
+      <FILE id="Y0MrpG" name="SmokeComponent.cpp" compile="1" resource="0"
+            file="Source/SmokeComponent.cpp"/>
+      <FILE id="MRrYyT" name="SmokeComponent.h" compile="0" resource="0"
+            file="Source/SmokeComponent.h"/>
+      <FILE id="W2NBCy" name="synthBack.png" compile="0" resource="1" file="Source/synthBack.png"/>
+      <FILE id="oclHui" name="synthBack2.png" compile="0" resource="1" file="Source/synthBack2.png"/>
+      <FILE id="UFnqpn" name="synthBrooding.png" compile="0" resource="1"
+            file="Source/synthBrooding.png"/>
+      <FILE id="Ukyko4" name="SynthPreset.cpp" compile="1" resource="0" file="Source/SynthPreset.cpp"/>
+      <FILE id="tlH2fx" name="SynthPreset.h" compile="0" resource="0" file="Source/SynthPreset.h"/>
+      <FILE id="xy4Zri" name="VintageLookAndFeel.cpp" compile="1" resource="0"
+            file="Source/VintageLookAndFeel.cpp"/>
+      <FILE id="QFzNm7" name="VintageLookAndFeel.h" compile="0" resource="0"
+            file="Source/VintageLookAndFeel.h"/>
+      <FILE id="SBTtuD" name="WaveformDisplay.cpp" compile="1" resource="0"
+            file="Source/WaveformDisplay.cpp"/>
+      <FILE id="jCPxQi" name="WaveformDisplay.h" compile="0" resource="0"
+            file="Source/WaveformDisplay.h"/>
+      <FILE id="Kktfws" name="WaveformSlider.cpp" compile="1" resource="0"
+            file="Source/WaveformSlider.cpp"/>
+      <FILE id="Wehpew" name="WaveformSlider.h" compile="0" resource="0"
+            file="Source/WaveformSlider.h"/>
+      <FILE id="Wjm7mz" name="woodgrain.jpeg" compile="0" resource="1" file="Source/woodgrain.jpeg"/>
       <FILE id="poCk2M" name="PluginProcessor.cpp" compile="1" resource="0"
             file="Source/PluginProcessor.cpp"/>
       <FILE id="xxUoUk" name="PluginProcessor.h" compile="0" resource="0"
@@ -14,20 +86,22 @@
     </GROUP>
   </MAINGROUP>
   <MODULES>
-    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
     <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
             useGlobalPath="1"/>
-    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
-    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="1"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_dsp" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
   </MODULES>
   <JUCEOPTIONS JUCE_STRICT_REFCOUNTEDPOINTER="1" JUCE_VST3_CAN_REPLACE_VST2="0"/>
   <EXPORTFORMATS>
@@ -37,19 +111,20 @@
         <CONFIGURATION isDebug="0" name="Release" targetName="MiniMoog"/>
       </CONFIGURATIONS>
       <MODULEPATHS>
-        <MODULEPATH id="juce_audio_basics" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_devices" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_formats" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_plugin_client" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_processors" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_audio_utils" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_core" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_data_structures" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_dsp" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_events" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_graphics" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_gui_basics" path="../JUCE/modules"/>
-        <MODULEPATH id="juce_gui_extra" path="../JUCE/modules"/>
+        <MODULEPATH id="juce_audio_basics" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_dsp" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="../../Downloads/JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="../../Downloads/JUCE/modules"/>
       </MODULEPATHS>
     </XCODE_MAC>
   </EXPORTFORMATS>

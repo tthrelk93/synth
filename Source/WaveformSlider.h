@@ -9,6 +9,7 @@
 #define WaveformSlider_h
 
 #include <JuceHeader.h>
+#include <functional>
 #include "CustomSliderLookAndFeel.h"
 
 
@@ -20,12 +21,19 @@ public:
     WaveformSlider(int numDiscretePos, bool useCustomRange, double stepLength, double first, double last, bool isTime, bool isOscWaveform, juce::String sliderKey);
     double loudnessAttackValueToSliderPosition(double value);
     double sliderPositionToLoudnessAttackValue(double position);
+    void setToggleEnabled(bool shouldToggle);
+    void setToggleActive(bool isActive);
+    bool isToggleActive() const;
+    void setToggleCallback(std::function<void(bool)> callback);
     
     virtual ~WaveformSlider();
 
 protected:
     // Override the snapValue method from the juce::Slider class
     double snapValue(double attemptedValue, DragMode dragMode) override;
+    void mouseDown(const juce::MouseEvent& event) override;
+    void mouseDrag(const juce::MouseEvent& event) override;
+    void mouseUp(const juce::MouseEvent& event) override;
     int numDiscretePositions;
     bool customRange;
     double step;
@@ -33,6 +41,11 @@ protected:
     double lastPos;
     bool isTimeKnob;
     CustomSliderLookAndFeel customLookAndFeel;  // Member variable
+
+    bool toggleEnabled = false;
+    bool toggleActive = false;
+    bool wasDragged = false;
+    std::function<void(bool)> toggleCallback;
 };
 
 #endif /* WaveformSlider_h */

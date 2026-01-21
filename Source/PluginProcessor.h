@@ -78,6 +78,18 @@ public:
     const float* getWaveformData() const;
     int getWaveformSize() const;
     CircularBuffer& getCircularBuffer();
+
+    struct SignalLevels {
+        float osc1 = 0.0f;
+        float osc2 = 0.0f;
+        float osc3 = 0.0f;
+        float noise = 0.0f;
+        float mix = 0.0f;
+        float filter = 0.0f;
+        float output = 0.0f;
+    };
+
+    SignalLevels getSignalLevels() const;
     
     void handleNoteOn(int midiChannel, int midiNoteNumber, float velocity);
        void handleNoteOff(int midiChannel, int midiNoteNumber, float velocity);
@@ -95,6 +107,8 @@ private:
     //==============================================================================
 
     int currentNoteNumber;
+    bool noteOffOccurred = false;
+    double timeSinceNoteOff = 0.0; // Time in seconds
     
     
     juce::dsp::Oscillator<float> a440Oscillator;
@@ -122,6 +136,14 @@ private:
     
     CircularBuffer circularBuffer; // The CircularBuffer object
     juce::AudioBuffer<float> a440Buffer;
+
+    std::atomic<float> osc1Level { 0.0f };
+    std::atomic<float> osc2Level { 0.0f };
+    std::atomic<float> osc3Level { 0.0f };
+    std::atomic<float> noiseLevel { 0.0f };
+    std::atomic<float> mixLevel { 0.0f };
+    std::atomic<float> filterLevel { 0.0f };
+    std::atomic<float> outputLevel { 0.0f };
     
     juce::MidiBuffer incomingMidi;
     juce::CriticalSection midiCriticalSection;

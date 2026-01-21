@@ -9,6 +9,7 @@
 #include "PianoKey.h"
 #include "SmokeComponent.h"
 #include "BlackBackgroundComponent.h"
+#include "SignalFlowOverlay.h"
 
 class MoogMiniAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer, public juce::Slider::Listener, public juce::Button::Listener, public PianoKey::Listener {
 public:
@@ -59,34 +60,34 @@ private:
     juce::OwnedArray<juce::ToggleButton> toggles;
     juce::OwnedArray<juce::TextButton> buttons;
     
-    WaveformSlider* ctrlTuneKnob;
-    WaveformSlider* ctrlGlideKnob;
-    WaveformSlider* ctrlModMixKnob;
+    WaveformSlider* ctrlTuneKnob = nullptr;
+    WaveformSlider* ctrlGlideKnob = nullptr;
+    WaveformSlider* ctrlModMixKnob = nullptr;
     juce::ToggleButton oscModSwitch;
     juce::ToggleButton decaySwitch;
     juce::ToggleButton glideSwitch;
 
     
     //Osc bank
-    WaveformSlider* osc1RangeKnob;
-    WaveformSlider* osc1WaveFormKnob;
+    WaveformSlider* osc1RangeKnob = nullptr;
+    WaveformSlider* osc1WaveFormKnob = nullptr;
     
-    WaveformSlider* osc2RangeKnob;
-    WaveformSlider* osc2FreqKnob;
-    WaveformSlider* osc2WaveFormKnob;
+    WaveformSlider* osc2RangeKnob = nullptr;
+    WaveformSlider* osc2FreqKnob = nullptr;
+    WaveformSlider* osc2WaveFormKnob = nullptr;
     
-    WaveformSlider* osc3RangeKnob;
-    WaveformSlider* osc3FreqKnob;
-    WaveformSlider* osc3WaveFormKnob;
+    WaveformSlider* osc3RangeKnob = nullptr;
+    WaveformSlider* osc3FreqKnob = nullptr;
+    WaveformSlider* osc3WaveFormKnob = nullptr;
     
     juce::ToggleButton osc3CtrlSwitch;
     
     //Mixer
-    WaveformSlider* osc1VolKnob;
-    WaveformSlider* osc2VolKnob;
-    WaveformSlider* osc3VolKnob;
+    WaveformSlider* osc1VolKnob = nullptr;
+    WaveformSlider* osc2VolKnob = nullptr;
+    WaveformSlider* osc3VolKnob = nullptr;
     
-    WaveformSlider* feedbackKnob;
+    WaveformSlider* feedbackKnob = nullptr;
     
     juce::ToggleButton osc1OnOffSwitch;
     juce::ToggleButton extInputVolSwitch;
@@ -94,8 +95,8 @@ private:
     juce::ToggleButton noiseOnOffSwitch;
     juce::ToggleButton osc3OnOffSwitch;
     
-    WaveformSlider* extInputVolKnob;
-    WaveformSlider* noiseVolKnob;
+    WaveformSlider* extInputVolKnob = nullptr;
+    WaveformSlider* noiseVolKnob = nullptr;
     
     juce::TextButton overloadButton;
     juce::ToggleButton whitePinkSwitch;
@@ -106,23 +107,23 @@ private:
     
     //Modifiers
     //Filter
-    WaveformSlider* filterCutoffFreqKnob;
-    WaveformSlider* filterEmphasisKnob;
-    WaveformSlider* filterAmtContourKnob;
+    WaveformSlider* filterCutoffFreqKnob = nullptr;
+    WaveformSlider* filterEmphasisKnob = nullptr;
+    WaveformSlider* filterAmtContourKnob = nullptr;
     
-    WaveformSlider* filterAttackTimeKnob;
-    WaveformSlider* filterDecayTimeKnob;
-    WaveformSlider* filterSustainKnob;
+    WaveformSlider* filterAttackTimeKnob = nullptr;
+    WaveformSlider* filterDecayTimeKnob = nullptr;
+    WaveformSlider* filterSustainKnob = nullptr;
     
-    WaveformSlider* loudnessAttackTimeKnob;
-    WaveformSlider* loudnessDecayTimeKnob;
-    WaveformSlider* loudnessSustainLevelKnob;
+    WaveformSlider* loudnessAttackTimeKnob = nullptr;
+    WaveformSlider* loudnessDecayTimeKnob = nullptr;
+    WaveformSlider* loudnessSustainLevelKnob = nullptr;
     
     //Output
-    WaveformSlider* outputVolKnob;
+    WaveformSlider* outputVolKnob = nullptr;
     juce::ToggleButton ouputMainOutputSwitch;
     
-    WaveformSlider* outputPhonesVolKnob;
+    WaveformSlider* outputPhonesVolKnob = nullptr;
     juce::ToggleButton a440hzSwitch;
     
     //juce::Slider modWheelSlider;
@@ -197,8 +198,11 @@ private:
     juce::Point<int> initialKeyPosition;
     int initialKeyIndex;
     SmokeComponent smokeComponent;
+    SignalFlowOverlay signalFlowOverlay;
 
     void createUIComponents();
+    void updateSignalFlowOverlayLayout();
+    juce::Point<float> getOverlayPointForComponent(juce::Component* component) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MoogMiniAudioProcessorEditor)
 };

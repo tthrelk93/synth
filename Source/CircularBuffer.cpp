@@ -7,14 +7,20 @@ CircularBuffer::CircularBuffer(int size)
 }
 
 void CircularBuffer::write(float leftSample, float rightSample) {
-    const std::lock_guard<std::mutex> lock(mutex);
+    const juce::SpinLock::ScopedTryLockType lock(mutex);
+    if (!lock.isLocked()) {
+        return;
+    }
     buffer[writeIndex] = leftSample;
     buffer[(writeIndex + 1) % size] = rightSample;
     writeIndex = (writeIndex + 2) % size; // Increment by 2 for stereo
 }
 
 bool CircularBuffer::read(float* leftOutput, float* rightOutput, int numSamples) {
-    const std::lock_guard<std::mutex> lock(mutex);
+    const juce::SpinLock::ScopedTryLockType lock(mutex);
+    if (!lock.isLocked()) {
+        return false;
+    }
     if (numSamples * 2 > size) return false; // Check for stereo buffer length
     for (int i = 0; i < numSamples; ++i) {
         int index = (readIndex + i * 2) % size;

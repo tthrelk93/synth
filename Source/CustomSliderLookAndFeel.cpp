@@ -20,9 +20,9 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
     juce::Colour backgroundColour ;
     // Set the background color with the interpolated alpha
     if(sliderKey == "noiseVolKnob"){
-        backgroundColour = juce::Colour::fromHSV(0, 0, 0, 0.2); // Black with interpolated alpha
+        backgroundColour = juce::Colour::fromHSV(0.0f, 0.0f, 0.0f, 0.2f); // Black with interpolated alpha
     } else {
-        backgroundColour = juce::Colour::fromHSV(0, 0, 0, sliderPosProportional); // Black with interpolated alpha
+        backgroundColour = juce::Colour::fromHSV(0.0f, 0.0f, 0.0f, sliderPosProportional); // Black with interpolated alpha
     }
     
     // Draw the base circle with the background color
@@ -163,6 +163,15 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
     g.fillPath(trianglePath); // Fill the triangle
    
     
+    const bool shouldHighlight = (isOscWaveformSlider || sliderKey == "noiseVolKnob") && isActive;
+
+    if (shouldHighlight) {
+        g.setColour(juce::Colours::papayawhip.withAlpha(0.45f));
+        g.drawEllipse(centreX - radius - 2.5f, centreY - radius - 2.5f, (radius + 2.5f) * 2.0f, (radius + 2.5f) * 2.0f, 1.2f);
+        g.setColour(juce::Colours::papayawhip.withAlpha(0.25f));
+        g.drawEllipse(centreX - radius - 5.0f, centreY - radius - 5.0f, (radius + 5.0f) * 2.0f, (radius + 5.0f) * 2.0f, 2.0f);
+    }
+
     if (isOscWaveformSlider) {
         float alpha = 0.7;
        
@@ -406,8 +415,6 @@ void CustomSliderLookAndFeel::drawWaveform(juce::Graphics& g, int index, int x, 
 
     g.strokePath(waveform, juce::PathStrokeType(1.8f));
 }
-
-
 
 
 

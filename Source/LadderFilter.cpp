@@ -39,7 +39,7 @@ void LadderFilter::process(float* input, float* output, int numSamples) {
 
     for (int i = 0; i < numSamples; ++i) {
         float envNextSample = envelopeGenerator.getNextSample();
-        float loudnessEnvSample = contourEnvelopeGenerator.getNextSample();
+        float loudnessEnvSample = lastContourEnvelopeValue;
         if (sampleCounter++ >= logIntervalSamples) {
            // juce::Logger::writeToLog("in method LadderFilter::process | Cutoff Frequency (Before Modulation): " + juce::String(cutoffFrequency));
         }
@@ -107,7 +107,8 @@ void LadderFilter::setContourEnvelopeSettings(float attack, float decay, float s
 }
 
 float LadderFilter::getContourEnvelopeValue() {
-    return contourEnvelopeGenerator.getNextSample();
+    lastContourEnvelopeValue = contourEnvelopeGenerator.getNextSample();
+    return lastContourEnvelopeValue;
 }
 
 void LadderFilter::setSampleRate(float newSampleRate) {

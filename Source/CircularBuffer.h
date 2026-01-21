@@ -2,8 +2,8 @@
 #ifndef CIRCULARBUFFER_H
 #define CIRCULARBUFFER_H
 
+#include <JuceHeader.h>
 #include <vector>
-#include <mutex>
 
 class CircularBuffer {
 public:
@@ -16,7 +16,7 @@ private:
     int size;
     int writeIndex;
     int readIndex;
-    std::mutex mutex;
+    juce::SpinLock mutex;
 };
 
 #endif // CIRCULARBUFFER_H
