@@ -20,10 +20,10 @@ public:
     void setSampleRate(float newSampleRate);
 
 private:
-    enum EnvelopeStage { ATTACK, DECAY, SUSTAIN, OFF };
+    enum EnvelopeStage { ATTACK, DECAY, SUSTAIN, RELEASE, OFF };
     EnvelopeStage stage;
     float attackTime, decayTime, sustainLevel;
-    float currentLevel, attackRate, decayRate;
+    float currentLevel, attackRate, decayRate, releaseRate;
     float sampleRate; // Add sample rate to the envelope generator
 
        void updateRates(); // Helper function to update attack and decay rates

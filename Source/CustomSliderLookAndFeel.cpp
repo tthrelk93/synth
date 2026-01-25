@@ -6,6 +6,7 @@
 //
 
 #include <stdio.h>
+#include <cmath>
 #include "CustomSliderLookAndFeel.h"
 
 void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
@@ -14,6 +15,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
                                                float rotaryStartAngle,
                                                float rotaryEndAngle,
                                                juce::Slider& slider) {
+    const auto accentColour = juce::Colour::fromRGB(60, 160, 255);
     auto radius = juce::jmin(width / 2, height / 2) - 4.0f;
     auto centreX = x + width * 0.5f;
     auto centreY = y + height * 0.5f;
@@ -159,27 +161,52 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
                              centreX + (handleDistanceFromCentre - handleLength) * std::cos(handleAngle - juce::MathConstants<float>::pi / 9),
                              centreY + (handleDistanceFromCentre - handleLength) * std::sin(handleAngle - juce::MathConstants<float>::pi / 9));
     
-    g.setColour(juce::Colours::whitesmoke); // Color of the handle
+    g.setColour(juce::Colour::fromRGB(220, 230, 255)); // Color of the handle
     g.fillPath(trianglePath); // Fill the triangle
    
     
-    const bool shouldHighlight = (isOscWaveformSlider || sliderKey == "noiseVolKnob") && isActive;
+    const bool shouldHighlight = (isOscWaveformSlider
+                                  || sliderKey == "noiseVolKnob"
+                                  || sliderKey == "extInputVolKnob")
+        && isActive;
 
     if (shouldHighlight) {
-        g.setColour(juce::Colours::papayawhip.withAlpha(0.45f));
+        g.setColour(accentColour.withAlpha(0.45f));
         g.drawEllipse(centreX - radius - 2.5f, centreY - radius - 2.5f, (radius + 2.5f) * 2.0f, (radius + 2.5f) * 2.0f, 1.2f);
-        g.setColour(juce::Colours::papayawhip.withAlpha(0.25f));
+        g.setColour(accentColour.withAlpha(0.25f));
         g.drawEllipse(centreX - radius - 5.0f, centreY - radius - 5.0f, (radius + 5.0f) * 2.0f, (radius + 5.0f) * 2.0f, 2.0f);
     }
 
     if (isOscWaveformSlider) {
         float alpha = 0.7;
        
-        g.setColour(juce::Colours::papayawhip.withAlpha(alpha)); // Border color
+        g.setColour(accentColour.withAlpha(alpha)); // Border color
         
         g.strokePath(borderPath, juce::PathStrokeType(0.5f)); // Border thickness
-            // Draw waveform in the center based on slider position
-            drawWaveform(g, slider.getValue(), x, y, width, height);
+        // Draw waveform in the center based on slider position
+        int waveformIndex = static_cast<int>(std::round(slider.getValue()));
+        if (sliderKey == "osc1WaveFormKnob" || sliderKey == "osc2WaveFormKnob") {
+            switch (waveformIndex) {
+                case 0: waveformIndex = 0; break; // Triangle
+                case 1: waveformIndex = 1; break; // Sharktooth
+                case 2: waveformIndex = 3; break; // Sawtooth
+                case 3: waveformIndex = 4; break; // Square
+                case 4: waveformIndex = 5; break; // Wide Rectangle
+                case 5: waveformIndex = 6; break; // Narrow Rectangle
+                default: waveformIndex = 0; break;
+            }
+        } else if (sliderKey == "osc3WaveFormKnob") {
+            switch (waveformIndex) {
+                case 0: waveformIndex = 0; break; // Triangle
+                case 1: waveformIndex = 2; break; // Reverse Saw
+                case 2: waveformIndex = 3; break; // Sawtooth
+                case 3: waveformIndex = 4; break; // Square
+                case 4: waveformIndex = 5; break; // Wide Rectangle
+                case 5: waveformIndex = 6; break; // Narrow Rectangle
+                default: waveformIndex = 0; break;
+            }
+        }
+        drawWaveform(g, waveformIndex, x, y, width, height);
     } else {
         float alpha = sliderPosProportional;
         if(sliderKey == "noiseVolKnob"){
@@ -193,7 +220,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
         if(isNegativeKnobVal){
             lineColour = juce::Colours::maroon.withAlpha(alpha); // Border color
         } else {
-            lineColour = juce::Colours::papayawhip.withAlpha(alpha); // Border color
+            lineColour = accentColour.withAlpha(alpha); // Border color
         }
         g.setColour(lineColour); // Border color
         g.strokePath(borderPath, juce::PathStrokeType(0.5f)); // Border thickness
@@ -227,7 +254,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
                 if(isNegativeKnobVal){
                     pieColor = juce::Colours::maroon.withAlpha(alpha); // Border color
                 } else {
-                    pieColor = juce::Colours::papayawhip.withAlpha(alpha); // Border color
+                    pieColor = accentColour.withAlpha(alpha); // Border color
                 }
                 g.setColour(pieColor); // Border color
                 g.strokePath(bladePath, juce::PathStrokeType(0.5f)); // Border thickness
@@ -260,7 +287,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
                 if(isNegativeKnobVal){
                     pieColor = juce::Colours::maroon.withAlpha(alpha); // Border color
                 } else {
-                    pieColor = juce::Colours::papayawhip.withAlpha(alpha); // Border color
+                    pieColor = accentColour.withAlpha(alpha); // Border color
                 }
                 g.setColour(pieColor); // Border color
                 g.strokePath(bladePath, juce::PathStrokeType(0.5f)); // Border thickness
@@ -268,7 +295,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
         }
         
         auto textBounds = juce::Rectangle<float>(x, y, width, height).reduced(10); // Adjust as needed
-        g.setColour(juce::Colours::white); // Text color
+        g.setColour(juce::Colour::fromRGB(210, 220, 245)); // Text color
         auto text = juce::String(slider.getValue(), 2); // 2 decimal places
 
         g.drawText(createTextLabelForSlider(slider.getValue()), textBounds, juce::Justification::centred, false);
@@ -415,9 +442,4 @@ void CustomSliderLookAndFeel::drawWaveform(juce::Graphics& g, int index, int x, 
 
     g.strokePath(waveform, juce::PathStrokeType(1.8f));
 }
-
-
-
-
-
 

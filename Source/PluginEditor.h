@@ -10,6 +10,7 @@
 #include "SmokeComponent.h"
 #include "BlackBackgroundComponent.h"
 #include "SignalFlowOverlay.h"
+#include "PresetManager.h"
 
 class MoogMiniAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer, public juce::Slider::Listener, public juce::Button::Listener, public PianoKey::Listener {
 public:
@@ -24,6 +25,7 @@ public:
     float getEnumSizeLessOne(juce::Slider* slider);
     juce::String getParameterID(juce::Slider* slider);
     float getNormalizedValue(juce::Slider* slider, float enumSizeLessOne);
+    float getSliderValueFromNormalized(juce::Slider* slider, float normalizedValue);
     bool sliderHasChanged(juce::Slider* slider);
     void createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, std::string paramName, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob);
     void createToggleSwitch(juce::ToggleButton& toggleSwitch, std::string toggleKey, std::string paramName, int posArray[], bool isHorizontal, int cellWidth, int cellHeight);
@@ -35,6 +37,13 @@ public:
     void pianoKeyDragged(int noteNumber, const juce::MouseEvent& event) override;
     void releaseAllKeys();
     virtual void pianoKeyMouseUp() override;
+
+    void refreshPresetList();
+    void loadSelectedPreset();
+    void promptSavePreset();
+    int findPresetIndex(const juce::String& name) const;
+    void confirmAndSavePreset(const juce::String& presetName);
+    void savePresetByName(const juce::String& presetName);
     
     double sliderPositionToLoudnessAttackValue(double position);
 
@@ -50,6 +59,7 @@ public:
 
 private:
     MoogMiniAudioProcessor& audioProcessor;
+    PresetManager presetManager;
     juce::Image image;
     juce::ImageComponent imageComponent;
     
@@ -199,10 +209,15 @@ private:
     int initialKeyIndex;
     SmokeComponent smokeComponent;
     SignalFlowOverlay signalFlowOverlay;
+    juce::ComboBox presetComboBox;
+    juce::TextButton savePresetButton;
+    juce::TextButton loadPresetButton;
+    juce::Label presetLabel;
 
     void createUIComponents();
     void updateSignalFlowOverlayLayout();
     juce::Point<float> getOverlayPointForComponent(juce::Component* component) const;
+    juce::Rectangle<float> getOverlayBoundsForComponent(juce::Component* component) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(MoogMiniAudioProcessorEditor)
 };

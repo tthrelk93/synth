@@ -4,11 +4,24 @@
 #include "VintageLookAndFeel.h"
 #include "WaveformSlider.h"
 #include "PianoKey.h"
+#include <cmath>
+#include <limits>
+
+static_assert(SignalFlowOverlay::waveformSize == MoogMiniAudioProcessor::stageBufferSize,
+              "Signal flow overlay buffer size must match processor stage buffer size.");
+
+namespace {
+constexpr int kDesignWidth = 1782;
+constexpr int kDesignHeight = 1000;
+constexpr float kMinScale = 0.5f;
+constexpr float kMaxScale = 1.5f;
+}
 
 //==============================================================================
 MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcessor& p)
 : AudioProcessorEditor (&p)
 , audioProcessor (p)
+, presetManager(p.apvts)
 , osc1WaveformDisplayRaw (audioProcessor.getCircularBuffer(), p, WaveformDisplay::WaveformDisplayKey::Osc1Raw)
 , osc2WaveformDisplayRaw (audioProcessor.getCircularBuffer(), p, WaveformDisplay::WaveformDisplayKey::Osc2Raw)
 , osc3WaveformDisplayRaw (audioProcessor.getCircularBuffer(), p, WaveformDisplay::WaveformDisplayKey::Osc3Raw)
@@ -16,14 +29,20 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
 
 {
     
-    setSize (1782, 1000);
+    setSize (kDesignWidth, kDesignHeight);
+    setResizable(true, true);
+    const int minWidth = juce::roundToInt(kDesignWidth * kMinScale);
+    const int minHeight = juce::roundToInt(kDesignHeight * kMinScale);
+    const int maxWidth = juce::roundToInt(kDesignWidth * kMaxScale);
+    const int maxHeight = juce::roundToInt(kDesignHeight * kMaxScale);
+    setResizeLimits(minWidth, minHeight, maxWidth, maxHeight);
     
-    customPanel.setBounds(0, 0, getWidth(), getHeight());
+    customPanel.setBounds(0, 0, kDesignWidth, kDesignHeight);
     addAndMakeVisible(customPanel);
     
     const int gridWidth = 26;
     const int gridHeight = 7;
-    const int cellWidth = 1782 / gridWidth;
+    const int cellWidth = kDesignWidth / gridWidth;
     const int cellHeight = 700 / gridHeight;
     
     // Set bounds for pitch and mod wheels
@@ -40,6 +59,34 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
 
     // Make sure the editor can intercept mouse clicks and receive mouse drag events
     setInterceptsMouseClicks(true, true);
+
+    presetLabel.setText("Preset", juce::dontSendNotification);
+    presetLabel.setJustificationType(juce::Justification::centredLeft);
+    presetLabel.setColour(juce::Label::textColourId,
+                          juce::Colour::fromRGB(200, 210, 230).withAlpha(0.9f));
+    presetLabel.setBounds(24, 18, 70, 24);
+    addAndMakeVisible(presetLabel);
+
+    presetComboBox.setTextWhenNothingSelected("Select Preset");
+    presetComboBox.setJustificationType(juce::Justification::centredLeft);
+    presetComboBox.setColour(juce::ComboBox::backgroundColourId, juce::Colour::fromRGB(12, 16, 24));
+    presetComboBox.setColour(juce::ComboBox::textColourId, juce::Colour::fromRGB(210, 220, 245));
+    presetComboBox.setColour(juce::ComboBox::outlineColourId, juce::Colour::fromRGB(60, 80, 120).withAlpha(0.6f));
+    presetComboBox.setColour(juce::ComboBox::arrowColourId, juce::Colour::fromRGB(150, 180, 230));
+    presetComboBox.setBounds(96, 16, 200, 28);
+    addAndMakeVisible(presetComboBox);
+
+    savePresetButton.setButtonText("Save");
+    savePresetButton.setBounds(304, 16, 60, 28);
+    savePresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour::fromRGB(20, 28, 44));
+    savePresetButton.setColour(juce::TextButton::textColourOffId, juce::Colour::fromRGB(210, 220, 245));
+    addAndMakeVisible(savePresetButton);
+
+    loadPresetButton.setButtonText("Load");
+    loadPresetButton.setBounds(370, 16, 60, 28);
+    loadPresetButton.setColour(juce::TextButton::buttonColourId, juce::Colour::fromRGB(20, 28, 44));
+    loadPresetButton.setColour(juce::TextButton::textColourOffId, juce::Colour::fromRGB(210, 220, 245));
+    addAndMakeVisible(loadPresetButton);
     
     
     
@@ -440,11 +487,11 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
    
     
     
-    createSliderKnob(osc1WaveFormKnob, "osc1WaveFormKnob", 7, 0, 6, 1, "osc1Waveform", false, osc1WaveformPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc1WaveFormKnob, "osc1WaveFormKnob", 6, 0, 5, 1, "osc1Waveform", false, osc1WaveformPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc2WaveFormKnob, "osc2WaveFormKnob", 7, 0, 6, 1, "osc2Waveform", false, osc2WaveformPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc2WaveFormKnob, "osc2WaveFormKnob", 6, 0, 5, 1, "osc2Waveform", false, osc2WaveformPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc3WaveFormKnob, "osc3WaveFormKnob", 7, 0, 6, 1, "osc3Waveform", false, osc3WaveformPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc3WaveFormKnob, "osc3WaveFormKnob", 6, 0, 5, 1, "osc3Waveform", false, osc3WaveformPos, cellWidth, cellHeight, false);
     
     createSliderKnob(osc1RangeKnob, "osc1RangeKnob", 6, 0, 5, 1, "osc1Range", false, osc1RangePos, cellWidth, cellHeight, false);
     
@@ -519,6 +566,7 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     configureToggleSlider(osc2WaveFormKnob, "osc2OnOff", false);
     configureToggleSlider(osc3WaveFormKnob, "osc3OnOff", false);
     configureToggleSlider(noiseVolKnob, "noiseOnOffSwitch", true);
+    configureToggleSlider(extInputVolKnob, "extInputVolSwitch", false);
     
     createToggleSwitch(osc1OnOffSwitch, "osc1OnOffSwitch", "osc1OnOff", osc1OnOffPos, true, cellWidth, cellHeight);
     
@@ -554,10 +602,169 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
         label.setVisible(false);
     };
 
+    auto hideSlider = [&](WaveformSlider* slider, juce::Label& label) {
+        if (slider == nullptr) {
+            return;
+        }
+        slider->setVisible(false);
+        slider->setEnabled(false);
+        label.setVisible(false);
+    };
+
     hideToggle(osc1OnOffSwitch, osc1OnOffSwitchLabel);
     hideToggle(osc2OnOffSwitch, osc2OnOffSwitchLabel);
     hideToggle(osc3OnOffSwitch, osc3OnOffSwitchLabel);
     hideToggle(noiseOnOffSwitch, noiseOnOffSwitchLabel);
+    hideToggle(extInputVolSwitch, extInputVolSwitchLabel);
+
+    hideSlider(filterCutoffFreqKnob, filterCutoffFreqKnobLabel);
+    hideSlider(filterEmphasisKnob, filterEmphasisKnobLabel);
+    hideSlider(filterAmtContourKnob, filterAmtContourKnobLabel);
+    hideSlider(filterAttackTimeKnob, filterAttackTimeKnobLabel);
+    hideSlider(filterDecayTimeKnob, filterDecayTimeKnobLabel);
+    hideSlider(filterSustainKnob, filterSustainKnobLabel);
+    hideSlider(loudnessAttackTimeKnob, loudnessAttackTimeKnobLabel);
+    hideSlider(loudnessDecayTimeKnob, loudnessDecayTimeKnobLabel);
+    hideSlider(loudnessSustainLevelKnob, loudnessSustainLevelKnobLabel);
+
+    const float rightPanelAnchorX = static_cast<float>(lowerPanel.getRight());
+    const float rightPanelScale = 2.0f / 3.0f;
+    auto compressRightComponent = [&](juce::Component* component) {
+        if (component == nullptr) {
+            return 0;
+        }
+        auto bounds = component->getBounds();
+        if (bounds.getX() <= rightPanelAnchorX) {
+            return 0;
+        }
+        const float offset = static_cast<float>(bounds.getX()) - rightPanelAnchorX;
+        const int newX = juce::roundToInt(rightPanelAnchorX + offset * rightPanelScale);
+        const int deltaX = newX - bounds.getX();
+        component->setBounds(newX, bounds.getY(), bounds.getWidth(), bounds.getHeight());
+        return deltaX;
+    };
+    auto compressRightWithLabel = [&](juce::Component* component, juce::Label& label) {
+        const int deltaX = compressRightComponent(component);
+        if (deltaX != 0 && label.isVisible()) {
+            label.setBounds(label.getX() + deltaX, label.getY(), label.getWidth(), label.getHeight());
+        }
+    };
+
+    compressRightWithLabel(outputVolKnob, outputVolKnobLabel);
+    compressRightWithLabel(outputPhonesVolKnob, outputPhonesVolKnobLabel);
+
+    auto shiftComponentX = [](juce::Component* component, int deltaX) {
+        if (component == nullptr || deltaX == 0) {
+            return;
+        }
+        component->setBounds(component->getX() + deltaX,
+                             component->getY(),
+                             component->getWidth(),
+                             component->getHeight());
+    };
+    auto shiftLabelX = [](juce::Label& label, int deltaX) {
+        if (!label.isVisible() || deltaX == 0) {
+            return;
+        }
+        label.setBounds(label.getX() + deltaX,
+                        label.getY(),
+                        label.getWidth(),
+                        label.getHeight());
+    };
+
+    juce::Rectangle<int> rightPanelBounds;
+    bool hasRightPanelBounds = false;
+    auto addRightBounds = [&](juce::Component* component) {
+        if (component == nullptr) {
+            return;
+        }
+        auto bounds = component->getBounds();
+        if (!hasRightPanelBounds) {
+            rightPanelBounds = bounds;
+            hasRightPanelBounds = true;
+        } else {
+            rightPanelBounds = rightPanelBounds.getUnion(bounds);
+        }
+    };
+
+    addRightBounds(&lowerPanel);
+    addRightBounds(filterCutoffFreqKnob);
+    addRightBounds(filterEmphasisKnob);
+    addRightBounds(filterAmtContourKnob);
+    addRightBounds(filterAttackTimeKnob);
+    addRightBounds(filterDecayTimeKnob);
+    addRightBounds(filterSustainKnob);
+    addRightBounds(loudnessAttackTimeKnob);
+    addRightBounds(loudnessDecayTimeKnob);
+    addRightBounds(loudnessSustainLevelKnob);
+    addRightBounds(outputVolKnob);
+    addRightBounds(outputPhonesVolKnob);
+    addRightBounds(&filterModSwitch);
+    addRightBounds(&keyboardCtrlSwitch1);
+    addRightBounds(&keyboardCtrlSwitch2);
+    addRightBounds(&decaySwitch);
+    addRightBounds(&a440hzSwitch);
+
+    if (hasRightPanelBounds) {
+        const int rightMargin = 30;
+        const int targetRight = getWidth() - rightMargin;
+        const int deltaX = targetRight - rightPanelBounds.getRight();
+        if (deltaX > 0) {
+            shiftComponentX(&lowerPanel, deltaX);
+            shiftComponentX(filterCutoffFreqKnob, deltaX);
+            shiftComponentX(filterEmphasisKnob, deltaX);
+            shiftComponentX(filterAmtContourKnob, deltaX);
+            shiftComponentX(filterAttackTimeKnob, deltaX);
+            shiftComponentX(filterDecayTimeKnob, deltaX);
+            shiftComponentX(filterSustainKnob, deltaX);
+            shiftComponentX(loudnessAttackTimeKnob, deltaX);
+            shiftComponentX(loudnessDecayTimeKnob, deltaX);
+            shiftComponentX(loudnessSustainLevelKnob, deltaX);
+            shiftComponentX(outputVolKnob, deltaX);
+            shiftComponentX(outputPhonesVolKnob, deltaX);
+            shiftComponentX(&filterModSwitch, deltaX);
+            shiftComponentX(&keyboardCtrlSwitch1, deltaX);
+            shiftComponentX(&keyboardCtrlSwitch2, deltaX);
+            shiftComponentX(&decaySwitch, deltaX);
+            shiftComponentX(&a440hzSwitch, deltaX);
+
+            shiftLabelX(filterCutoffFreqKnobLabel, deltaX);
+            shiftLabelX(filterEmphasisKnobLabel, deltaX);
+            shiftLabelX(filterAmtContourKnobLabel, deltaX);
+            shiftLabelX(filterAttackTimeKnobLabel, deltaX);
+            shiftLabelX(filterDecayTimeKnobLabel, deltaX);
+            shiftLabelX(filterSustainKnobLabel, deltaX);
+            shiftLabelX(loudnessAttackTimeKnobLabel, deltaX);
+            shiftLabelX(loudnessDecayTimeKnobLabel, deltaX);
+            shiftLabelX(loudnessSustainLevelKnobLabel, deltaX);
+            shiftLabelX(outputVolKnobLabel, deltaX);
+            shiftLabelX(outputPhonesVolKnobLabel, deltaX);
+        }
+    }
+
+    if (outputVolKnob != nullptr) {
+        auto panelBounds = lowerPanel.getBounds().toFloat();
+        if (!panelBounds.isEmpty()) {
+            auto knobBounds = outputVolKnob->getBounds();
+            const float filterOutX = panelBounds.getRight()
+                + SignalFlowOverlay::filterScopeGap
+                + SignalFlowOverlay::filterScopeWidth * 0.5f;
+            const float knobGap = 12.0f;
+            const float targetLeft = filterOutX + SignalFlowOverlay::filterScopeWidth * 0.5f + knobGap;
+            const float targetCenterY = panelBounds.getCentreY();
+            const int newX = juce::roundToInt(targetLeft);
+            const int newY = juce::roundToInt(targetCenterY - knobBounds.getHeight() * 0.5f);
+            const int deltaX = newX - knobBounds.getX();
+            const int deltaY = newY - knobBounds.getY();
+            outputVolKnob->setBounds(newX, newY, knobBounds.getWidth(), knobBounds.getHeight());
+            if ((deltaX != 0 || deltaY != 0) && outputVolKnobLabel.isVisible()) {
+                outputVolKnobLabel.setBounds(outputVolKnobLabel.getX() + deltaX,
+                                             outputVolKnobLabel.getY() + deltaY,
+                                             outputVolKnobLabel.getWidth(),
+                                             outputVolKnobLabel.getHeight());
+            }
+        }
+    }
 
     
     auto* button = buttonMap["overloadButton"];
@@ -581,12 +788,21 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     osc2WaveformDisplayRaw.setBounds(osc2OnOffSwitch.getX() + osc2OnOffSwitch.getWidth(), osc2OnOffSwitch.getY() - 30, filterCutoffFreqKnob->getX() - osc2OnOffSwitch.getX() - 100, 120);
     osc3WaveformDisplayRaw.setBounds(osc3OnOffSwitch.getX() + osc3OnOffSwitch.getWidth(), osc3OnOffSwitch.getY() - 30, filterCutoffFreqKnob->getX() - osc3OnOffSwitch.getX() - 100, 120);
     combinedWaveformDisplay.setBounds(filterSustainKnob->getX() + filterSustainKnob->getWidth() + 31, filterSustainKnob->getY() - 20, 435, 120);
-    
-    float whiteKeyWidth = 43.6;
-    float blackKeyWidth = whiteKeyWidth / 1.7;
-    int blackKeyHeight = (300 * 0.6)-10; // 60% of the panel height
-    
-    int startX = osc3VolKnob->getX() + osc3VolKnob->getWidth() + 20; // Starting X position for the keys
+    osc1WaveformDisplayRaw.setVisible(false);
+    osc2WaveformDisplayRaw.setVisible(false);
+    osc3WaveformDisplayRaw.setVisible(false);
+    combinedWaveformDisplay.setVisible(false);
+
+    pitchWheelSlider.setBounds(ctrlGlideKnob->getX() + ctrlGlideKnob->getWidth() - 7 , ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
+    pitchWheelSlider.addListener(this);
+
+    modWheelSlider.setBounds(pitchWheelSlider.getRight() - 15,ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
+    modWheelSlider.addListener(this);
+
+    const float whiteKeyWidth = 43.6f;
+    const float blackKeyWidth = whiteKeyWidth / 1.7f;
+    const int blackKeyHeight = static_cast<int>((300 * 0.6f) - 10.0f); // 60% of the panel height
+    const int startX = modWheelSlider.getRight() + 20; // Start right next to the mod wheel sliders
     
     int midiNoteNumber = 53; // MIDI note number for F3
     int whiteKeyIndex = 0; // Index for positioning white keys
@@ -636,17 +852,47 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
         }
         midiNoteNumber++;
     }
-    pitchWheelSlider.setBounds(ctrlGlideKnob->getX() + ctrlGlideKnob->getWidth() - 7 , ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
-    pitchWheelSlider.addListener(this);
-    
-    modWheelSlider.setBounds(pitchWheelSlider.getRight() - 15,ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
-    modWheelSlider.addListener(this);
-    
     addAndMakeVisible(signalFlowOverlay);
     signalFlowOverlay.setBounds(getLocalBounds());
-    signalFlowOverlay.setInterceptsMouseClicks(false, false);
+    signalFlowOverlay.setInterceptsMouseClicks(true, true);
+    {
+        auto setParam = [this](const juce::String& paramId, float value) {
+            if (auto* param = audioProcessor.apvts.getParameter(paramId)) {
+                param->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, value));
+            }
+        };
+        auto setChoiceParam = [setParam](const juce::String& paramId, float value) {
+            const float stepped = std::round(juce::jlimit(0.0f, 1.0f, value) * 10.0f) / 10.0f;
+            setParam(paramId, stepped);
+        };
+
+        SignalFlowOverlay::FilterVizCallbacks callbacks;
+        callbacks.setCutoff = [setParam](float value) { setParam("filterCutoff", value); };
+        callbacks.setResonance = [setChoiceParam](float value) { setChoiceParam("filterEmphasis", value); };
+        callbacks.setContour = [setChoiceParam](float value) { setChoiceParam("filterContour", value); };
+        callbacks.setContourAttack = [setParam](float value) { setParam("loudnessAttackTimeKnob", value); };
+        callbacks.setContourDecay = [setParam](float value) { setParam("loudnessDecayTimeKnob", value); };
+        callbacks.setContourSustain = [setChoiceParam](float value) { setChoiceParam("loudnessSustainLevelKnob", value); };
+        callbacks.setLoudnessAttack = [setParam](float value) { setParam("filterAttackTimeKnob", value); };
+        callbacks.setLoudnessDecay = [setParam](float value) { setParam("filterDecayTimeKnob", value); };
+        callbacks.setLoudnessSustain = [setChoiceParam](float value) { setChoiceParam("filterSustainKnob", value); };
+    signalFlowOverlay.setFilterVizCallbacks(callbacks);
+    }
     signalFlowOverlay.toFront(false);
     updateSignalFlowOverlayLayout();
+
+    savePresetButton.onClick = [this] { promptSavePreset(); };
+    loadPresetButton.onClick = [this] { loadSelectedPreset(); };
+    refreshPresetList();
+    if (audioProcessor.shouldAutoLoadLastPreset()) {
+        const auto lastPreset = presetManager.getLastPresetName();
+        if (lastPreset.isNotEmpty() && presetManager.loadPreset(lastPreset)) {
+            const int presetIndex = findPresetIndex(lastPreset);
+            if (presetIndex >= 0) {
+                presetComboBox.setSelectedItemIndex(presetIndex, juce::dontSendNotification);
+            }
+        }
+    }
     
     startTimerHz(60); // repaint at 60 Hz
     resized();
@@ -654,6 +900,7 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
 
 void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, std::string paramName, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob){
     auto adjustedWidth = cellWidth*0.94;
+    const int oscColumnSpacing = 72;
     bool isOscWaveform = (sliderKey == "osc1WaveFormKnob") || (sliderKey == "osc2WaveFormKnob") || (sliderKey == "osc3WaveFormKnob");
    
     if(useCustomRange){
@@ -669,13 +916,20 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
 
     sliderKnob->setTextBoxStyle(juce::Slider::NoTextBox, false, 100, 20);
     if(sliderKey == "osc1VolKnob" || sliderKey == "osc2VolKnob" || sliderKey == "osc3VolKnob" || sliderKey == "extInputVolKnob" || sliderKey == "noiseVolKnob"){
-        sliderKnob->setBounds(osc1RangeKnob->getX() + osc1RangeKnob->getWidth() + 5, (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
+        int volumeGap = 12;
+        if (sliderKey == "osc1VolKnob" || sliderKey == "osc2VolKnob" || sliderKey == "osc3VolKnob" || sliderKey == "noiseVolKnob" || sliderKey == "extInputVolKnob") {
+            volumeGap = 108;
+        }
+        sliderKnob->setBounds(osc1RangeKnob->getX() + osc1RangeKnob->getWidth() + volumeGap, (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
     } else if( sliderKey == "osc1FreqKnob" || sliderKey == "osc2FreqKnob" || sliderKey == "osc3FreqKnob" || sliderKey == "ctrlTuneKnob" ){
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 10, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
+        const int oscOffset = posArray[1] * oscColumnSpacing;
+        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 10 + oscOffset, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "osc1WaveFormKnob" || sliderKey == "osc2WaveFormKnob" || sliderKey == "osc3WaveFormKnob"){
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 12, (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
+        const int oscOffset = posArray[1] * oscColumnSpacing;
+        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 12 + oscOffset, (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "osc1RangeKnob" || sliderKey == "osc2RangeKnob"  || sliderKey == "osc3RangeKnob"){
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 13, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
+        const int oscOffset = posArray[1] * oscColumnSpacing;
+        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 13 + oscOffset, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "extInputVolKnob" || sliderKey == "feedbackKnob" ){
         sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 30)) + 30) - adjustedWidth, (posArray[0] * cellHeight) + 15 , 40, 40); // Set the bounds of the slider
     } else if(sliderKey == "ctrlModMixKnob"){
@@ -704,7 +958,8 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
     if(label){
         // Set up the label for the knob
         label->setText(labelStringMap[sliderKey], juce::dontSendNotification);
-        label->setColour(juce::Label::textColourId, juce::Colours::whitesmoke.withAlpha(0.85f));
+        const auto labelColour = juce::Colour::fromRGB(200, 210, 230).withAlpha(0.9f);
+        label->setColour(juce::Label::textColourId, labelColour);
         
         // Get the current bounds of the slider knob
         auto sliderBounds = sliderKnob->getBounds();
@@ -727,18 +982,50 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
     auto adjustedWidth = cellWidth*0.94;
     auto* label = labelMap[toggleKey];
     VintageLookAndFeel* vintageLook = new VintageLookAndFeel(isHorizontal);
+    if (toggleKey == "whitePinkSwitch") {
+        vintageLook->setHandleColours(juce::Colours::hotpink.withAlpha(0.9f),
+                                      juce::Colours::whitesmoke.withAlpha(0.9f));
+    }
     vintageLookAndFeels.add(vintageLook); // Take ownership
     toggleSwitch.setLookAndFeel(vintageLook);
     toggleSwitch.addListener(this);
     toggleSwitch.setToggleState(audioProcessor.apvts.getParameterAsValue(paramName).getValue(), juce::dontSendNotification);
     toggleSwitch.setEnabled(true);
     if(isHorizontal){
+        if (toggleKey == "extInputVolSwitch" && extInputVolKnob != nullptr) {
+            auto knobBounds = extInputVolKnob->getBounds();
+            toggleSwitch.setBounds(knobBounds.getRight() + 12, knobBounds.getCentreY() - 15, 60, 30);
+        } else
         if(toggleKey == "osc1OnOffSwitch" || toggleKey == "osc2OnOffSwitch" || toggleKey == "osc3OnOffSwitch" || toggleKey == "noiseOnOffSwitch" || toggleKey == "extInputVolSwitch"){
             toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - 60) - adjustedWidth, (posArray[0] * cellHeight) + 15, 60, 30);
         } else if(toggleKey == "oscModSwitch"){
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 20, (ctrlGlideKnob->getY() + ctrlGlideKnob->getHeight()) + 30, 60, 30);
+            if (ctrlModMixKnob != nullptr) {
+                auto knobBounds = ctrlModMixKnob->getBounds();
+                const int toggleWidth = 60;
+                const int toggleHeight = 30;
+                const int toggleX = knobBounds.getCentreX() - toggleWidth / 2;
+                const int toggleY = knobBounds.getBottom() + 22;
+                toggleSwitch.setBounds(toggleX, toggleY, toggleWidth, toggleHeight);
+            } else {
+                toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 20,
+                                       (ctrlGlideKnob->getY() + ctrlGlideKnob->getHeight()) + 30,
+                                       60,
+                                       30);
+            }
         } else if(toggleKey == "glideSwitch" ){
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 20)) - adjustedWidth) - 20, (ctrlGlideKnob->getY() + ctrlGlideKnob->getHeight()) + 30, 60, 30);
+            if (ctrlGlideKnob != nullptr) {
+                auto knobBounds = ctrlGlideKnob->getBounds();
+                const int toggleWidth = 60;
+                const int toggleHeight = 30;
+                const int toggleX = knobBounds.getCentreX() - toggleWidth / 2;
+                const int toggleY = knobBounds.getBottom() + 22;
+                toggleSwitch.setBounds(toggleX, toggleY, toggleWidth, toggleHeight);
+            } else {
+                toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 20)) - adjustedWidth) - 20,
+                                       (ctrlGlideKnob->getY() + ctrlGlideKnob->getHeight()) + 30,
+                                       60,
+                                       30);
+            }
         } else if(toggleKey == "filterModSwitch" || toggleKey == "keyboardCtrlSwitch1" || toggleKey == "keyboardCtrlSwitch2"){
             toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 400, (posArray[0] * cellHeight) , 60, 30);
         } else if(toggleKey == "decaySwitch" || toggleKey == "a440hzSwitch"){
@@ -749,6 +1036,12 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
     } else {
          if (toggleKey == "osc3CtrlSwitch"){
             toggleSwitch.setBounds((posArray[1] * (adjustedWidth + 30)) - adjustedWidth - 5, (posArray[0] * cellHeight) - 15, 30, 60);
+        } else if (toggleKey == "whitePinkSwitch" && noiseVolKnob != nullptr){
+            auto knobBounds = noiseVolKnob->getBounds();
+            toggleSwitch.setBounds(knobBounds.getX() - 40,
+                                   knobBounds.getCentreY() - 30,
+                                   30,
+                                   60);
         } else if (toggleKey == "whitePinkSwitch"){
             toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 45, (posArray[0] * cellHeight) - 15, 30, 60);
         } else {
@@ -761,7 +1054,8 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
         // Set up the label for the knob
         // Set up the label for the knob
         label->setText(labelStringMap[toggleKey], juce::dontSendNotification);
-        label->setColour(juce::Label::textColourId, juce::Colours::whitesmoke.withAlpha(0.85f));
+        const auto labelColour = juce::Colour::fromRGB(200, 210, 230).withAlpha(0.9f);
+        label->setColour(juce::Label::textColourId, labelColour);
         if (isHorizontal) {
             label->attachToComponent(&toggleSwitch, false);
             // Manually position the label for vertical toggle switch
@@ -844,7 +1138,7 @@ float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, flo
     if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob ) {
         return index / 5.0f;
     } else if (slider == osc1WaveFormKnob || slider == osc2WaveFormKnob || slider == osc3WaveFormKnob) {
-        return index / 6.0f;
+        return index / 5.0f;
     }
     
     else if (slider == osc2FreqKnob || slider == osc3FreqKnob) {
@@ -873,6 +1167,38 @@ float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, flo
         return index;
     }
     // Add other conditions for different sliders...
+}
+
+float MoogMiniAudioProcessorEditor::getSliderValueFromNormalized(juce::Slider* slider, float normalizedValue) {
+    if (slider == nullptr) {
+        return normalizedValue;
+    }
+    float value = normalizedValue;
+    if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob) {
+        value = std::round(normalizedValue * 5.0f);
+    } else if (slider == osc1WaveFormKnob || slider == osc2WaveFormKnob || slider == osc3WaveFormKnob) {
+        value = std::round(normalizedValue * 5.0f);
+    } else if (slider == osc2FreqKnob || slider == osc3FreqKnob) {
+        value = std::round(normalizedValue * 16.0f) - 8.0f;
+    } else if (slider == ctrlTuneKnob) {
+        value = normalizedValue * 5.0f - 2.5f;
+        value = std::round(value * 2.0f) / 2.0f;
+    } else if (slider == filterCutoffFreqKnob || slider == &pitchWheelSlider) {
+        value = normalizedValue * 10.0f - 5.0f;
+    } else if (slider == osc1VolKnob || slider == osc2VolKnob || slider == osc3VolKnob || slider == ctrlTuneKnob
+               || slider == filterEmphasisKnob || slider == filterAmtContourKnob || slider == outputVolKnob
+               || slider == extInputVolKnob || slider == ctrlGlideKnob || slider == ctrlModMixKnob
+               || slider == filterSustainKnob || slider == loudnessSustainLevelKnob || slider == outputPhonesVolKnob
+               || slider == noiseVolKnob || slider == feedbackKnob) {
+        value = std::round(normalizedValue * 10.0f);
+    } else if (slider == filterAttackTimeKnob || slider == filterDecayTimeKnob
+               || slider == loudnessAttackTimeKnob || slider == loudnessDecayTimeKnob) {
+        value = normalizedValue * 10000.0f;
+    }
+
+    const float minValue = static_cast<float>(slider->getMinimum());
+    const float maxValue = static_cast<float>(slider->getMaximum());
+    return juce::jlimit(minValue, maxValue, value);
 }
 
 juce::String MoogMiniAudioProcessorEditor::getParameterID(juce::Slider* slider) {
@@ -979,7 +1305,7 @@ float MoogMiniAudioProcessorEditor::getEnumSizeLessOne(juce::Slider* slider) {
     if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob) {
         return 5.0;
     } else if (slider == osc1WaveFormKnob || slider == osc2WaveFormKnob || slider == osc3WaveFormKnob) {
-        return 7.0;
+        return 5.0;
     }
     
     else if (slider == osc2FreqKnob || slider == osc3FreqKnob) {
@@ -1134,6 +1460,123 @@ void MoogMiniAudioProcessorEditor::pianoKeyMouseUp() {
     releaseAllKeys();
 }
 
+void MoogMiniAudioProcessorEditor::refreshPresetList() {
+    juce::String selectedName;
+    if (presetComboBox.getSelectedId() > 0) {
+        selectedName = presetComboBox.getItemText(presetComboBox.getSelectedItemIndex());
+    }
+
+    presetComboBox.clear();
+    const auto presetNames = presetManager.getPresetNames();
+    int presetId = 1;
+    for (const auto& presetName : presetNames) {
+        presetComboBox.addItem(presetName, presetId++);
+    }
+
+    if (selectedName.isNotEmpty()) {
+        const int presetIndex = findPresetIndex(selectedName);
+        if (presetIndex >= 0) {
+            presetComboBox.setSelectedItemIndex(presetIndex, juce::dontSendNotification);
+        }
+    }
+}
+
+int MoogMiniAudioProcessorEditor::findPresetIndex(const juce::String& name) const {
+    for (int i = 0; i < presetComboBox.getNumItems(); ++i) {
+        if (presetComboBox.getItemText(i) == name) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void MoogMiniAudioProcessorEditor::loadSelectedPreset() {
+    if (presetComboBox.getSelectedId() == 0) {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
+                                               "Load Preset",
+                                               "Select a preset to load.");
+        return;
+    }
+    const auto presetName = presetComboBox.getItemText(presetComboBox.getSelectedItemIndex());
+    if (!presetManager.loadPreset(presetName)) {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                               "Load Preset",
+                                               "Unable to load the selected preset.");
+        return;
+    }
+    const int presetIndex = findPresetIndex(presetName);
+    if (presetIndex >= 0) {
+        presetComboBox.setSelectedItemIndex(presetIndex, juce::dontSendNotification);
+    }
+}
+
+void MoogMiniAudioProcessorEditor::promptSavePreset() {
+    auto* window = new juce::AlertWindow("Save Preset", "Enter a preset name.", juce::AlertWindow::NoIcon);
+    if (presetComboBox.getSelectedId() > 0) {
+        window->addTextEditor("presetName", presetComboBox.getItemText(presetComboBox.getSelectedItemIndex()), "Name");
+    } else {
+        window->addTextEditor("presetName", "", "Name");
+    }
+    window->addButton("Save", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    window->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    juce::Component::SafePointer<MoogMiniAudioProcessorEditor> safeThis(this);
+    window->enterModalState(true,
+                            juce::ModalCallbackFunction::create([safeThis, window](int result) {
+                                std::unique_ptr<juce::AlertWindow> cleanup(window);
+                                if (!safeThis || result != 1) {
+                                    return;
+                                }
+                                const auto presetName = cleanup->getTextEditorContents("presetName");
+                                safeThis->confirmAndSavePreset(presetName);
+                            }),
+                            false);
+}
+
+void MoogMiniAudioProcessorEditor::confirmAndSavePreset(const juce::String& presetName) {
+    const auto trimmedName = presetName.trim();
+    if (trimmedName.isEmpty()) {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                               "Save Preset",
+                                               "Preset name cannot be empty.");
+        return;
+    }
+
+    if (presetManager.presetExists(trimmedName)) {
+        juce::Component::SafePointer<MoogMiniAudioProcessorEditor> safeThis(this);
+        juce::AlertWindow::showOkCancelBox(juce::AlertWindow::WarningIcon,
+                                           "Replace Preset",
+                                           "A preset with this name already exists. Replace it?",
+                                           "Replace",
+                                           "Cancel",
+                                           this,
+                                           juce::ModalCallbackFunction::create([safeThis, trimmedName](int result) {
+                                               if (!safeThis || result != 1) {
+                                                   return;
+                                               }
+                                               safeThis->savePresetByName(trimmedName);
+                                           }));
+        return;
+    }
+
+    savePresetByName(trimmedName);
+}
+
+void MoogMiniAudioProcessorEditor::savePresetByName(const juce::String& presetName) {
+    if (!presetManager.savePreset(presetName)) {
+        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::WarningIcon,
+                                               "Save Preset",
+                                               "Unable to save the preset.");
+        return;
+    }
+
+    refreshPresetList();
+    const int presetIndex = findPresetIndex(presetName);
+    if (presetIndex >= 0) {
+        presetComboBox.setSelectedItemIndex(presetIndex, juce::dontSendNotification);
+    }
+}
+
 juce::Point<float> MoogMiniAudioProcessorEditor::getOverlayPointForComponent(juce::Component* component) const {
     if (component == nullptr) {
         return {};
@@ -1144,45 +1587,81 @@ juce::Point<float> MoogMiniAudioProcessorEditor::getOverlayPointForComponent(juc
     return { static_cast<float>(localPoint.x), static_cast<float>(localPoint.y) };
 }
 
+juce::Rectangle<float> MoogMiniAudioProcessorEditor::getOverlayBoundsForComponent(juce::Component* component) const {
+    if (component == nullptr) {
+        return {};
+    }
+    auto localBounds = component->getLocalBounds().toFloat();
+    return signalFlowOverlay.getLocalArea(component, localBounds);
+}
+
 void MoogMiniAudioProcessorEditor::updateSignalFlowOverlayLayout() {
-    signalFlowOverlay.setBounds(getLocalBounds());
+    const auto designBounds = juce::Rectangle<int>(0, 0, kDesignWidth, kDesignHeight);
+    signalFlowOverlay.setBounds(designBounds);
+    signalFlowOverlay.resetNodes();
 
-    if (osc1WaveFormKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc1Wave, getOverlayPointForComponent(osc1WaveFormKnob));
-    }
-    if (osc2WaveFormKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc2Wave, getOverlayPointForComponent(osc2WaveFormKnob));
-    }
-    if (osc3WaveFormKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc3Wave, getOverlayPointForComponent(osc3WaveFormKnob));
-    }
-    if (osc1VolKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc1Vol, getOverlayPointForComponent(osc1VolKnob));
-    }
-    if (osc2VolKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc2Vol, getOverlayPointForComponent(osc2VolKnob));
-    }
-    if (osc3VolKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Osc3Vol, getOverlayPointForComponent(osc3VolKnob));
-    }
-    if (noiseVolKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::NoiseVol, getOverlayPointForComponent(noiseVolKnob));
-    }
-    if (filterCutoffFreqKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Filter, getOverlayPointForComponent(filterCutoffFreqKnob));
-    }
+    auto setNodeForComponent = [&](SignalFlowOverlay::Node node, juce::Component* component) {
+        if (component == nullptr) {
+            return;
+        }
+        if (!component->isVisible()) {
+            return;
+        }
+        signalFlowOverlay.setNodePosition(node, getOverlayPointForComponent(component));
+        signalFlowOverlay.setNodeBounds(node, getOverlayBoundsForComponent(component));
+    };
+
+    setNodeForComponent(SignalFlowOverlay::Node::Osc1Wave, osc1WaveFormKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc1Tune, ctrlTuneKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc1Range, osc1RangeKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc2Wave, osc2WaveFormKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc2Freq, osc2FreqKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc2Range, osc2RangeKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc3Wave, osc3WaveFormKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc3Freq, osc3FreqKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc3Range, osc3RangeKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc1Vol, osc1VolKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc2Vol, osc2VolKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::Osc3Vol, osc3VolKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::NoiseVol, noiseVolKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::ModMix, ctrlModMixKnob);
+    setNodeForComponent(SignalFlowOverlay::Node::FilterCutoff, filterCutoffFreqKnob);
+
     if (outputVolKnob) {
-        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Output, getOverlayPointForComponent(outputVolKnob));
+        auto outputPoint = getOverlayPointForComponent(outputVolKnob);
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Output, outputPoint);
+        signalFlowOverlay.setNodeBounds(SignalFlowOverlay::Node::Output, getOverlayBoundsForComponent(outputVolKnob));
+        auto outputBounds = outputVolKnob->getBounds().toFloat();
+        const float scopeHalfWidth = SignalFlowOverlay::outputScopeWidth * 0.5f;
+        const float knobHalfWidth = outputBounds.getWidth() * 0.5f;
+        const float offset = knobHalfWidth + SignalFlowOverlay::outputScopeGap + scopeHalfWidth;
+        juce::Point<float> outputPost { outputPoint.x + offset, outputPoint.y };
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::OutputPost, outputPost);
     }
 
-    juce::Point<float> mixerSum;
+    juce::Point<float> mixerSum {};
     int mixerCount = 0;
+    float mixerRightEdge = 0.0f;
+    float mixerTopEdge = std::numeric_limits<float>::max();
+    float mixerBottomEdge = std::numeric_limits<float>::lowest();
+    float mixerWidthSum = 0.0f;
+    int mixerWidthCount = 0;
+    juce::Point<float> filterInPoint {};
+    juce::Point<float> filterOutPoint {};
+    bool hasFilterPanel = false;
     auto addMixerPoint = [&](juce::Component* component) {
         if (component == nullptr) {
             return;
         }
-        mixerSum += getOverlayPointForComponent(component);
+        auto center = getOverlayPointForComponent(component);
+        mixerSum += center;
         ++mixerCount;
+        auto bounds = getOverlayBoundsForComponent(component);
+        mixerRightEdge = std::max(mixerRightEdge, bounds.getRight());
+        mixerTopEdge = std::min(mixerTopEdge, bounds.getY());
+        mixerBottomEdge = std::max(mixerBottomEdge, bounds.getBottom());
+        mixerWidthSum += bounds.getWidth();
+        ++mixerWidthCount;
     };
 
     addMixerPoint(osc1VolKnob);
@@ -1192,31 +1671,132 @@ void MoogMiniAudioProcessorEditor::updateSignalFlowOverlayLayout() {
 
     if (mixerCount > 0) {
         auto mixerPoint = mixerSum / static_cast<float>(mixerCount);
+        const float averageWidth = mixerWidthCount > 0 ? mixerWidthSum / static_cast<float>(mixerWidthCount) : 0.0f;
+        const float mixerOffset = juce::jlimit(32.0f, 90.0f, averageWidth * 0.75f);
+        mixerPoint.x = mixerRightEdge + mixerOffset;
+        if (mixerTopEdge > mixerBottomEdge) {
+            mixerTopEdge = mixerPoint.y - 20.0f;
+            mixerBottomEdge = mixerPoint.y + 20.0f;
+        }
 
-        juce::Point<float> filterSum;
-        int filterCount = 0;
-        auto addFilterPoint = [&](juce::Component* component) {
+        juce::Point<float> oscTargetSum {};
+        int oscTargetCount = 0;
+        auto addOscTarget = [&](juce::Component* component) {
             if (component == nullptr) {
                 return;
             }
-            filterSum += getOverlayPointForComponent(component);
-            ++filterCount;
+            oscTargetSum += getOverlayPointForComponent(component);
+            ++oscTargetCount;
         };
 
-        addFilterPoint(filterCutoffFreqKnob);
-        addFilterPoint(filterEmphasisKnob);
-        addFilterPoint(filterAmtContourKnob);
-        addFilterPoint(filterAttackTimeKnob);
-        addFilterPoint(filterDecayTimeKnob);
-        addFilterPoint(filterSustainKnob);
+        addOscTarget(osc1WaveFormKnob);
+        addOscTarget(osc2WaveFormKnob);
+        addOscTarget(osc3WaveFormKnob);
+        if (oscTargetCount > 0) {
+            signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::ModOscTarget,
+                                              oscTargetSum / static_cast<float>(oscTargetCount));
+        }
 
-        if (filterCount > 0) {
-            auto filterCenter = filterSum / static_cast<float>(filterCount);
-            const float blendToFilter = 0.6f;
-            mixerPoint = mixerPoint + (filterCenter - mixerPoint) * blendToFilter;
+        auto panelBounds = lowerPanel.getBounds().toFloat();
+        if (!panelBounds.isEmpty()) {
+            const float scopeHalfWidth = SignalFlowOverlay::filterScopeWidth * 0.5f;
+            const float scopeGap = SignalFlowOverlay::filterScopeGap;
+            const float centeredScopeX = designBounds.getCentreX();
+            filterInPoint = juce::Point<float>(centeredScopeX,
+                                               panelBounds.getCentreY());
+            hasFilterPanel = true;
+            filterOutPoint = juce::Point<float>(panelBounds.getRight() + scopeGap + scopeHalfWidth,
+                                                panelBounds.getCentreY());
+            auto filterCorePoint = panelBounds.getCentre();
+            signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::FilterIn, filterInPoint);
+            signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::FilterOut, filterOutPoint);
+            signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::FilterCore, filterCorePoint);
+            signalFlowOverlay.setNodeBounds(SignalFlowOverlay::Node::FilterIn,
+                                            { filterInPoint.x - scopeHalfWidth,
+                                              filterInPoint.y - SignalFlowOverlay::filterScopeHeight * 0.5f,
+                                              SignalFlowOverlay::filterScopeWidth,
+                                              SignalFlowOverlay::filterScopeHeight });
+            signalFlowOverlay.setNodeBounds(SignalFlowOverlay::Node::FilterCore,
+                                            { filterCorePoint.x - 6.0f, filterCorePoint.y - 6.0f, 12.0f, 12.0f });
+            if (outputVolKnob) {
+                auto outputPoint = getOverlayPointForComponent(outputVolKnob);
+                auto vcaPoint = filterOutPoint + (outputPoint - filterOutPoint) * 0.35f;
+                signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::LoudnessVCA, vcaPoint);
+                signalFlowOverlay.setNodeBounds(SignalFlowOverlay::Node::LoudnessVCA,
+                                                { vcaPoint.x - 6.0f, vcaPoint.y - 6.0f, 12.0f, 12.0f });
+            }
+        }
+
+        if (hasFilterPanel) {
+            const float scopeHalfWidth = SignalFlowOverlay::filterScopeWidth * 0.5f;
+            mixerPoint = { filterInPoint.x - scopeHalfWidth, filterInPoint.y };
+            mixerTopEdge = mixerPoint.y - 0.25f;
+            mixerBottomEdge = mixerPoint.y + 0.25f;
         }
 
         signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::Mixer, mixerPoint);
+        const float mixerWidth = hasFilterPanel ? 0.5f : 8.0f;
+        signalFlowOverlay.setNodeBounds(SignalFlowOverlay::Node::Mixer,
+                                        { mixerPoint.x - mixerWidth * 0.5f,
+                                          mixerTopEdge,
+                                          mixerWidth,
+                                          mixerBottomEdge - mixerTopEdge });
+    }
+
+    juce::Rectangle<float> filterVizBounds;
+    bool hasFilterVizBounds = false;
+    {
+        const float height = 150.0f;
+        if (hasFilterPanel && outputVolKnob != nullptr) {
+            const float scopeHalfWidth = SignalFlowOverlay::filterScopeWidth * 0.5f;
+            const float left = filterInPoint.x + scopeHalfWidth + 8.0f;
+            const float right = filterInPoint.x + (filterOutPoint.x - filterInPoint.x) - scopeHalfWidth - 8.0f;
+            const float top = filterInPoint.y - height * 0.5f;
+            if (right > left + 40.0f) {
+                filterVizBounds = { left, top, right - left, height };
+                hasFilterVizBounds = true;
+            }
+        }
+    }
+    signalFlowOverlay.setFilterVizBounds(hasFilterVizBounds ? filterVizBounds : juce::Rectangle<float>{});
+    if (hasFilterVizBounds) {
+        signalFlowOverlay.setNodePosition(SignalFlowOverlay::Node::FilterIn, filterVizBounds.getCentre());
+        signalFlowOverlay.setNodeBounds(SignalFlowOverlay::Node::FilterIn, filterVizBounds);
+
+        const int toggleWidth = 60;
+        const int toggleHeight = 30;
+        const int spacing = 12;
+        auto placeToggleWithLabel = [&](juce::ToggleButton& toggle, juce::Label& label, int x, int y) {
+            toggle.setBounds(x, y, toggleWidth, toggleHeight);
+            if (label.isVisible()) {
+                const int labelWidth = 200;
+                const int labelHeight = 30;
+                const int labelX = x - (labelWidth - toggleWidth) / 2;
+                const int labelY = y - labelHeight + 4;
+                label.setBounds(labelX, labelY, labelWidth, labelHeight);
+            }
+        };
+
+        const int topRowX = static_cast<int>(filterVizBounds.getX()) + 12;
+        const int topRowY = static_cast<int>(filterVizBounds.getY()) - toggleHeight - 14;
+        placeToggleWithLabel(filterModSwitch, filterModSwitchLabel, topRowX, topRowY);
+        placeToggleWithLabel(keyboardCtrlSwitch1,
+                             keyboardCtrlSwitch1Label,
+                             topRowX + toggleWidth + spacing,
+                             topRowY);
+        placeToggleWithLabel(keyboardCtrlSwitch2,
+                             keyboardCtrlSwitch2Label,
+                             topRowX + (toggleWidth + spacing) * 2,
+                             topRowY);
+
+        const int bottomRowX = static_cast<int>(filterVizBounds.getRight())
+            - (toggleWidth * 2 + spacing) - 12;
+        const int bottomRowY = static_cast<int>(filterVizBounds.getBottom()) + 22;
+        placeToggleWithLabel(decaySwitch, decaySwitchLabel, bottomRowX, bottomRowY);
+        placeToggleWithLabel(a440hzSwitch,
+                             a440hzSwitchLabel,
+                             bottomRowX + toggleWidth + spacing,
+                             bottomRowY);
     }
 
     signalFlowOverlay.updatePaths();
@@ -1232,30 +1812,132 @@ void MoogMiniAudioProcessorEditor::paint(juce::Graphics& g) {
 }
 
 void MoogMiniAudioProcessorEditor::resized() {
-    customPanel.setBounds(getLocalBounds());
+    const auto designBounds = juce::Rectangle<int>(0, 0, kDesignWidth, kDesignHeight);
+    customPanel.setBounds(designBounds);
     updateSignalFlowOverlayLayout();
+    const float scale = juce::jmin(getWidth() / static_cast<float>(kDesignWidth),
+                                   getHeight() / static_cast<float>(kDesignHeight));
+    const float scaledWidth = kDesignWidth * scale;
+    const float scaledHeight = kDesignHeight * scale;
+    const float offsetX = (getWidth() - scaledWidth) * 0.5f;
+    const float offsetY = (getHeight() - scaledHeight) * 0.5f;
+    const auto transform = juce::AffineTransform::scale(scale).translated(offsetX, offsetY);
+    for (auto* child : getChildren()) {
+        if (dynamic_cast<juce::ResizableCornerComponent*>(child) != nullptr) {
+            continue;
+        }
+        child->setTransform(transform);
+    }
 }
 
 void MoogMiniAudioProcessorEditor::timerCallback() {
+    signalFlowOverlay.setSampleRate(audioProcessor.getSampleRate());
+    auto syncSliderValue = [this](juce::Slider* slider) {
+        if (slider == nullptr || slider->isMouseButtonDown()) {
+            return;
+        }
+        const auto paramId = getParameterID(slider);
+        if (paramId.isEmpty()) {
+            return;
+        }
+        auto* param = audioProcessor.apvts.getParameter(paramId);
+        if (param == nullptr) {
+            return;
+        }
+        const float normalizedValue = param->getValue();
+        const float newValue = getSliderValueFromNormalized(slider, normalizedValue);
+        if (std::abs(static_cast<float>(slider->getValue()) - newValue) > 0.0001f) {
+            slider->setValue(newValue, juce::dontSendNotification);
+        }
+    };
+
+    auto syncToggleState = [this](juce::ToggleButton& toggle, const juce::String& paramId) {
+        auto* paramValue = audioProcessor.apvts.getRawParameterValue(paramId);
+        if (paramValue == nullptr || toggle.isMouseButtonDown()) {
+            return;
+        }
+        const bool isOn = paramValue->load() > 0.5f;
+        if (toggle.getToggleState() != isOn) {
+            toggle.setToggleState(isOn, juce::dontSendNotification);
+        }
+    };
+
+    syncSliderValue(&modWheelSlider);
+    syncSliderValue(&pitchWheelSlider);
+    for (auto* slider : waveformSliders) {
+        syncSliderValue(slider);
+    }
+
+    syncToggleState(osc1OnOffSwitch, "osc1OnOff");
+    syncToggleState(osc2OnOffSwitch, "osc2OnOff");
+    syncToggleState(osc3OnOffSwitch, "osc3OnOff");
+    syncToggleState(a440hzSwitch, "a440HzOnOff");
+    syncToggleState(osc3CtrlSwitch, "osc3CtrlMode");
+    syncToggleState(oscModSwitch, "oscModSwitch");
+    syncToggleState(noiseOnOffSwitch, "noiseOnOffSwitch");
+    syncToggleState(extInputVolSwitch, "extInputVolSwitch");
+    syncToggleState(whitePinkSwitch, "whitePinkSwitch");
+    syncToggleState(filterModSwitch, "filterModSwitch");
+    syncToggleState(keyboardCtrlSwitch1, "keyboardCtrlSwitch1");
+    syncToggleState(keyboardCtrlSwitch2, "keyboardCtrlSwitch2");
+    syncToggleState(decaySwitch, "decaySwitch");
+    syncToggleState(glideSwitch, "glideSwitch");
+
+    const bool osc1On = audioProcessor.apvts.getRawParameterValue("osc1OnOff")->load() > 0.5f;
+    const bool osc2On = audioProcessor.apvts.getRawParameterValue("osc2OnOff")->load() > 0.5f;
+    const bool osc3On = audioProcessor.apvts.getRawParameterValue("osc3OnOff")->load() > 0.5f;
     if (osc1WaveFormKnob) {
-        osc1WaveFormKnob->setToggleActive(audioProcessor.apvts.getRawParameterValue("osc1OnOff")->load() > 0.5f);
+        osc1WaveFormKnob->setToggleActive(osc1On);
     }
     if (osc2WaveFormKnob) {
-        osc2WaveFormKnob->setToggleActive(audioProcessor.apvts.getRawParameterValue("osc2OnOff")->load() > 0.5f);
+        osc2WaveFormKnob->setToggleActive(osc2On);
     }
     if (osc3WaveFormKnob) {
-        osc3WaveFormKnob->setToggleActive(audioProcessor.apvts.getRawParameterValue("osc3OnOff")->load() > 0.5f);
+        osc3WaveFormKnob->setToggleActive(osc3On);
     }
     const bool noiseOn = audioProcessor.apvts.getRawParameterValue("noiseOnOffSwitch")->load() > 0.5f;
     if (noiseVolKnob) {
         noiseVolKnob->setToggleActive(noiseOn);
     }
+    const bool extInputOn = audioProcessor.apvts.getRawParameterValue("extInputVolSwitch")->load() > 0.5f;
+    if (extInputVolKnob) {
+        extInputVolKnob->setToggleActive(extInputOn);
+    }
+    const bool isPinkNoise = audioProcessor.apvts.getRawParameterValue("whitePinkSwitch")->load() > 0.5f;
+    if (smokeComponent.getIsPink() != isPinkNoise) {
+        smokeComponent.setIsPink(isPinkNoise);
+    }
     if (smokeComponent.isVisible() != noiseOn) {
         smokeComponent.setVisible(noiseOn);
     }
+    {
+        const float noiseVol = audioProcessor.apvts.getRawParameterValue("noiseVolKnob")->load();
+        const float noiseAlpha = juce::jlimit(0.0f, 1.0f, noiseVol / 10.0f);
+        smokeComponent.setAlpha(noiseOn ? noiseAlpha : 0.0f);
+    }
+
+    MoogMiniAudioProcessor::StageBuffers stageBuffers;
+    audioProcessor.copyStageBuffers(stageBuffers);
+    SignalFlowOverlay::StageWaveforms waveforms;
+    waveforms.osc1Raw = stageBuffers.osc1Raw;
+    waveforms.osc2Raw = stageBuffers.osc2Raw;
+    waveforms.osc3Raw = stageBuffers.osc3Raw;
+    waveforms.osc1 = stageBuffers.osc1;
+    waveforms.osc2 = stageBuffers.osc2;
+    waveforms.osc3 = stageBuffers.osc3;
+    waveforms.noise = stageBuffers.noise;
+    waveforms.mix = stageBuffers.mix;
+    waveforms.filter = stageBuffers.filter;
+    waveforms.output = stageBuffers.output;
+    waveforms.modOsc = stageBuffers.modOsc;
+    waveforms.modFilter = stageBuffers.modFilter;
+    signalFlowOverlay.setStageWaveforms(waveforms);
 
     auto levels = audioProcessor.getSignalLevels();
     SignalFlowOverlay::Levels overlayLevels;
+    overlayLevels.osc1Raw = levels.osc1Raw;
+    overlayLevels.osc2Raw = levels.osc2Raw;
+    overlayLevels.osc3Raw = levels.osc3Raw;
     overlayLevels.osc1 = levels.osc1;
     overlayLevels.osc2 = levels.osc2;
     overlayLevels.osc3 = levels.osc3;
@@ -1263,7 +1945,62 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     overlayLevels.mix = levels.mix;
     overlayLevels.filter = levels.filter;
     overlayLevels.output = levels.output;
+    overlayLevels.modOsc = levels.modOsc;
+    overlayLevels.modFilter = levels.modFilter;
     signalFlowOverlay.setLevels(overlayLevels);
+
+    SignalFlowOverlay::FilterVizState filterViz;
+    filterViz.cutoffHz = audioProcessor.mapFilterCutoffValueToFrequency(
+        audioProcessor.apvts.getRawParameterValue("filterCutoff")->load());
+    filterViz.resonance = audioProcessor.apvts.getRawParameterValue("filterEmphasis")->load() / 10.0f;
+    filterViz.contourAmount = audioProcessor.apvts.getRawParameterValue("filterContour")->load() / 10.0f;
+    filterViz.filterEnvelope = audioProcessor.getFilterEnvelopeValue();
+    filterViz.contourEnvelope = audioProcessor.getContourEnvelopeValue();
+    filterViz.attackMs = audioProcessor.normalizedToMilliseconds(
+        audioProcessor.apvts.getRawParameterValue("loudnessAttackTimeKnob")->load());
+    filterViz.decayMs = audioProcessor.normalizedToMilliseconds(
+        audioProcessor.apvts.getRawParameterValue("loudnessDecayTimeKnob")->load());
+    filterViz.sustainLevel = audioProcessor.apvts.getRawParameterValue("loudnessSustainLevelKnob")->load() / 10.0f;
+    filterViz.contourAttackNorm = audioProcessor.apvts.getRawParameterValue("loudnessAttackTimeKnob")->load();
+    filterViz.contourDecayNorm = audioProcessor.apvts.getRawParameterValue("loudnessDecayTimeKnob")->load();
+    filterViz.contourSustainLevel = audioProcessor.apvts.getRawParameterValue("loudnessSustainLevelKnob")->load() / 10.0f;
+    filterViz.loudnessAttackNorm = audioProcessor.apvts.getRawParameterValue("filterAttackTimeKnob")->load();
+    filterViz.loudnessDecayNorm = audioProcessor.apvts.getRawParameterValue("filterDecayTimeKnob")->load();
+    filterViz.loudnessSustainLevel = audioProcessor.apvts.getRawParameterValue("filterSustainKnob")->load() / 10.0f;
+    const bool keyCtrl1 = audioProcessor.apvts.getRawParameterValue("keyboardCtrlSwitch1")->load() > 0.5f;
+    const bool keyCtrl2 = audioProcessor.apvts.getRawParameterValue("keyboardCtrlSwitch2")->load() > 0.5f;
+    filterViz.keyTracking = (keyCtrl1 ? (1.0f / 3.0f) : 0.0f) + (keyCtrl2 ? (2.0f / 3.0f) : 0.0f);
+    signalFlowOverlay.setFilterVizState(filterViz);
+
+    auto rangeRatio = [](int rangeIndex) {
+        switch (rangeIndex) {
+            case 0: return 1.0f / 256.0f; // LO
+            case 1: return 1.0f / 4.0f;   // 32'
+            case 2: return 1.0f / 2.0f;   // 16'
+            case 3: return 1.0f;          // 8'
+            case 4: return 2.0f;          // 4'
+            case 5: return 4.0f;          // 2'
+            default: return 1.0f;
+        }
+    };
+    auto tuneRatio = [](int tuneIndex) {
+        const float semitoneRatio = std::pow(2.0f, 1.0f / 12.0f);
+        const int offset = tuneIndex - 5; // Zero is index 5
+        return std::pow(semitoneRatio, static_cast<float>(offset));
+    };
+    auto detuneRatio = [](int detuneIndex) {
+        return std::pow(2.0f, static_cast<float>(detuneIndex) / 12.0f);
+    };
+
+    SignalFlowOverlay::OscFrequencyScales scales;
+    scales.osc1Tune = tuneRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("tune")->load()));
+    scales.osc1Range = rangeRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc1Range")->load()));
+    scales.osc2Detune = detuneRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc2Freq")->load()));
+    scales.osc2Range = rangeRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc2Range")->load()));
+    scales.osc3Detune = detuneRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc3Freq")->load()));
+    scales.osc3Range = rangeRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc3Range")->load()));
+    signalFlowOverlay.setOscFrequencyScales(scales);
+
     signalFlowOverlay.advance();
     repaint();
 }

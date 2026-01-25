@@ -69,6 +69,8 @@ public:
     void setEnvelopeSettings(float attack, float decay, float sustain);
     void setContourEnvelopeSettings(float attack, float decay, float sustain);
     float getContourEnvelopeValue();
+    float getEnvelopeValue() const;
+    float getLastContourEnvelopeValue() const;
     float getFeedback();
     void setFeedback(float f);
 private:
@@ -82,6 +84,7 @@ private:
     EnvelopeGenerator contourEnvelopeGenerator;
     float contourEnvelopeAmount;
     float lastContourEnvelopeValue = 0.0f;
+    float lastEnvelopeValue = 0.0f;
 
        // New variables for the stages of the filter
        float stage[4]; // Array to hold the state of each filter stage

@@ -53,6 +53,10 @@
       <FILE id="s7L70g" name="PresetLibrary.cpp" compile="1" resource="0"
             file="Source/PresetLibrary.cpp"/>
       <FILE id="K8TPyb" name="PresetLibrary.h" compile="0" resource="0" file="Source/PresetLibrary.h"/>
+      <FILE id="Ptm9s2" name="PresetManager.cpp" compile="1" resource="0"
+            file="Source/PresetManager.cpp"/>
+      <FILE id="S8o5Kp" name="PresetManager.h" compile="0" resource="0"
+            file="Source/PresetManager.h"/>
       <FILE id="Y0MrpG" name="SmokeComponent.cpp" compile="1" resource="0"
             file="Source/SmokeComponent.cpp"/>
       <FILE id="MRrYyT" name="SmokeComponent.h" compile="0" resource="0"

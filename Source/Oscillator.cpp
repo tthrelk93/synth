@@ -130,11 +130,10 @@ float Oscillator::generateWaveform() {
 }
 
 float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
-
-    bool isLFO = this->range == Oscillator::Range::LO;
+    juce::ignoreUnused(osc3CtrlMode);
 
     // Apply modulation to frequency
-    float baseFrequency = isLFO ? lfoFrequency : calculateFrequencyForRange();
+    float baseFrequency = calculateFrequencyForRange();
     float modulatedFrequency = baseFrequency * (1.0f + modulationEffect); // Adjust frequency based on modulation effect
     float finalFrequency = calculateDetunedFrequency(modulatedFrequency); // Calculate final frequency considering detune
     phaseIncrement = finalFrequency / sampleRate; // Recalculate phase increment
@@ -211,12 +210,6 @@ float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
             break;
         // Add additional cases for other waveforms if necessary
     }
-    if(osc3CtrlMode){
-        // Apply volume control
-        float volumeLevel = static_cast<float>(vol) / static_cast<float>(VolTen); // Normalize volume level
-        sample *= volumeLevel;
-    }
-  
     // Increment phase
     phase += phaseIncrement;
     if (phase >= 1.0f) phase -= 1.0f;
@@ -231,7 +224,7 @@ float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
 void Oscillator::updateIncrement() {
     float baseFrequency = calculateFrequencyForRange(); // Get the base frequency adjusted for range
     float finalFrequency = calculateDetunedFrequency(baseFrequency); // Calculate final frequency considering detune
-    phaseIncrement = (finalFrequency / sampleRate) * 2.0f * juce::MathConstants<float>::pi;
+    phaseIncrement = finalFrequency / sampleRate;
 }
 
 float Oscillator::calculateFrequencyForRange() {
@@ -240,23 +233,22 @@ float Oscillator::calculateFrequencyForRange() {
 
     switch (range) {
         case LO:
-            adjustedFrequency /= 128.0f; // Example reduction factor for LFO range
-             break; // Significantly lower than the main octave range
+            adjustedFrequency /= 256.0f; // Sub-audio range for LFO use
+            break;
         case ThirtyTwo:
-            adjustedFrequency /= 32.0f;
-            break; // Two octaves below the base frequency
+            adjustedFrequency *= 0.25f; // 32' (two octaves below 8')
+            break;
         case Sixteen:
-            adjustedFrequency /= 16.0f;
-            break;  // One octave below the base frequency
+            adjustedFrequency *= 0.5f; // 16' (one octave below 8')
+            break;
         case Eight:
-            adjustedFrequency /= 8.0f;
-            break;  // Base frequency
+            break;  // 8' (base frequency)
         case Four:
-            adjustedFrequency /= 4.0f;
-            break;  // One octave above the base frequency
+            adjustedFrequency *= 2.0f;  // 4' (one octave above 8')
+            break;
         case Two:
-            adjustedFrequency /= 2.0f;  // One octave above the base frequency
-            break; // Two octaves above the base frequency, no change
+            adjustedFrequency *= 4.0f;  // 2' (two octaves above 8')
+            break;
         default:
             break; // Default case, no change
     }
@@ -270,17 +262,17 @@ float Oscillator::calculateTuneForOsc1(float adjustedFrequency){
     const float semitoneRatio = std::pow(2.0f, 1.0f / 12.0f); // Ratio for one semitone change
 
     switch (tune) {
-        case NegTwoHalf: adjustedFrequency *= std::pow(semitoneRatio, -5); break; // Down by 5 semitones
-        case NegTwo:     adjustedFrequency *= std::pow(semitoneRatio, -4); break; // Down by 4 semitones
-        case NegOneHalf: adjustedFrequency *= std::pow(semitoneRatio, -3); break; // Down by 3 semitones
-        case NegOne:     adjustedFrequency *= std::pow(semitoneRatio, -2); break; // Down by 2 semitones
-        case NegHalf:    adjustedFrequency *= std::pow(semitoneRatio, -1); break; // Down by 1 semitone
+        case NegTwoHalf: adjustedFrequency *= std::pow(semitoneRatio, -2.5f); break;
+        case NegTwo:     adjustedFrequency *= std::pow(semitoneRatio, -2.0f); break;
+        case NegOneHalf: adjustedFrequency *= std::pow(semitoneRatio, -1.5f); break;
+        case NegOne:     adjustedFrequency *= std::pow(semitoneRatio, -1.0f); break;
+        case NegHalf:    adjustedFrequency *= std::pow(semitoneRatio, -0.5f); break;
         case Zero:       break; // No change
-        case PosHalf:    adjustedFrequency *= std::pow(semitoneRatio, 1); break;  // Up by 1 semitone
-        case PosOne:     adjustedFrequency *= std::pow(semitoneRatio, 2); break;  // Up by 2 semitones
-        case PosOneHalf: adjustedFrequency *= std::pow(semitoneRatio, 3); break;  // Up by 3 semitones
-        case PosTwo:     adjustedFrequency *= std::pow(semitoneRatio, 4); break;  // Up by 4 semitones
-        case PosTwoHalf: adjustedFrequency *= std::pow(semitoneRatio, 5); break;  // Up by 5 semitones
+        case PosHalf:    adjustedFrequency *= std::pow(semitoneRatio, 0.5f); break;
+        case PosOne:     adjustedFrequency *= std::pow(semitoneRatio, 1.0f); break;
+        case PosOneHalf: adjustedFrequency *= std::pow(semitoneRatio, 1.5f); break;
+        case PosTwo:     adjustedFrequency *= std::pow(semitoneRatio, 2.0f); break;
+        case PosTwoHalf: adjustedFrequency *= std::pow(semitoneRatio, 2.5f); break;
         default:         break;
     }
 
@@ -292,14 +284,11 @@ void Oscillator::setDetuneAmount(Frequency newDetuneAmount) {
     updateIncrement();
 }
 float Oscillator::calculateDetunedFrequency(float modulatedFrequency) {
-    float adjustedFrequency = modulatedFrequency; // Start with the modulated frequency
+    float adjustedFrequency = calculateTuneForOsc1(modulatedFrequency);
 
-    // Apply detune adjustment only if necessary
-    if (this->shouldApplyDetune) {
+    if (shouldApplyDetune) {
         const float detuneStep = 1.0f; // Step size for each detune position
         adjustedFrequency *= std::pow(2.0f, static_cast<float>(detuneAmount) * detuneStep / 12.0f);
-    } else {
-        adjustedFrequency = calculateTuneForOsc1(adjustedFrequency);
     }
 
     return adjustedFrequency;
@@ -308,4 +297,3 @@ float Oscillator::calculateDetunedFrequency(float modulatedFrequency) {
 float Oscillator::getFrequency(){
     return frequency;
 }
-

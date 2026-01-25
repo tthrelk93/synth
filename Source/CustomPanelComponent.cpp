@@ -36,18 +36,24 @@ CustomPanelComponent::CustomPanelComponent() {
 }
 
 void CustomPanelComponent::paint(juce::Graphics& g) {
-    int borderThickness = 15; // Adjust this value to match the desired border thickness
+    auto bounds = getLocalBounds().toFloat();
 
-       // Draw the woodgrain border
-       g.drawImageWithin(woodgrainImage, 0, 0, getWidth(), getHeight(), juce::RectanglePlacement::stretchToFit);
+    const auto topColour = juce::Colour::fromRGB(18, 22, 34);
+    const auto bottomColour = juce::Colour::fromRGB(7, 10, 16);
+    juce::ColourGradient baseGradient(topColour, 0.0f, 0.0f, bottomColour, 0.0f, bounds.getBottom(), false);
+    g.setGradientFill(baseGradient);
+    g.fillRect(bounds);
 
-       // Calculate the area for the black panel with consistent border thickness on all sides
-       juce::Rectangle<int> panelArea = getLocalBounds();
+    auto glossArea = bounds.withHeight(bounds.getHeight() * 0.3f);
+    glossArea.reduce(bounds.getWidth() * 0.03f, 0.0f);
+    juce::ColourGradient glossGradient(juce::Colour::fromRGB(110, 170, 255).withAlpha(0.25f),
+                                       glossArea.getX(), glossArea.getY(),
+                                       juce::Colour::fromRGB(110, 170, 255).withAlpha(0.0f),
+                                       glossArea.getX(), glossArea.getBottom(),
+                                       false);
+    g.setGradientFill(glossGradient);
+    g.fillRoundedRectangle(glossArea, 30.0f);
 
-       // Draw the black panel
-       g.drawImageWithin(blackPanelImage, panelArea.getX(), panelArea.getY(), panelArea.getWidth(), panelArea.getHeight(), juce::RectanglePlacement::fillDestination);
-
-       // Draw the opaque black layer over the black panel
-       g.setColour(juce::Colours::black.withAlpha(0.7f)); // Set the alpha for opacity (change as needed)
-       g.fillRect(panelArea); // Draw over the black panel area
+    g.setColour(juce::Colour::fromRGB(40, 55, 80).withAlpha(0.6f));
+    g.drawRoundedRectangle(bounds.reduced(2.0f), 24.0f, 1.0f);
 }

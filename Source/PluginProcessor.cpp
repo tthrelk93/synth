@@ -13,6 +13,32 @@
 #include "Oscillator.h"
 #include "LadderFilter.h"
 
+namespace {
+Oscillator::Waveform mapOsc1Waveform(int selection) {
+    switch (selection) {
+        case 0: return Oscillator::Triangle;
+        case 1: return Oscillator::Sharktooth; // Triangle/Saw hybrid for Osc 1/2
+        case 2: return Oscillator::Sawtooth;
+        case 3: return Oscillator::Square;
+        case 4: return Oscillator::WideRectangle;
+        case 5: return Oscillator::NarrowRectangle;
+        default: return Oscillator::Triangle;
+    }
+}
+
+Oscillator::Waveform mapOsc3Waveform(int selection) {
+    switch (selection) {
+        case 0: return Oscillator::Triangle;
+        case 1: return Oscillator::ReverseSaw; // Reverse saw only on Osc 3
+        case 2: return Oscillator::Sawtooth;
+        case 3: return Oscillator::Square;
+        case 4: return Oscillator::WideRectangle;
+        case 5: return Oscillator::NarrowRectangle;
+        default: return Oscillator::Triangle;
+    }
+}
+} // namespace
+
 
 //==============================================================================
 MoogMiniAudioProcessor::MoogMiniAudioProcessor()
@@ -63,13 +89,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout MoogMiniAudioProcessor::crea
     
     // Waveform selection parameters for each oscillator
     params.push_back(std::make_unique<juce::AudioParameterChoice>("osc1Waveform", "Oscillator 1 Waveform",
-                                                                  juce::StringArray{"Triangle", "Sharktooth", "ReverseSaw", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
+                                                                  juce::StringArray{"Triangle", "Sharktooth", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
     
     params.push_back(std::make_unique<juce::AudioParameterChoice>("osc2Waveform", "Oscillator 2 Waveform",
-                                                                  juce::StringArray{"Triangle", "Sharktooth", "ReverseSaw", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
+                                                                  juce::StringArray{"Triangle", "Sharktooth", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
     
     params.push_back(std::make_unique<juce::AudioParameterChoice>("osc3Waveform", "Oscillator 3 Waveform",
-                                                                  juce::StringArray{"Triangle", "Sharktooth", "ReverseSaw", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
+                                                                  juce::StringArray{"Triangle", "ReverseSaw", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
     
     params.push_back(std::make_unique<juce::AudioParameterChoice>("osc1Range", "Oscillator 1 Range",
                                                                   juce::StringArray{"LO", "ThirtyTwo", "Sixteen", "Eight", "Four", "Two"}, 2));
@@ -188,6 +214,9 @@ CircularBuffer& MoogMiniAudioProcessor::getCircularBuffer() {
 
 MoogMiniAudioProcessor::SignalLevels MoogMiniAudioProcessor::getSignalLevels() const {
     SignalLevels levels;
+    levels.osc1Raw = osc1RawLevel.load(std::memory_order_relaxed);
+    levels.osc2Raw = osc2RawLevel.load(std::memory_order_relaxed);
+    levels.osc3Raw = osc3RawLevel.load(std::memory_order_relaxed);
     levels.osc1 = osc1Level.load(std::memory_order_relaxed);
     levels.osc2 = osc2Level.load(std::memory_order_relaxed);
     levels.osc3 = osc3Level.load(std::memory_order_relaxed);
@@ -195,7 +224,45 @@ MoogMiniAudioProcessor::SignalLevels MoogMiniAudioProcessor::getSignalLevels() c
     levels.mix = mixLevel.load(std::memory_order_relaxed);
     levels.filter = filterLevel.load(std::memory_order_relaxed);
     levels.output = outputLevel.load(std::memory_order_relaxed);
+    levels.modOsc = modOscLevel.load(std::memory_order_relaxed);
+    levels.modFilter = modFilterLevel.load(std::memory_order_relaxed);
     return levels;
+}
+
+float MoogMiniAudioProcessor::getFilterEnvelopeValue() const {
+    return filterEnvelopeLevel.load(std::memory_order_relaxed);
+}
+
+float MoogMiniAudioProcessor::getContourEnvelopeValue() const {
+    return contourEnvelopeLevel.load(std::memory_order_relaxed);
+}
+
+void MoogMiniAudioProcessor::copyStageBuffers(StageBuffers& dest) const {
+    auto copyRing = [](const std::array<float, stageBufferSize>& source,
+                       std::array<float, stageBufferSize>& target,
+                       int writeIndex) {
+        for (int i = 0; i < stageBufferSize; ++i) {
+            int index = writeIndex + i;
+            if (index >= stageBufferSize) {
+                index -= stageBufferSize;
+            }
+            target[static_cast<size_t>(i)] = source[static_cast<size_t>(index)];
+        }
+    };
+
+    const int writeIndex = stageBufferWriteIndex.load(std::memory_order_acquire);
+    copyRing(stageOsc1RawBuffer, dest.osc1Raw, writeIndex);
+    copyRing(stageOsc2RawBuffer, dest.osc2Raw, writeIndex);
+    copyRing(stageOsc3RawBuffer, dest.osc3Raw, writeIndex);
+    copyRing(stageOsc1Buffer, dest.osc1, writeIndex);
+    copyRing(stageOsc2Buffer, dest.osc2, writeIndex);
+    copyRing(stageOsc3Buffer, dest.osc3, writeIndex);
+    copyRing(stageNoiseBuffer, dest.noise, writeIndex);
+    copyRing(stageMixBuffer, dest.mix, writeIndex);
+    copyRing(stageFilterBuffer, dest.filter, writeIndex);
+    copyRing(stageOutputBuffer, dest.output, writeIndex);
+    copyRing(stageModOscBuffer, dest.modOsc, writeIndex);
+    copyRing(stageModFilterBuffer, dest.modFilter, writeIndex);
 }
 
 const juce::String MoogMiniAudioProcessor::getName() const
@@ -334,6 +401,13 @@ float MoogMiniAudioProcessor::generatePinkNoise() {
     return pink * 0.11f; // Scaling factor for normalizing
 }
 
+float MoogMiniAudioProcessor::generateRedNoise() {
+    const float white = generateWhiteNoise();
+    // Simple leaky integrator for red (Brownian) noise.
+    redNoiseState = juce::jlimit(-1.0f, 1.0f, redNoiseState + (white * 0.02f));
+    return redNoiseState;
+}
+
 float MoogMiniAudioProcessor::normalizedToMilliseconds(float normalizedValue) {
     float milliseconds;
     if(normalizedValue == 0){
@@ -382,6 +456,8 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     bool whitePink = *apvts.getRawParameterValue("whitePinkSwitch");
     bool noiseOnOff = *apvts.getRawParameterValue("noiseOnOffSwitch");
     int noiseVolume = *apvts.getRawParameterValue("noiseVolKnob");
+    bool extInputOn = *apvts.getRawParameterValue("extInputVolSwitch");
+    int extInputVolLevel = *apvts.getRawParameterValue("extInputVolKnob");
     
     float filterCutoffValue = mapFilterCutoffValueToFrequency(*apvts.getRawParameterValue("filterCutoff"));
     int filterEmphasisValue = *apvts.getRawParameterValue("filterEmphasis");
@@ -424,27 +500,29 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     ladderFilter.setEnvelopeAmount(static_cast<float>(filterContourValue) / 10.0f); // Assuming range 0-10
     ladderFilter.setSampleRate(getSampleRate());
     ladderFilter.setFeedback(feedbackValue);
-    if(decaySwitchValue){
-        ladderFilter.setEnvelopeSettings(filterAttackTimeMilliseconds, loudnessDecayTimeMilliseconds, filterSustainTimeValue / 10.0f);
-    } else {
-        ladderFilter.setEnvelopeSettings(filterAttackTimeMilliseconds, filterDecayTimeMilliseconds, filterSustainTimeValue / 10.0f);
-    }
-    ladderFilter.setContourEnvelopeSettings(loudnessAttackTimeMilliseconds, loudnessDecayTimeMilliseconds, loudnessSustainTimeValue / 10.0f);
+    const float contourSustainLevel = decaySwitchValue ? (loudnessSustainTimeValue / 10.0f) : 1.0f;
+    const float loudnessSustainLevel = decaySwitchValue ? (filterSustainTimeValue / 10.0f) : 1.0f;
+    // C Attack/Decay/Sustain (contour) drive the filter envelope; Attack/Decay/Sustain drive loudness.
+    ladderFilter.setEnvelopeSettings(loudnessAttackTimeMilliseconds, loudnessDecayTimeMilliseconds, contourSustainLevel);
+    ladderFilter.setContourEnvelopeSettings(filterAttackTimeMilliseconds, filterDecayTimeMilliseconds, loudnessSustainLevel);
     
     
-    osc1.setWaveform(static_cast<Oscillator::Waveform>(waveformSelectionOsc1));
+    osc1.setWaveform(mapOsc1Waveform(waveformSelectionOsc1));
     osc1.setRange(static_cast<Oscillator::Range>(rangeSelectionOsc1));
     osc1.setVolume(static_cast<Oscillator::Volume>(volSelectionOsc1));
-    osc1.setTune(static_cast<Oscillator::Tune>(tuneSelectionOsc1));
+    const auto masterTune = static_cast<Oscillator::Tune>(tuneSelectionOsc1);
+    osc1.setTune(masterTune);
     
-    osc2.setWaveform(static_cast<Oscillator::Waveform>(waveformSelectionOsc2));
+    osc2.setWaveform(mapOsc1Waveform(waveformSelectionOsc2));
     osc2.setRange(static_cast<Oscillator::Range>(rangeSelectionOsc2));
     osc2.setVolume(static_cast<Oscillator::Volume>(volSelectionOsc2));
+    osc2.setTune(masterTune);
     osc2.setDetuneAmount(static_cast<Oscillator::Frequency>(freqSelectionOsc2));
     
-    osc3.setWaveform(static_cast<Oscillator::Waveform>(waveformSelectionOsc3));
+    osc3.setWaveform(mapOsc3Waveform(waveformSelectionOsc3));
     osc3.setRange(static_cast<Oscillator::Range>(rangeSelectionOsc3));
     osc3.setVolume(static_cast<Oscillator::Volume>(volSelectionOsc3));
+    osc3.setTune(masterTune);
     osc3.setDetuneAmount(static_cast<Oscillator::Frequency>(freqSelectionOsc3));
     
     // Conditional logging
@@ -454,12 +532,10 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         logTimer = 0.0f;
     }
     
-    buffer.clear(); // Clear the buffer
-    
-    // Calculate key tracking factor
-    float keyTrackingFactor = 0.0f;
-    if (keyboardCtrlSwitch1Value) keyTrackingFactor += 1.0f / 3.0f;
-    if (keyboardCtrlSwitch2Value) keyTrackingFactor += 2.0f / 3.0f;
+    const float keyTrackingAmount =
+        (keyboardCtrlSwitch1Value ? (1.0f / 3.0f) : 0.0f)
+        + (keyboardCtrlSwitch2Value ? (2.0f / 3.0f) : 0.0f);
+    const float referenceFrequency = juce::MidiMessage::getMidiNoteInHertz(referenceNote);
     
     
     for (const auto midiMessage : midiMessages)
@@ -489,31 +565,9 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                 osc2.start(frequency);
             }
             
-            // Start Oscillator 3 based on the state of the Osc3CtrlSwitch
-            if (osc3CtrlMode) {osc3.start(frequency);}
-            
-            // Calculate pitch difference from the reference note
-            int pitchDifference = currentNoteNumber - referenceNote;
-            
-            // Calculate key tracking factor
-            float keyTrackingFactor = 0.0f;
-            if (keyboardCtrlSwitch1Value) keyTrackingFactor += pitchDifference * 1.0f / 3.0f;
-            if (keyboardCtrlSwitch2Value) keyTrackingFactor += pitchDifference * 2.0f / 3.0f;
-            
-            // Calculate the frequency ratio based on the note played
-            float noteFrequency = juce::MidiMessage::getMidiNoteInHertz(message.getNoteNumber());
-            float referenceFrequency = juce::MidiMessage::getMidiNoteInHertz(referenceNote);
-            float frequencyRatio = noteFrequency / referenceFrequency;
-            
-            // Apply logarithmic key tracking adjustment
-            float keyTrackingAdjustment = log(frequencyRatio) / log(2.0f) * 12.0f * keyTrackingFactor; // 12 semitones per octave
-            
-            // Scale the adjustment to create a more noticeable effect
-            keyTrackingAdjustment *= 75; // Adjust this scaling factor as needed
-            
-            // Apply the key tracking adjustment to the filter's cutoff frequency
-            float modifiedCutoffFreq = filterCutoffValue + keyTrackingAdjustment;
-            ladderFilter.setCutoffFrequency(modifiedCutoffFreq);
+            if (osc3OnOff && osc3CtrlMode) {
+                osc3.start(frequency);
+            }
             
             ladderFilter.noteOn();
             noteOffOccurred = false;
@@ -527,8 +581,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                 osc1.stop();
                 osc2.stop();
                 
-                // Stop Oscillator 3 based on the state of the Osc3CtrlSwitch
-                if (osc3CtrlMode) {
+                if (osc3OnOff && osc3CtrlMode) {
                     osc3.stop();
                 }
                 currentNoteNumber = -1; // Reset current note number
@@ -559,13 +612,22 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     float osc1Peak = 0.0f;
     float osc2Peak = 0.0f;
     float osc3Peak = 0.0f;
+    float osc1RawPeak = 0.0f;
+    float osc2RawPeak = 0.0f;
+    float osc3RawPeak = 0.0f;
     float noisePeak = 0.0f;
     float mixPeak = 0.0f;
     float filterPeak = 0.0f;
     float outputPeak = 0.0f;
+    float modOscPeak = 0.0f;
+    float modFilterPeak = 0.0f;
     const float volumeScale = 0.1f;
     const float mixScale = 0.1f;
     const float noiseScale = 1.0f / (noiseVolumeScalingFactor * 10.0f);
+
+    int stageWriteIndex = stageBufferWriteIndex.load(std::memory_order_relaxed);
+    const float* inputLeft = totalNumInputChannels > 0 ? buffer.getReadPointer(0) : nullptr;
+    const float* inputRight = totalNumInputChannels > 1 ? buffer.getReadPointer(1) : inputLeft;
 
     for (int sampleIndex = 0; sampleIndex < buffer.getNumSamples(); ++sampleIndex)
     {
@@ -574,43 +636,33 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float osc1Sample = 0.0f;
         float osc2Sample = 0.0f;
         float osc3Sample = 0.0f;
+        float osc1Contribution = 0.0f;
+        float osc2Contribution = 0.0f;
+        float osc3Contribution = 0.0f;
+        float modulationSignal = 0.0f;
+        float modOscSample = 0.0f;
+        float modFilterSample = 0.0f;
         // Generate noise samples
+        const float noiseSource = whitePink ? generatePinkNoise() : generateWhiteNoise();
+        const float modNoiseSource = whitePink ? generateRedNoise() : generatePinkNoise();
         float noiseSampleLeft = 0.0f;
         float noiseSampleRight = 0.0f;
-        // Generate and add noise if the noise switch is on
         if (noiseOnOff) {
-            noiseSampleLeft = (whitePink ? generatePinkNoise() : generateWhiteNoise()) * noiseVolume;
+            noiseSampleLeft = noiseSource * noiseVolume;
             noiseSampleRight = noiseSampleLeft;
-            // Scale down the noise volume
             noiseSampleLeft *= noiseVolumeScalingFactor;
             noiseSampleRight *= noiseVolumeScalingFactor;
-        }
-
-        if (noiseOnOff) {
             noisePeak = juce::jmax(noisePeak, std::abs(noiseSampleLeft) * noiseScale);
         }
-        
-       
-        
-        if (decaySwitchValue && noteOffOccurred) {
-            // Update the time since the note-off event
-            timeSinceNoteOff += 1.0 / getSampleRate();
-            
-            // Calculate the decay effect based on timeSinceNoteOff and DECAY TIME knob
-            float decayEffect = calculateDecayEffect(timeSinceNoteOff, loudnessDecayTimeMilliseconds);
-            
-            // Apply the decay effect to the filter cutoff and volume
-            ladderFilter.setCutoffFrequency(juce::jmax(filterCutoffValue - decayEffect, 30.0f)); // Ensure cutoff doesn't go below a minimum value
-            float volumeAdjustment = juce::jmax(1.0f - decayEffect, 0.0f); // Ensure volume doesn't go negative
-            sampleLeft *= volumeAdjustment;
-            sampleRight *= volumeAdjustment;
+
+        float extInputSample = 0.0f;
+        if (extInputOn && inputLeft != nullptr) {
+            float inL = inputLeft[sampleIndex];
+            float inR = inputRight ? inputRight[sampleIndex] : inL;
+            extInputSample = 0.5f * (inL + inR);
+            extInputSample *= static_cast<float>(extInputVolLevel);
         }
-        
-        float osc3ModulationSignal = 0.0f;
-        if (filterModSwitchValue || oscModSwitchValue) {
-            osc3ModulationSignal = osc3.processNextSample(0.0, osc3CtrlMode); // LFO signal from Osc 3
-        }
-        
+
         if (isGlideActive) {
             // Glide logic
             if (glideRate <= 0.0f) {
@@ -633,107 +685,94 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         // Set frequencies for oscillators
         osc1.setFrequency(effectiveFrequency);
         osc2.setFrequency(effectiveFrequency);
-        osc3.setFrequency(effectiveFrequency);
-        
-        if (oscModSwitchValue && !osc3CtrlMode) {
-            //juce::Logger::writeToLog("here in isLFO and mod");
-            // Apply modulation to oscillators if the modulation switch is on
-            float modulationSignal = (1.0f - modulationMix) * osc3ModulationSignal + modulationMix * ((noiseSampleLeft + noiseSampleRight) * 0.5f);
-            float pitchModulationEffect = modulationSignal * osc3ModulationValue;
+        const float osc3BaseFrequency = osc3CtrlMode ? effectiveFrequency : referenceFrequency;
+        osc3.setFrequency(osc3BaseFrequency);
+
+        float osc3SampleRaw = 0.0f;
+        if (osc3OnOff || filterModSwitchValue || oscModSwitchValue) {
+            osc3SampleRaw = osc3.processNextSample(0.0f, osc3CtrlMode);
+        }
+
+        if (filterModSwitchValue || oscModSwitchValue) {
+            modulationSignal = (1.0f - modulationMix) * osc3SampleRaw
+                + modulationMix * modNoiseSource;
+        }
+
+        float pitchModulationEffect = 0.0f;
+        if (oscModSwitchValue) {
+            pitchModulationEffect = modulationSignal * osc3ModulationValue;
             pitchModulationEffect = juce::jlimit(-0.9f, 0.9f, pitchModulationEffect);
-            
-            // Process Oscillators 1, 2, and 3 with modulation for both channels
-            if (osc1OnOff && osc1.isActive()) {
-                osc1Sample = osc1.processNextSample(pitchModulationEffect, false);
-                float osc1Contribution = osc1Sample * volSelectionOsc1;
-                sampleLeft += osc1Contribution;
-                sampleRight += osc1Contribution;
-                osc1Peak = juce::jmax(osc1Peak, std::abs(osc1Sample) * (volSelectionOsc1 * volumeScale));
-            }
-            if (osc2OnOff && osc2.isActive()) {
-                osc2Sample = osc2.processNextSample(pitchModulationEffect, false);
-                float osc2Contribution = osc2Sample * volSelectionOsc2;
-                sampleLeft += osc2Contribution;
-                sampleRight += osc2Contribution;
-                osc2Peak = juce::jmax(osc2Peak, std::abs(osc2Sample) * (volSelectionOsc2 * volumeScale));
-            }
-            
-            osc3Sample = osc3.processNextSample(pitchModulationEffect, osc3CtrlMode);
-            float osc3Contribution = osc3Sample * volSelectionOsc3;
+            modOscSample = pitchModulationEffect;
+            modOscPeak = juce::jmax(modOscPeak, std::abs(modOscSample));
+        }
+
+        const float oscModAmount = oscModSwitchValue ? pitchModulationEffect : 0.0f;
+
+        if (osc1OnOff && osc1.isActive()) {
+            osc1Sample = osc1.processNextSample(oscModAmount, false);
+            osc1RawPeak = juce::jmax(osc1RawPeak, std::abs(osc1Sample));
+            osc1Contribution = osc1Sample * volSelectionOsc1;
+            sampleLeft += osc1Contribution;
+            sampleRight += osc1Contribution;
+            osc1Peak = juce::jmax(osc1Peak, std::abs(osc1Sample) * (volSelectionOsc1 * volumeScale));
+        }
+        if (osc2OnOff && osc2.isActive()) {
+            osc2Sample = osc2.processNextSample(oscModAmount, false);
+            osc2RawPeak = juce::jmax(osc2RawPeak, std::abs(osc2Sample));
+            osc2Contribution = osc2Sample * volSelectionOsc2;
+            sampleLeft += osc2Contribution;
+            sampleRight += osc2Contribution;
+            osc2Peak = juce::jmax(osc2Peak, std::abs(osc2Sample) * (volSelectionOsc2 * volumeScale));
+        }
+        if (osc3OnOff) {
+            osc3Sample = osc3SampleRaw;
+            osc3RawPeak = juce::jmax(osc3RawPeak, std::abs(osc3Sample));
+            osc3Contribution = osc3Sample * volSelectionOsc3;
             sampleLeft += osc3Contribution;
             sampleRight += osc3Contribution;
             osc3Peak = juce::jmax(osc3Peak, std::abs(osc3Sample) * (volSelectionOsc3 * volumeScale));
-            
-        } else {
-            // Process normally if the modulation switch is off
-            if (osc1OnOff && osc1.isActive()) {
-                osc1Sample = osc1.processNextSample(0.0f, false);
-                float osc1Contribution = osc1Sample * volSelectionOsc1;
-                sampleLeft += osc1Contribution;
-                sampleRight += osc1Contribution;
-                osc1Peak = juce::jmax(osc1Peak, std::abs(osc1Sample) * (volSelectionOsc1 * volumeScale));
-            }
-            if (osc2OnOff && osc2.isActive()) {
-                osc2Sample = osc2.processNextSample(0.0f, false);
-                float osc2Contribution = osc2Sample * volSelectionOsc2;
-                sampleLeft += osc2Contribution;
-                sampleRight += osc2Contribution;
-                osc2Peak = juce::jmax(osc2Peak, std::abs(osc2Sample) * (volSelectionOsc2 * volumeScale));
-            }
-            
-            if (osc3OnOff && osc3.isActive()) {
-                osc3Sample = osc3.processNextSample(0.0f, osc3CtrlMode);
-                float osc3Contribution = osc3Sample * volSelectionOsc3;
-                sampleLeft += osc3Contribution;
-                sampleRight += osc3Contribution;
-                osc3Peak = juce::jmax(osc3Peak, std::abs(osc3Sample) * (volSelectionOsc3 * volumeScale));
+        }
+
+        sampleLeft += noiseSampleLeft + extInputSample;
+        sampleRight += noiseSampleRight + extInputSample;
+
+        float baseCutoff = filterCutoffValue;
+        if (keyTrackingAmount > 0.0f && referenceFrequency > 0.0f) {
+            float ratio = effectiveFrequency / referenceFrequency;
+            if (ratio > 0.0f) {
+                baseCutoff *= std::pow(ratio, keyTrackingAmount);
             }
         }
-        
-        // Modulation for filter cutoff
+
+        float cutoffForFilter = baseCutoff;
         if (filterModSwitchValue) {
-            // Calculate the modulation signal using a mix of the modulation source (osc3/noise) for both channels
-            float modulationSignal = (1.0f - modulationMix) * osc3ModulationSignal + modulationMix * ((noiseSampleLeft + noiseSampleRight) / 2.0f);
-            
             float filterModulationSignal = modulationSignal * osc3ModulationValue;
-            //filterModulationSignal *= osc3ModulationValue; // Scale the signal as necessary
-            // Apply the modulation to the filter cutoff
-            float scaledFilterModulationSignal = filterModulationSignal * 5000; // Adjust someScalingFactor as needed
-            
-            // Apply the modulation to the filter cutoff, ensuring it remains within a realistic range
-            float modulatedCutoffFreq = juce::jlimit(0.0f, 20000.0f, filterCutoffValue + scaledFilterModulationSignal);
-            ladderFilter.setCutoffFrequency(modulatedCutoffFreq);
+            float scaledFilterModulationSignal = filterModulationSignal * 5000.0f;
+            modFilterSample = filterModulationSignal;
+            modFilterPeak = juce::jmax(modFilterPeak, std::abs(modFilterSample));
+            cutoffForFilter = baseCutoff + scaledFilterModulationSignal;
         }
-        
-        float loudnessEnvValue = ladderFilter.getContourEnvelopeValue();
-        // juce::Logger::writeToLog("loudnesEnv: " + juce::String(loudnessEnvValue));
-        sampleLeft *= loudnessEnvValue;
-        sampleRight *= loudnessEnvValue;
-        
+        cutoffForFilter = juce::jlimit(0.0f, 20000.0f, cutoffForFilter);
+        ladderFilter.setCutoffFrequency(cutoffForFilter);
+
         float monoSample = (sampleLeft + sampleRight) * 0.5f;
         mixPeak = juce::jmax(mixPeak, std::abs(monoSample) * mixScale);
-        
-        // Filter processing
+
         float filteredSample = 0.0f;
         ladderFilter.process(&monoSample, &filteredSample, 1); // Process as mono
         filterPeak = juce::jmax(filterPeak, std::abs(filteredSample) * mixScale);
-        
-        // Apply filtered sample to both channels
+
+        float loudnessEnvValue = ladderFilter.getContourEnvelopeValue();
+        filteredSample *= loudnessEnvValue;
+
         sampleLeft = filteredSample;
         sampleRight = filteredSample;
-        
-        // If A440 DSP oscillator is on, add its output to the mix
+
         if (a440HzOnOff) {
             float a440Sample = a440Oscillator.processSample(0.0f);
             a440Sample *= noiseVolumeScalingFactor;
-            
             sampleLeft += a440Sample;
             sampleRight += a440Sample;
-        }
-        
-        if (!filterModSwitchValue && !oscModSwitchValue) {
-            sampleLeft += noiseSampleLeft;
-            sampleRight += noiseSampleRight;
         }
         
         // Apply the main output volume control to both channels
@@ -758,6 +797,24 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         if (osc3OnOff && osc3.isActive()) {
             osc3Buffer[sampleIndex % waveformBufferSize] = osc3Sample;
         }
+
+        stageOsc1Buffer[static_cast<size_t>(stageWriteIndex)] = osc1Contribution;
+        stageOsc2Buffer[static_cast<size_t>(stageWriteIndex)] = osc2Contribution;
+        stageOsc3Buffer[static_cast<size_t>(stageWriteIndex)] = osc3Contribution;
+        stageOsc1RawBuffer[static_cast<size_t>(stageWriteIndex)] = osc1Sample;
+        stageOsc2RawBuffer[static_cast<size_t>(stageWriteIndex)] = osc2Sample;
+        stageOsc3RawBuffer[static_cast<size_t>(stageWriteIndex)] = osc3Sample;
+        stageNoiseBuffer[static_cast<size_t>(stageWriteIndex)] = noiseSampleLeft;
+        stageMixBuffer[static_cast<size_t>(stageWriteIndex)] = monoSample;
+        stageFilterBuffer[static_cast<size_t>(stageWriteIndex)] = filteredSample;
+        stageOutputBuffer[static_cast<size_t>(stageWriteIndex)] = sampleLeft;
+        stageModOscBuffer[static_cast<size_t>(stageWriteIndex)] = modOscSample;
+        stageModFilterBuffer[static_cast<size_t>(stageWriteIndex)] = modFilterSample;
+
+        stageWriteIndex++;
+        if (stageWriteIndex >= stageBufferSize) {
+            stageWriteIndex = 0;
+        }
     }
 
     auto updateLevel = [](std::atomic<float>& target, float peak) {
@@ -770,10 +827,20 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     updateLevel(osc1Level, osc1Peak);
     updateLevel(osc2Level, osc2Peak);
     updateLevel(osc3Level, osc3Peak);
+    updateLevel(osc1RawLevel, osc1RawPeak);
+    updateLevel(osc2RawLevel, osc2RawPeak);
+    updateLevel(osc3RawLevel, osc3RawPeak);
     updateLevel(noiseLevel, noisePeak);
     updateLevel(mixLevel, mixPeak);
     updateLevel(filterLevel, filterPeak);
     updateLevel(outputLevel, outputPeak);
+    updateLevel(modOscLevel, modOscPeak);
+    updateLevel(modFilterLevel, modFilterPeak);
+
+    filterEnvelopeLevel.store(ladderFilter.getEnvelopeValue(), std::memory_order_relaxed);
+    contourEnvelopeLevel.store(ladderFilter.getLastContourEnvelopeValue(), std::memory_order_relaxed);
+
+    stageBufferWriteIndex.store(stageWriteIndex, std::memory_order_release);
 }
 
 float MoogMiniAudioProcessor::calculateGlideRate(int glideKnobValue) {
@@ -794,8 +861,8 @@ float MoogMiniAudioProcessor::calculateGlideRate(int glideKnobValue) {
 
 
 float MoogMiniAudioProcessor::mapFilterCutoffValueToFrequency(float filterCutoffValue) {
-    // Map the normalized range [0, 1] to frequency range [447 Hz, 20 kHz] using a logarithmic scale
-    float minFreq = 447.0f;  // Minimum frequency
+    // Map the normalized range [0, 1] to frequency range [20 Hz, 20 kHz] using a logarithmic scale
+    float minFreq = 20.0f;  // Minimum frequency
     float maxFreq = 20000.0f; // Maximum frequency
     float minFreqLog = log(minFreq);
     float maxFreqLog = log(maxFreq);
@@ -855,8 +922,13 @@ void MoogMiniAudioProcessor::setStateInformation (const void* data, int sizeInBy
         if (xmlState->hasTagName(apvts.state.getType()))
         {
             apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
+            restoredStateFromHost = true;
         }
     }
+}
+
+bool MoogMiniAudioProcessor::shouldAutoLoadLastPreset() const {
+    return !restoredStateFromHost;
 }
 
 

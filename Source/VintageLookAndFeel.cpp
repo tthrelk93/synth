@@ -15,17 +15,33 @@ VintageLookAndFeel::VintageLookAndFeel(bool isHorizontal) : isHorizontalSwitch(i
 VintageLookAndFeel::~VintageLookAndFeel() {
     // Destructor code here (if needed)
 }
+
+void VintageLookAndFeel::setHandleColours(juce::Colour onColour, juce::Colour offColour) {
+    handleOnColour = onColour;
+    handleOffColour = offColour;
+    useCustomColours = true;
+}
+
 void VintageLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& toggleButton,
                                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
     auto bounds = toggleButton.getLocalBounds().toFloat();
     float cornerRadius = 6.0f; // Rounded corners radius
 
     // Draw the background of the toggle with rounded corners
-    g.setColour(toggleButton.getToggleState() ? juce::Colours::black.withAlpha(0.35f) : juce::Colours::black.withAlpha(0.35f));
+    g.setColour(juce::Colour::fromRGB(10, 14, 22).withAlpha(0.7f));
     g.fillRoundedRectangle(bounds, cornerRadius);
 
     // Determine handle color based on toggle state
-    juce::Colour handleColour = toggleButton.getToggleState() ? juce::Colours::linen.withAlpha(0.90f) : juce::Colours::papayawhip.withAlpha(0.35f);
+    juce::Colour handleColour;
+    if (useCustomColours) {
+        handleColour = toggleButton.getToggleState() ? handleOnColour : handleOffColour;
+    } else {
+        const auto accentColour = juce::Colour::fromRGB(60, 160, 255);
+        const auto offColour = juce::Colour::fromRGB(35, 45, 70);
+        handleColour = toggleButton.getToggleState()
+            ? accentColour.withAlpha(0.85f)
+            : offColour.withAlpha(0.75f);
+    }
 
     // Calculate handle bounds
     auto handleBounds = bounds.reduced(4.0f); // Reduced for padding inside the switch
@@ -56,5 +72,3 @@ void VintageLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton&
     g.setColour(handleColour);
     g.fillRoundedRectangle(handleBounds, cornerRadius);
 }
-
-

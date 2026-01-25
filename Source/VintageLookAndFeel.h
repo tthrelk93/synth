@@ -16,9 +16,13 @@ public:
 
     void drawToggleButton(juce::Graphics& g, juce::ToggleButton& toggleButton,
                           bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) override;
+    void setHandleColours(juce::Colour onColour, juce::Colour offColour);
 
 private:
     bool isHorizontalSwitch;
+    bool useCustomColours = false;
+    juce::Colour handleOnColour;
+    juce::Colour handleOffColour;
 };
 
 #endif /* VintageLookAndFeel_h */

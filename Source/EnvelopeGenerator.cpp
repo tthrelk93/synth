@@ -38,7 +38,7 @@ void EnvelopeGenerator::noteOn() {
 }
 
 void EnvelopeGenerator::noteOff() {
-    stage = DECAY;
+    stage = RELEASE;
     
 }
 
@@ -54,6 +54,7 @@ void EnvelopeGenerator::updateRates() {
     // Ensure the rates are above a minimum threshold to avoid division by zero or extremely high values
     attackRate = std::fmax(attackRate, 1.0f / sampleRate);
     decayRate = std::fmax(decayRate, 1.0f / sampleRate);
+    releaseRate = decayRate;
 
 //    juce::Logger::writeToLog("attackTimeInSeconds: " + juce::String(attackTimeInSeconds));
 //    juce::Logger::writeToLog("decayTimeInSeconds: " + juce::String(decayTimeInSeconds));
@@ -89,6 +90,14 @@ float EnvelopeGenerator::getNextSample() {
         case SUSTAIN:
             stageString = "SUSTAIN";
             // The level remains constant at the sustain level
+            break;
+        case RELEASE:
+            stageString = "RELEASE";
+            currentLevel -= releaseRate;
+            if (currentLevel <= 0.0f) {
+                currentLevel = 0.0f;
+                stage = OFF;
+            }
             break;
         case OFF:
             stageString = "stageString";

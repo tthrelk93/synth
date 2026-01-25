@@ -67,8 +67,27 @@ public:
     
     float generatePinkNoise();
     float generateWhiteNoise();
+    float generateRedNoise();
     
     float normalizedToMilliseconds(float normalizedValue);
+
+    static constexpr int stageBufferSize = 2048;
+    struct StageBuffers {
+        std::array<float, stageBufferSize> osc1Raw{};
+        std::array<float, stageBufferSize> osc2Raw{};
+        std::array<float, stageBufferSize> osc3Raw{};
+        std::array<float, stageBufferSize> osc1{};
+        std::array<float, stageBufferSize> osc2{};
+        std::array<float, stageBufferSize> osc3{};
+        std::array<float, stageBufferSize> noise{};
+        std::array<float, stageBufferSize> mix{};
+        std::array<float, stageBufferSize> filter{};
+        std::array<float, stageBufferSize> output{};
+        std::array<float, stageBufferSize> modOsc{};
+        std::array<float, stageBufferSize> modFilter{};
+    };
+
+    void copyStageBuffers(StageBuffers& dest) const;
     
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts;
@@ -80,6 +99,9 @@ public:
     CircularBuffer& getCircularBuffer();
 
     struct SignalLevels {
+        float osc1Raw = 0.0f;
+        float osc2Raw = 0.0f;
+        float osc3Raw = 0.0f;
         float osc1 = 0.0f;
         float osc2 = 0.0f;
         float osc3 = 0.0f;
@@ -87,9 +109,14 @@ public:
         float mix = 0.0f;
         float filter = 0.0f;
         float output = 0.0f;
+        float modOsc = 0.0f;
+        float modFilter = 0.0f;
     };
 
     SignalLevels getSignalLevels() const;
+    float getFilterEnvelopeValue() const;
+    float getContourEnvelopeValue() const;
+    bool shouldAutoLoadLastPreset() const;
     
     void handleNoteOn(int midiChannel, int midiNoteNumber, float velocity);
        void handleNoteOff(int midiChannel, int midiNoteNumber, float velocity);
@@ -120,6 +147,7 @@ private:
     juce::Random random;
     // Pink noise generator state
     float pinkNoiseState[7] = {0};
+    float redNoiseState = 0.0f;
    
     
     const float defaultBaseFrequency = 440.0f;
@@ -140,10 +168,33 @@ private:
     std::atomic<float> osc1Level { 0.0f };
     std::atomic<float> osc2Level { 0.0f };
     std::atomic<float> osc3Level { 0.0f };
+    std::atomic<float> osc1RawLevel { 0.0f };
+    std::atomic<float> osc2RawLevel { 0.0f };
+    std::atomic<float> osc3RawLevel { 0.0f };
     std::atomic<float> noiseLevel { 0.0f };
     std::atomic<float> mixLevel { 0.0f };
     std::atomic<float> filterLevel { 0.0f };
     std::atomic<float> outputLevel { 0.0f };
+    std::atomic<float> modOscLevel { 0.0f };
+    std::atomic<float> modFilterLevel { 0.0f };
+    std::atomic<float> filterEnvelopeLevel { 0.0f };
+    std::atomic<float> contourEnvelopeLevel { 0.0f };
+
+    std::array<float, stageBufferSize> stageOsc1RawBuffer{};
+    std::array<float, stageBufferSize> stageOsc2RawBuffer{};
+    std::array<float, stageBufferSize> stageOsc3RawBuffer{};
+    std::array<float, stageBufferSize> stageOsc1Buffer{};
+    std::array<float, stageBufferSize> stageOsc2Buffer{};
+    std::array<float, stageBufferSize> stageOsc3Buffer{};
+    std::array<float, stageBufferSize> stageNoiseBuffer{};
+    std::array<float, stageBufferSize> stageMixBuffer{};
+    std::array<float, stageBufferSize> stageFilterBuffer{};
+    std::array<float, stageBufferSize> stageOutputBuffer{};
+    std::array<float, stageBufferSize> stageModOscBuffer{};
+    std::array<float, stageBufferSize> stageModFilterBuffer{};
+    std::atomic<int> stageBufferWriteIndex { 0 };
+
+    bool restoredStateFromHost = false;
     
     juce::MidiBuffer incomingMidi;
     juce::CriticalSection midiCriticalSection;
