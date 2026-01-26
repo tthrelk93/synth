@@ -1,7 +1,7 @@
 
 # MiniMoog
 
-A JUCE-based Model D–inspired synthesizer with a standalone UI that mirrors the original panel.
+A JUCE-based Model D–inspired synthesizer with a standalone UI.
 
 ## Prerequisites
 
