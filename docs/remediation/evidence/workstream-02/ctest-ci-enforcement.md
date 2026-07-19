@@ -68,3 +68,27 @@ YAML parsing and `git diff --check` passed.
 The eight hosted jobs have not executed from this local task. BLD-010 therefore
 remains `in-progress`, not `pass`; Windows, Linux, macOS Intel, and hosted
 macOS arm64 results are `not-run` until a workflow run supplies durable logs.
+
+## README clean-clone proof
+
+After the README/planning commit `5bb1702`, a fresh local clone was created at
+`/private/tmp/model-d-readme-clone.bPAbrU/synth`. From its root, the five shell
+commands in the committed README were executed verbatim and in order:
+
+```sh
+cmake -S . -B "build with spaces/Release" -DCMAKE_BUILD_TYPE=Release -DSYNTH_WARNINGS_AS_ERRORS=ON -DSYNTH_BUILD_TESTS=ON -DSYNTH_BUILD_VALIDATORS=ON
+cmake --build "build with spaces/Release" --config Release --parallel
+ctest --test-dir "build with spaces/Release" -C Release --output-on-failure
+cmake --build "build with spaces/Release" --config Release --target ModelDRunStandaloneLifecycle --parallel
+cmake --build "build with spaces/Release" --config Release --target ModelDVerifyValidationEvidence --parallel
+```
+
+The exact JUCE commit resolved; the full build passed; CTest passed 9/9; the
+standalone lifecycle target passed; and the final target reported actual wrapper
+and pluginval 1.0.4 passing 3/3 before deep-verifying linked evidence. The
+release aggregate remained truthfully blocked because the AU was not registered
+in that local account and external gates were unavailable.
+
+This satisfies BLD-004's clean-clone command criterion. It does not substitute
+for BLD-001/002/003/005/006/008/009/010/012 hosted matrix evidence or make
+BLD-011 pass.
