@@ -146,5 +146,141 @@ if(EXISTS "${_run_report}" OR EXISTS "${_run_build}/validation/pluginval")
     message(FATAL_ERROR "rejected pluginval validation created build evidence")
 endif()
 
+# A caller may spell an otherwise valid build root through a symlink (for
+# example /tmp -> /private/tmp on macOS). Lexical ancestry checks must retain
+# that spelling instead of comparing canonical candidates to a lexical root.
+set(_alias_root "${_contract_root}/build-root-alias")
+set(_alias_real_build "${_alias_root}/real-build")
+set(_alias_build "${_alias_root}/build-link")
+file(MAKE_DIRECTORY
+    "${_alias_real_build}/validation"
+    "${_alias_real_build}/validation-ownership")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink
+            "${_alias_real_build}" "${_alias_build}"
+    RESULT_VARIABLE _alias_symlink_status
+    ERROR_VARIABLE _alias_symlink_error)
+if(NOT _alias_symlink_status STREQUAL "0")
+    file(REMOVE_RECURSE "${_contract_root}")
+    message(FATAL_ERROR
+        "parent symlink creation succeeded but build-root alias creation failed: ${_alias_symlink_error}")
+endif()
+set(_alias_report "${_alias_build}/validation/pluginval-run-report.json")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_BUILD_ROOT=${_alias_build}"
+        "-DSYNTH_STAGE_DIRECTORY=${_alias_build}/stage"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE=${_alias_build}/missing-pluginval"
+        "-DSYNTH_PLUGINVAL_METADATA_PATH=${_alias_build}/missing-provision.json"
+        "-DSYNTH_PLUGINVAL_REPORT_PATH=${_alias_report}"
+        "-DSYNTH_VALIDATION_DIRECTORY=${_alias_build}/validation"
+        "-DSYNTH_REPEAT_COUNT=1"
+        "-DSYNTH_SEED=0x4d6f64656c44"
+        "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+        "-DSYNTH_ARCHITECTURE=contract-architecture"
+        "-DSYNTH_CONFIGURATION=Contract"
+        -P "${SYNTH_SOURCE_ROOT}/cmake/RunPluginval.cmake"
+    RESULT_VARIABLE _alias_status
+    OUTPUT_VARIABLE _alias_stdout
+    ERROR_VARIABLE _alias_stderr
+    ENCODING UTF-8)
+if(_alias_status STREQUAL "0"
+   OR NOT "${_alias_stdout}${_alias_stderr}" MATCHES
+          "pluginval executable is missing")
+    message(FATAL_ERROR
+        "pluginval rejected a valid symlink-spelled build root before tool checks:\n${_alias_stdout}${_alias_stderr}")
+endif()
+if(EXISTS "${_alias_report}"
+   OR EXISTS "${_alias_build}/validation/pluginval")
+    message(FATAL_ERROR "build-root alias compatibility check created evidence")
+endif()
+
+# Standalone lifecycle evidence uses a separate marker in the same ownership
+# directory. Its runner must apply the identical no-write-through-symlink rule.
+set(_standalone_root "${_contract_root}/standalone")
+set(_standalone_build "${_standalone_root}/build")
+set(_standalone_stage "${_standalone_build}/stage")
+set(_standalone_external
+    "${_standalone_root}/external/validation-ownership")
+file(MAKE_DIRECTORY
+    "${_standalone_build}/validation"
+    "${_standalone_stage}"
+    "${_standalone_external}")
+file(REAL_PATH "${_standalone_build}" _standalone_build_real)
+file(REAL_PATH "${_standalone_stage}" _standalone_stage_real)
+if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
+    set(_standalone_product_relative "Standalone/MiniMoog.app")
+    set(_standalone_payload_root "Standalone/MiniMoog.app")
+    set(_standalone_file_relative "Contents/MacOS/MiniMoog")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Windows")
+    set(_standalone_product_relative "Standalone/MiniMoog.exe")
+    set(_standalone_payload_root "Standalone")
+    set(_standalone_file_relative "MiniMoog.exe")
+else()
+    set(_standalone_product_relative "Standalone/MiniMoog")
+    set(_standalone_payload_root "Standalone")
+    set(_standalone_file_relative "MiniMoog")
+endif()
+set(_standalone_executable
+    "${_standalone_stage_real}/${_standalone_payload_root}/${_standalone_file_relative}")
+get_filename_component(_standalone_executable_directory
+                       "${_standalone_executable}" DIRECTORY)
+file(MAKE_DIRECTORY "${_standalone_executable_directory}")
+file(WRITE "${_standalone_executable}"
+     "validator path-safety standalone fixture\n")
+file(SHA256 "${_standalone_executable}" _standalone_executable_sha256)
+string(SHA256 _standalone_aggregate_sha256
+       "${_standalone_executable_sha256}  ${_standalone_file_relative}\n")
+file(WRITE "${_standalone_stage_real}/build-manifest.json"
+    "{\n"
+    "  \"products\": [\n"
+    "    {\n"
+    "      \"format\": \"Standalone\",\n"
+    "      \"relative_path\": \"${_standalone_product_relative}\",\n"
+    "      \"payload_root_relative_path\": \"${_standalone_payload_root}\",\n"
+    "      \"aggregate_sha256\": \"${_standalone_aggregate_sha256}\",\n"
+    "      \"files\": [{\"path\": \"${_standalone_file_relative}\", \"sha256\": \"${_standalone_executable_sha256}\"}]\n"
+    "    }\n"
+    "  ]\n"
+    "}\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink
+            "${_standalone_external}"
+            "${_standalone_build_real}/validation-ownership"
+    RESULT_VARIABLE _standalone_symlink_status
+    ERROR_VARIABLE _standalone_symlink_error)
+if(NOT _standalone_symlink_status STREQUAL "0")
+    file(REMOVE_RECURSE "${_contract_root}")
+    message(FATAL_ERROR
+        "pluginval symlink creation succeeded but standalone ownership symlink creation failed: ${_standalone_symlink_error}")
+endif()
+set(_standalone_report
+    "${_standalone_build_real}/validation/standalone-lifecycle-report.json")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_BUILD_ROOT=${_standalone_build_real}"
+        "-DSYNTH_STAGE_DIRECTORY=${_standalone_stage_real}"
+        "-DSYNTH_STANDALONE_REPORT_PATH=${_standalone_report}"
+        "-DSYNTH_VALIDATION_DIRECTORY=${_standalone_build_real}/validation"
+        "-DSYNTH_REPEAT_COUNT=1"
+        "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+        "-DSYNTH_ARCHITECTURE=contract-architecture"
+        "-DSYNTH_CONFIGURATION=Contract"
+        "-DSYNTH_PROJECT_VERSION=1.0.0"
+        "-DSYNTH_SOURCE_ROOT=${SYNTH_SOURCE_ROOT}"
+        -P "${SYNTH_SOURCE_ROOT}/cmake/RunStandaloneLifecycle.cmake"
+    RESULT_VARIABLE _standalone_status
+    OUTPUT_VARIABLE _standalone_stdout
+    ERROR_VARIABLE _standalone_stderr
+    ENCODING UTF-8)
+_synth_require_rejected_without_external_mutation(
+    "standalone validation through a symlinked ownership parent"
+    "${_standalone_status}" "${_standalone_stdout}${_standalone_stderr}"
+    "${_standalone_external}")
+if(EXISTS "${_standalone_report}"
+   OR EXISTS "${_standalone_build_real}/validation/standalone")
+    message(FATAL_ERROR "rejected standalone validation created build evidence")
+endif()
+
 file(REMOVE_RECURSE "${_contract_root}")
 message(STATUS "Validator ancestor-symlink path-safety contracts passed")

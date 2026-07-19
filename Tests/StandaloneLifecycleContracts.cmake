@@ -442,7 +442,8 @@ file(MAKE_DIRECTORY "${_symlink_target}")
 file(RENAME "${_standalone_root}" "${_standalone_backup}")
 file(CREATE_LINK "${_symlink_target}" "${_standalone_root}" SYMBOLIC RESULT _link_result)
 if(_link_result STREQUAL "0")
-    _synth_run_runner_expect_failure("symlinked evidence root" "symlinked standalone evidence root")
+    _synth_run_runner_expect_failure(
+        "symlinked evidence root" "standalone evidence root has a symlink ancestor")
     file(REMOVE "${_standalone_root}")
 else()
     message(STATUS

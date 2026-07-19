@@ -78,6 +78,52 @@ function(_synth_hash_if_file output_variable path)
     set(${output_variable} "${_sha256}" PARENT_SCOPE)
 endfunction()
 
+function(_synth_validate_build_owned_directory_ancestry
+         build_root_real build_root_lexical candidate_directory description)
+    cmake_path(ABSOLUTE_PATH candidate_directory NORMALIZE
+               OUTPUT_VARIABLE _candidate_directory)
+    cmake_path(IS_PREFIX build_root_lexical "${_candidate_directory}" NORMALIZE
+               _candidate_is_lexically_owned)
+    if(NOT _candidate_is_lexically_owned
+       OR _candidate_directory STREQUAL build_root_lexical)
+        message(FATAL_ERROR
+            "${description} is not a nested build-owned directory: ${_candidate_directory}")
+    endif()
+
+    file(RELATIVE_PATH _relative_directory
+         "${build_root_lexical}" "${_candidate_directory}")
+    string(REPLACE "\\" "/" _relative_directory "${_relative_directory}")
+    if(IS_ABSOLUTE "${_relative_directory}"
+       OR _relative_directory MATCHES "(^|/)[.][.](/|$)")
+        message(FATAL_ERROR
+            "${description} escapes the lexical build root: ${_candidate_directory}")
+    endif()
+
+    string(REPLACE "/" ";" _directory_components "${_relative_directory}")
+    set(_ancestor "${build_root_lexical}")
+    foreach(_directory_component IN LISTS _directory_components)
+        set(_ancestor "${_ancestor}/${_directory_component}")
+        if(IS_SYMLINK "${_ancestor}")
+            message(FATAL_ERROR
+                "${description} has a symlink ancestor: ${_ancestor}")
+        endif()
+        if(EXISTS "${_ancestor}")
+            if(NOT IS_DIRECTORY "${_ancestor}")
+                message(FATAL_ERROR
+                    "${description} has a non-directory ancestor: ${_ancestor}")
+            endif()
+            file(REAL_PATH "${_ancestor}" _ancestor_real)
+            cmake_path(IS_PREFIX build_root_real "${_ancestor_real}" NORMALIZE
+                       _ancestor_is_really_owned)
+            if(NOT _ancestor_is_really_owned
+               OR _ancestor_real STREQUAL build_root_real)
+                message(FATAL_ERROR
+                    "${description} resolves outside the build root: ${_ancestor}")
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
 cmake_path(ABSOLUTE_PATH SYNTH_BUILD_ROOT NORMALIZE OUTPUT_VARIABLE _build_root_lexical)
 file(REAL_PATH "${SYNTH_STAGE_DIRECTORY}" _stage_root)
 file(REAL_PATH "${SYNTH_SOURCE_ROOT}" _source_root)
@@ -168,8 +214,25 @@ string(REPLACE "\\" "/" _stage_from_build "${_stage_from_build}")
 _synth_normalize_relative(_stage_from_build "${_stage_from_build}" "Stage directory")
 
 set(_standalone_root "${_validation_root}/standalone")
+set(_standalone_root_lexical
+    "${_build_root_lexical}/validation/standalone")
 set(_standalone_root_marker
     "${_build_root}/validation-ownership/standalone-evidence-root.marker")
+set(_standalone_marker_directory_lexical
+    "${_build_root_lexical}/validation-ownership")
+_synth_validate_build_owned_directory_ancestry(
+    "${_build_root}" "${_build_root_lexical}"
+    "${_standalone_root_lexical}" "standalone evidence root")
+_synth_validate_build_owned_directory_ancestry(
+    "${_build_root}" "${_build_root_lexical}"
+    "${_standalone_marker_directory_lexical}"
+    "standalone evidence ownership directory")
+if(IS_SYMLINK "${_standalone_root_marker}")
+    message(FATAL_ERROR "standalone evidence ownership marker is symlinked")
+endif()
+if(IS_SYMLINK "${_aggregate_path}")
+    message(FATAL_ERROR "standalone lifecycle aggregate report is symlinked")
+endif()
 if(EXISTS "${_standalone_root}" OR IS_SYMLINK "${_standalone_root}")
     if(IS_SYMLINK "${_standalone_root}")
         message(FATAL_ERROR "refusing to clean a symlinked standalone evidence root")

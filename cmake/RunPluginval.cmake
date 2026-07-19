@@ -153,12 +153,15 @@ if(NOT _pluginval_report_path STREQUAL "${_build_root_lexical}/validation/plugin
     message(FATAL_ERROR "pluginval report path must be the fixed build-owned report path")
 endif()
 set(_pluginval_evidence_root "${_validation_directory}/pluginval")
+set(_pluginval_evidence_root_lexical
+    "${_build_root_lexical}/validation/pluginval")
 set(_pluginval_evidence_marker
     "${_build_root_lexical}/validation-ownership/pluginval-evidence-root.marker")
 get_filename_component(_pluginval_evidence_marker_directory
                        "${_pluginval_evidence_marker}" DIRECTORY)
 _synth_validate_build_owned_directory_ancestry(
-    "${_build_root}" "${_build_root_lexical}" "${_pluginval_evidence_root}"
+    "${_build_root}" "${_build_root_lexical}"
+    "${_pluginval_evidence_root_lexical}"
     "pluginval evidence root")
 _synth_validate_build_owned_directory_ancestry(
     "${_build_root}" "${_build_root_lexical}"
