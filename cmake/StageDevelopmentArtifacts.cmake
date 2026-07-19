@@ -51,15 +51,22 @@ function(_synth_ensure_safe_stage_directory)
     endif()
     cmake_path(ABSOLUTE_PATH _synth_home_path NORMALIZE OUTPUT_VARIABLE _home_root)
     cmake_path(IS_PREFIX _stage_root "${_stage_directory}" NORMALIZE _stage_is_nested)
-    if(NOT _stage_is_nested OR _stage_root STREQUAL _stage_directory)
+    get_filename_component(_stage_parent "${_stage_directory}" DIRECTORY)
+    if(NOT _stage_is_nested OR _stage_root STREQUAL _stage_directory
+       OR NOT _stage_parent STREQUAL _stage_root)
         message(FATAL_ERROR
-            "SYNTH_STAGE_DIRECTORY must be a child of SYNTH_STAGE_ROOT; refusing cleanup of '${_stage_directory}'")
+            "SYNTH_STAGE_DIRECTORY must be a direct child of SYNTH_STAGE_ROOT; refusing cleanup of '${_stage_directory}'")
     endif()
     if(_stage_root STREQUAL "/"
        OR _stage_root MATCHES "^[A-Za-z]:/$"
        OR _stage_root STREQUAL _source_root
        OR (NOT _home_root STREQUAL "" AND _stage_root STREQUAL _home_root))
         message(FATAL_ERROR "SYNTH_STAGE_ROOT is too broad or collides with source/home: '${_stage_root}'")
+    endif()
+    if(_stage_directory STREQUAL _source_root
+       OR _stage_directory STREQUAL _build_root
+       OR (NOT _home_root STREQUAL "" AND _stage_directory STREQUAL _home_root))
+        message(FATAL_ERROR "SYNTH_STAGE_DIRECTORY collides with a protected directory: '${_stage_directory}'")
     endif()
     set(SYNTH_STAGE_ROOT "${_stage_root}" PARENT_SCOPE)
     set(SYNTH_STAGE_DIRECTORY "${_stage_directory}" PARENT_SCOPE)
