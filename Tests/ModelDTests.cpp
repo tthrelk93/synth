@@ -310,9 +310,167 @@ void verifyA440Routing (MoogMiniAudioProcessor& processor,
               << " result=true\n";
 }
 
+struct ExternalInputRender
+{
+    std::vector<float> main;
+    std::array<std::vector<float>, 2> phones;
+};
+
+ExternalInputRender renderExternalInput (int externalChannels,
+                                         const std::vector<float>& left,
+                                         const std::vector<float>& right,
+                                         TestContext& test,
+                                         std::string_view context)
+{
+    MoogMiniAudioProcessor processor;
+    setParameter (processor, "extInputVolSwitch", 1.0f, test);
+    setParameter (processor, "extInputVolKnob", 1.0f, test);
+    setParameter (processor, "outputVolKnob", 1.0f, test);
+    setParameter (processor, "filterCutoff", 1.0f, test);
+    setParameter (processor, "filterAttackTimeKnob", 0.0f, test);
+    setParameter (processor, "loudnessAttackTimeKnob", 0.0f, test);
+
+    const auto externalLayout = externalChannels == 1
+                              ? ChannelSet::mono() : ChannelSet::stereo();
+    if (! configureLayout (processor,
+                           makeLayout (ChannelSet::mono(),
+                                       externalLayout,
+                                       ChannelSet::stereo()),
+                           test,
+                           context))
+        return {};
+
+    const auto numSamples = static_cast<int> (left.size());
+    test.expect (externalChannels == 1 || right.size() == left.size(),
+                 std::string { context } + ": stereo input vectors must have equal length");
+    processor.setRateAndBufferSizeDetails (48000.0, numSamples);
+    processor.prepareToPlay (48000.0, numSamples);
+
+    const auto processChannels = std::max (processor.getTotalNumInputChannels(),
+                                           processor.getTotalNumOutputChannels());
+    juce::AudioBuffer<float> buffer (processChannels, numSamples);
+    for (int channel = 0; channel < buffer.getNumChannels(); ++channel)
+        buffer.clear (channel, 0, numSamples);
+
+    // Poison channels that are output-only in this layout. A processor that reads
+    // the full process buffer as input will feed these distinguishable values into
+    // the engine instead of sourcing only the declared External Input bus.
+    for (int channel = externalChannels; channel < buffer.getNumChannels(); ++channel)
+        for (int sample = 0; sample < numSamples; ++sample)
+            buffer.setSample (channel, sample,
+                              1000.0f * static_cast<float> (channel + 1)
+                                  + static_cast<float> (sample));
+
+    auto external = processor.getBusBuffer (buffer, true, 0);
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        external.setSample (0, sample, left[static_cast<size_t> (sample)]);
+        if (externalChannels == 2)
+            external.setSample (1, sample, right[static_cast<size_t> (sample)]);
+    }
+
+    juce::MidiBuffer midi;
+    midi.addEvent (juce::MidiMessage::noteOn (1, 69, 1.0f), 0);
+    processor.processBlock (buffer, midi);
+
+    auto main = processor.getBusBuffer (buffer, false, 0);
+    auto phones = processor.getBusBuffer (buffer, false, 1);
+    test.expect (isFinite (main), std::string { context } + ": Main Output must be finite");
+    test.expect (isFinite (phones), std::string { context } + ": Phones/Cue must be finite");
+    test.expect (absoluteSum (main) > 0.01,
+                 std::string { context } + ": External Input must reach the engine output");
+
+    ExternalInputRender result;
+    result.main.resize (static_cast<size_t> (numSamples));
+    for (auto& channel : result.phones)
+        channel.resize (static_cast<size_t> (numSamples));
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const auto index = static_cast<size_t> (sample);
+        result.main[index] = main.getSample (0, sample);
+        result.phones[0][index] = phones.getSample (0, sample);
+        result.phones[1][index] = phones.getSample (1, sample);
+    }
+    return result;
+}
+
+bool expectSamplesEqual (const std::vector<float>& actual,
+                         const std::vector<float>& expected,
+                         TestContext& test,
+                         std::string_view context)
+{
+    test.expect (actual.size() == expected.size(),
+                 std::string { context } + ": sample counts must match");
+    if (actual.size() != expected.size())
+        return false;
+
+    float maximumDifference = 0.0f;
+    for (size_t index = 0; index < actual.size(); ++index)
+        maximumDifference = std::max (maximumDifference,
+                                      std::abs (actual[index] - expected[index]));
+
+    const auto matches = maximumDifference <= 1.0e-6f;
+    test.expect (matches,
+                 std::string { context } + ": rendered samples must match");
+    return matches;
+}
+
+void testExternalInputRouting (TestContext& test)
+{
+    constexpr int numSamples = 512;
+    std::vector<float> mono (numSamples);
+    std::vector<float> left (numSamples);
+    std::vector<float> right (numSamples);
+    std::vector<float> average (numSamples);
+
+    for (int sample = 0; sample < numSamples; ++sample)
+    {
+        const auto index = static_cast<size_t> (sample);
+        mono[index] = 0.15f + 0.002f * static_cast<float> (sample % 17);
+        left[index] = 0.31f + 0.003f * static_cast<float> (sample % 13);
+        right[index] = -0.07f + 0.001f * static_cast<float> (sample % 11);
+        average[index] = 0.5f * (left[index] + right[index]);
+    }
+
+    const auto monoRender = renderExternalInput (1, mono, {}, test, "mono External Input");
+    const auto duplicatedStereo = renderExternalInput (2, mono, mono, test,
+                                                        "duplicated stereo External Input");
+    const auto monoMainMatches = expectSamplesEqual (monoRender.main, duplicatedStereo.main,
+                                                     test, "mono input duplication");
+    const auto monoCueLeftMatches = expectSamplesEqual (monoRender.phones[0],
+                                                        duplicatedStereo.phones[0], test,
+                                                        "mono input duplication cue left");
+    const auto monoCueRightMatches = expectSamplesEqual (monoRender.phones[1],
+                                                         duplicatedStereo.phones[1], test,
+                                                         "mono input duplication cue right");
+    const auto monoMatches = monoMainMatches && monoCueLeftMatches && monoCueRightMatches;
+    std::cout << "EXTERNAL_INPUT case=mono-duplication result="
+              << (monoMatches ? "true" : "false") << '\n';
+
+    const auto stereoRender = renderExternalInput (2, left, right, test,
+                                                    "distinguishable stereo External Input");
+    const auto averagedMono = renderExternalInput (1, average, {}, test,
+                                                    "averaged mono External Input");
+    const auto stereoMainMatches = expectSamplesEqual (stereoRender.main, averagedMono.main,
+                                                       test, "stereo input downmix");
+    const auto stereoCueLeftMatches = expectSamplesEqual (stereoRender.phones[0],
+                                                          averagedMono.phones[0], test,
+                                                          "stereo input downmix cue left");
+    const auto stereoCueRightMatches = expectSamplesEqual (stereoRender.phones[1],
+                                                           averagedMono.phones[1], test,
+                                                           "stereo input downmix cue right");
+    const auto stereoMatches = stereoMainMatches
+                            && stereoCueLeftMatches
+                            && stereoCueRightMatches;
+    std::cout << "EXTERNAL_INPUT case=stereo-downmix result="
+              << (stereoMatches ? "true" : "false") << '\n';
+}
+
 void testProcessingContract (TestContext& test)
 {
     testDefaultSilence (test);
+    testExternalInputRouting (test);
 
     MoogMiniAudioProcessor processor;
     setParameter (processor, "a440HzOnOff", 1.0f, test);
