@@ -8,6 +8,7 @@ foreach(_required_variable IN ITEMS
         SYNTH_REPEAT_COUNT
         SYNTH_SYSTEM_NAME
         SYNTH_ARCHITECTURE
+        SYNTH_CONFIGURATION
         SYNTH_PROJECT_VERSION
         SYNTH_SOURCE_ROOT)
     if(NOT DEFINED ${_required_variable} OR "${${_required_variable}}" STREQUAL "")
@@ -196,37 +197,6 @@ get_filename_component(_standalone_marker_directory
 file(MAKE_DIRECTORY "${_standalone_marker_directory}")
 file(WRITE "${_standalone_root_marker}"
      "model-d-standalone-evidence-root-v1\n")
-
-# Snapshot the exact legacy settings location used by a normal, non-test launch.
-# Lifecycle launches must leave this path byte-for-byte untouched.
-if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
-    set(_legacy_settings_path "$ENV{HOME}/Library/Application Support/MiniMoog.settings")
-    set(_legacy_settings_display "<USER_HOME>/Library/Application Support/MiniMoog.settings")
-elseif(SYNTH_SYSTEM_NAME STREQUAL "Windows")
-    if(DEFINED ENV{APPDATA} AND NOT "$ENV{APPDATA}" STREQUAL "")
-        set(_legacy_settings_path "$ENV{APPDATA}/MiniMoog/MiniMoog.settings")
-    else()
-        set(_legacy_settings_path "$ENV{USERPROFILE}/AppData/Roaming/MiniMoog/MiniMoog.settings")
-    endif()
-    set(_legacy_settings_display "<USER_APPDATA>/MiniMoog/MiniMoog.settings")
-elseif(SYNTH_SYSTEM_NAME STREQUAL "Linux")
-    set(_legacy_settings_path "$ENV{HOME}/.config/MiniMoog.settings")
-    set(_legacy_settings_display "<USER_HOME>/.config/MiniMoog.settings")
-else()
-    message(FATAL_ERROR "unsupported platform for legacy standalone settings sentinel")
-endif()
-cmake_path(NORMAL_PATH _legacy_settings_path OUTPUT_VARIABLE _legacy_settings_path)
-if(EXISTS "${_legacy_settings_path}")
-    set(_legacy_exists_before true)
-else()
-    set(_legacy_exists_before false)
-endif()
-if(IS_SYMLINK "${_legacy_settings_path}")
-    set(_legacy_symlink_before true)
-else()
-    set(_legacy_symlink_before false)
-endif()
-_synth_hash_if_file(_legacy_sha256_before "${_legacy_settings_path}")
 
 set(_runs "[]")
 set(_run_index 0)
@@ -433,26 +403,6 @@ foreach(_mode IN ITEMS normal invalid no-device)
     endforeach()
 endforeach()
 
-if(EXISTS "${_legacy_settings_path}")
-    set(_legacy_exists_after true)
-else()
-    set(_legacy_exists_after false)
-endif()
-if(IS_SYMLINK "${_legacy_settings_path}")
-    set(_legacy_symlink_after true)
-else()
-    set(_legacy_symlink_after false)
-endif()
-_synth_hash_if_file(_legacy_sha256_after "${_legacy_settings_path}")
-if("${_legacy_exists_before}" STREQUAL "${_legacy_exists_after}"
-   AND "${_legacy_symlink_before}" STREQUAL "${_legacy_symlink_after}"
-   AND "${_legacy_sha256_before}" STREQUAL "${_legacy_sha256_after}")
-    set(_legacy_unchanged true)
-else()
-    set(_legacy_unchanged false)
-    set(_all_processes_passed false)
-endif()
-
 set(_executable "{}")
 _synth_json_set_string(_executable product_relative_path "${_standalone_product_relative}")
 _synth_json_set_string(_executable product_aggregate_sha256 "${_standalone_product_sha256}")
@@ -461,15 +411,7 @@ _synth_json_set_string(_executable sha256 "${_standalone_executable_sha256}")
 set(_environment "{}")
 _synth_json_set_string(_environment os "${SYNTH_SYSTEM_NAME}")
 _synth_json_set_string(_environment architecture "${SYNTH_ARCHITECTURE}")
-set(_legacy_settings "{}")
-_synth_json_set_string(_legacy_settings path "${_legacy_settings_display}")
-string(JSON _legacy_settings SET "${_legacy_settings}" exists_before ${_legacy_exists_before})
-string(JSON _legacy_settings SET "${_legacy_settings}" symlink_before ${_legacy_symlink_before})
-_synth_json_set_string(_legacy_settings sha256_before "${_legacy_sha256_before}")
-string(JSON _legacy_settings SET "${_legacy_settings}" exists_after ${_legacy_exists_after})
-string(JSON _legacy_settings SET "${_legacy_settings}" symlink_after ${_legacy_symlink_after})
-_synth_json_set_string(_legacy_settings sha256_after "${_legacy_sha256_after}")
-string(JSON _legacy_settings SET "${_legacy_settings}" unchanged ${_legacy_unchanged})
+_synth_json_set_string(_environment configuration "${SYNTH_CONFIGURATION}")
 set(_aggregate "{}")
 string(JSON _aggregate SET "${_aggregate}" schema_version 1)
 _synth_json_set_string(_aggregate tool_version "${SYNTH_PROJECT_VERSION}")
@@ -481,7 +423,6 @@ endif()
 string(JSON _aggregate SET "${_aggregate}" environment "${_environment}")
 string(JSON _aggregate SET "${_aggregate}" repeat_count ${SYNTH_REPEAT_COUNT})
 string(JSON _aggregate SET "${_aggregate}" executable "${_executable}")
-string(JSON _aggregate SET "${_aggregate}" legacy_default_settings "${_legacy_settings}")
 string(JSON _aggregate SET "${_aggregate}" runs "${_runs}")
 file(WRITE "${_aggregate_path}" "${_aggregate}\n")
 
@@ -497,6 +438,7 @@ execute_process(
         "-DSYNTH_REPEAT_COUNT=${SYNTH_REPEAT_COUNT}"
         "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
         "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+        "-DSYNTH_CONFIGURATION=${SYNTH_CONFIGURATION}"
         "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
         -P "${_source_root}/cmake/VerifyStandaloneLifecycleEvidence.cmake"
     RESULT_VARIABLE _verification_status

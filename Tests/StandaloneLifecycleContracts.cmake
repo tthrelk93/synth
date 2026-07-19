@@ -26,6 +26,55 @@ foreach(_required_file IN ITEMS
     endif()
 endforeach()
 
+file(READ "${_runner}" _standalone_runner_source)
+file(READ "${_verifier}" _standalone_verifier_source)
+if("${_standalone_runner_source}\n${_standalone_verifier_source}" MATCHES
+        "legacy_default_settings|_legacy_settings_|<USER_HOME>|<USER_APPDATA>")
+    message(FATAL_ERROR
+        "Standalone lifecycle validation still probes the real default settings path")
+endif()
+foreach(_runner_configuration_contract IN ITEMS
+        "_synth_json_set_string(_environment configuration"
+        "-DSYNTH_CONFIGURATION=\${SYNTH_CONFIGURATION}")
+    string(FIND "${_standalone_runner_source}"
+           "${_runner_configuration_contract}" _contract_position)
+    if(_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone lifecycle runner is missing configuration provenance: ${_runner_configuration_contract}")
+    endif()
+endforeach()
+foreach(_verifier_configuration_contract IN ITEMS
+        "string(JSON _aggregate_configuration GET \"\${_aggregate}\" environment configuration)"
+        "_aggregate_configuration STREQUAL SYNTH_CONFIGURATION")
+    string(FIND "${_standalone_verifier_source}"
+           "${_verifier_configuration_contract}" _contract_position)
+    if(_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone lifecycle verifier is missing configuration provenance: ${_verifier_configuration_contract}")
+    endif()
+endforeach()
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake"
+     _validation_manifest_generator_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake"
+     _validation_manifest_verifier_source)
+foreach(_manifest_configuration_contract IN ITEMS
+        "string(JSON _standalone_configuration GET \"\${_standalone}\" environment configuration)"
+        "_standalone_configuration STREQUAL SYNTH_CONFIGURATION"
+        "_standalone_configuration STREQUAL _build_configuration")
+    string(FIND "${_validation_manifest_generator_source}"
+           "${_manifest_configuration_contract}" _contract_position)
+    if(_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Validation manifest generation is missing standalone configuration binding: ${_manifest_configuration_contract}")
+    endif()
+endforeach()
+string(FIND "${_validation_manifest_verifier_source}"
+       "-DSYNTH_CONFIGURATION=\${SYNTH_CONFIGURATION}" _contract_position)
+if(_contract_position LESS 0)
+    message(FATAL_ERROR
+        "Validation manifest verification does not pass configuration to standalone verification")
+endif()
+
 file(READ "${SYNTH_SOURCE_ROOT}/Source/StandaloneApp.cpp" _standalone_source)
 if(_standalone_source MATCHES "StandalonePluginHolder|StandaloneFilterWindow")
     message(FATAL_ERROR
@@ -38,8 +87,15 @@ endif()
 foreach(_required_contract IN ITEMS
         "--settings"
         "--preset-dir"
+        "File::isAbsolutePath (arguments[3])"
         "std::make_unique<PropertiesFile> (lifecycle.settings"
         "setStandaloneLifecycleTestDirectory"
+        "private ComponentListener"
+        "BorderedComponentBoundsConstrainer"
+        "getEditorConstrainer"
+        "setBoundsConstrained"
+        "editor_constrainer_limits_valid"
+        "editor_resize_round_trip"
         "createAudioDeviceTypes"
         "audio_device_discovery_count"
         "status_label_showing")
@@ -85,6 +141,7 @@ set(_verify_command
     "-DSYNTH_REPEAT_COUNT=${SYNTH_REPEAT_COUNT}"
     "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
     "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+    "-DSYNTH_CONFIGURATION=${SYNTH_CONFIGURATION}"
     "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
     -P "${_verifier}")
 
@@ -128,6 +185,7 @@ function(_synth_run_runner_expect_failure name expected_pattern)
             "-DSYNTH_REPEAT_COUNT=${SYNTH_REPEAT_COUNT}"
             "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
             "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+            "-DSYNTH_CONFIGURATION=${SYNTH_CONFIGURATION}"
             "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
             "-DSYNTH_SOURCE_ROOT=${SYNTH_SOURCE_ROOT}"
             -P "${_runner}"
@@ -155,6 +213,7 @@ function(_synth_run_runner_expect_success)
             "-DSYNTH_REPEAT_COUNT=${SYNTH_REPEAT_COUNT}"
             "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
             "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+            "-DSYNTH_CONFIGURATION=${SYNTH_CONFIGURATION}"
             "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
             "-DSYNTH_SOURCE_ROOT=${SYNTH_SOURCE_ROOT}"
             -P "${_runner}"
@@ -184,6 +243,51 @@ endfunction()
 
 _synth_run_verifier_expect_success()
 file(READ "${_aggregate_path}" _aggregate_original)
+
+# Raw relative CLI tokens must be rejected before juce::File can resolve them
+# against the working directory or any platform default.
+string(JSON _standalone_executable_relative GET "${_aggregate_original}" executable relative_path)
+set(_standalone_executable "${SYNTH_STAGE_DIRECTORY}/${_standalone_executable_relative}")
+if(NOT EXISTS "${_standalone_executable}" OR IS_DIRECTORY "${_standalone_executable}")
+    message(FATAL_ERROR "Relative-path negative cannot find the staged standalone executable")
+endif()
+set(_relative_cli_root "${SYNTH_BUILD_ROOT}/validation/standalone-relative-cli-negative")
+if(IS_SYMLINK "${_relative_cli_root}")
+    message(FATAL_ERROR "Refusing to use a symlinked relative-path negative root")
+endif()
+if(EXISTS "${_relative_cli_root}")
+    file(REMOVE_RECURSE "${_relative_cli_root}")
+endif()
+file(MAKE_DIRECTORY "${_relative_cli_root}")
+set(_relative_cli_command "${_standalone_executable}"
+    --synth-lifecycle-test no-device
+    --report relative-report.json
+    --screenshot relative-screenshot.png
+    --settings relative-settings/MiniMoog.settings
+    --preset-dir relative-presets)
+if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+    list(PREPEND _relative_cli_command xvfb-run -a)
+endif()
+execute_process(
+    COMMAND ${_relative_cli_command}
+    WORKING_DIRECTORY "${_relative_cli_root}"
+    TIMEOUT 30
+    RESULT_VARIABLE _relative_cli_status
+    OUTPUT_VARIABLE _relative_cli_stdout
+    ERROR_VARIABLE _relative_cli_stderr
+    ENCODING UTF-8)
+if(_relative_cli_status STREQUAL "0")
+    message(FATAL_ERROR "Standalone accepted relative lifecycle output/state paths")
+endif()
+foreach(_unexpected_relative_output IN ITEMS
+        relative-report.json relative-screenshot.png relative-settings relative-presets)
+    if(EXISTS "${_relative_cli_root}/${_unexpected_relative_output}"
+       OR IS_SYMLINK "${_relative_cli_root}/${_unexpected_relative_output}")
+        message(FATAL_ERROR
+            "Rejected relative lifecycle CLI created output: ${_unexpected_relative_output}")
+    endif()
+endforeach()
+file(REMOVE_RECURSE "${_relative_cli_root}")
 
 # Missing report and screenshot evidence must be rejected and restored exactly.
 set(_first_report "${SYNTH_BUILD_ROOT}/validation/standalone/normal/repeat-1/report.json")
@@ -234,13 +338,6 @@ _synth_run_verifier_expect_failure("forbidden no-device discovery" "forbidden au
 file(WRITE "${_no_device_report}" "${_no_device_report_original}")
 file(WRITE "${_aggregate_path}" "${_aggregate_original}")
 
-# The legacy default settings before/after sentinel is mandatory.
-string(JSON _aggregate_mutated SET "${_aggregate_original}"
-       legacy_default_settings unchanged false)
-file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
-_synth_run_verifier_expect_failure("legacy settings mutation" "legacy default standalone settings sentinel")
-file(WRITE "${_aggregate_path}" "${_aggregate_original}")
-
 # Aggregate executable identity, run mode, and aggregate status are strict.
 _synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
                        executable sha256
@@ -253,6 +350,10 @@ _synth_run_verifier_expect_failure("invalid mode" "mode/repeat/status is inconsi
 _synth_set_json_string(_aggregate_mutated "${_aggregate_original}" status "fail")
 file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
 _synth_run_verifier_expect_failure("aggregate status inconsistency" "header/status is inconsistent")
+_synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
+                       environment configuration "WrongConfiguration")
+file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
+_synth_run_verifier_expect_failure("wrong configuration" "header/status is inconsistent")
 file(WRITE "${_aggregate_path}" "${_aggregate_original}")
 
 # A failed actual-window assertion remains fatal even if its hash is updated.
@@ -267,6 +368,34 @@ _synth_run_verifier_expect_failure("failed window assertion" "top_level_visible"
 file(WRITE "${_first_report}" "${_first_report_original}")
 file(WRITE "${_aggregate_path}" "${_aggregate_original}")
 
+# Resize propagation is required independently of the other window assertions.
+file(READ "${_first_report}" _report_mutated)
+string(JSON _report_mutated SET "${_report_mutated}"
+       assertions editor_resize_round_trip false)
+file(WRITE "${_first_report}" "${_report_mutated}\n")
+file(SHA256 "${_first_report}" _mutated_report_sha256)
+_synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
+                       runs 0 report_sha256 "${_mutated_report_sha256}")
+file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
+_synth_run_verifier_expect_failure("failed resize assertion" "editor_resize_round_trip")
+file(WRITE "${_first_report}" "${_first_report_original}")
+file(WRITE "${_aggregate_path}" "${_aggregate_original}")
+
+# A forged resize relationship is rejected even when every assertion says true.
+file(READ "${_first_report}" _report_mutated)
+string(JSON _resized_window_width GET "${_report_mutated}" resize resized_window_width)
+math(EXPR _forged_resized_window_width "${_resized_window_width} + 1")
+string(JSON _report_mutated SET "${_report_mutated}"
+       resize resized_window_width ${_forged_resized_window_width})
+file(WRITE "${_first_report}" "${_report_mutated}\n")
+file(SHA256 "${_first_report}" _mutated_report_sha256)
+_synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
+                       runs 0 report_sha256 "${_mutated_report_sha256}")
+file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
+_synth_run_verifier_expect_failure("forged resize relationship" "resize round-trip is inconsistent")
+file(WRITE "${_first_report}" "${_first_report_original}")
+file(WRITE "${_aggregate_path}" "${_aggregate_original}")
+
 # Zero repeats are rejected at the verifier boundary.
 set(_verify_command_saved ${_verify_command})
 set(_verify_command
@@ -277,6 +406,7 @@ set(_verify_command
     "-DSYNTH_REPEAT_COUNT=0"
     "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
     "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+    "-DSYNTH_CONFIGURATION=${SYNTH_CONFIGURATION}"
     "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
     -P "${_verifier}")
 _synth_run_verifier_expect_failure("zero repeat count" "positive integer")

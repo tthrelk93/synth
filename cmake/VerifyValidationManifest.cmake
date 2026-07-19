@@ -284,6 +284,7 @@ execute_process(
         "-DSYNTH_REPEAT_COUNT=${SYNTH_REPEAT_COUNT}"
         "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
         "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+        "-DSYNTH_CONFIGURATION=${SYNTH_CONFIGURATION}"
         "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
         -P "${CMAKE_CURRENT_LIST_DIR}/VerifyStandaloneLifecycleEvidence.cmake"
     RESULT_VARIABLE _standalone_verification_status

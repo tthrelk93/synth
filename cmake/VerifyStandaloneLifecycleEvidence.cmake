@@ -7,6 +7,7 @@ foreach(_required_variable IN ITEMS
         SYNTH_REPEAT_COUNT
         SYNTH_SYSTEM_NAME
         SYNTH_ARCHITECTURE
+        SYNTH_CONFIGURATION
         SYNTH_PROJECT_VERSION)
     if(NOT DEFINED ${_required_variable} OR "${${_required_variable}}" STREQUAL "")
         message(FATAL_ERROR "${_required_variable} is required to verify standalone lifecycle evidence")
@@ -120,40 +121,15 @@ string(JSON _aggregate_status GET "${_aggregate}" status)
 string(JSON _aggregate_repeat_count GET "${_aggregate}" repeat_count)
 string(JSON _aggregate_os GET "${_aggregate}" environment os)
 string(JSON _aggregate_arch GET "${_aggregate}" environment architecture)
+string(JSON _aggregate_configuration GET "${_aggregate}" environment configuration)
 if(NOT _schema STREQUAL "1"
    OR NOT _tool_version STREQUAL SYNTH_PROJECT_VERSION
    OR NOT _aggregate_status STREQUAL "pass"
    OR NOT _aggregate_repeat_count STREQUAL SYNTH_REPEAT_COUNT
    OR NOT _aggregate_os STREQUAL SYNTH_SYSTEM_NAME
-   OR NOT _aggregate_arch STREQUAL SYNTH_ARCHITECTURE)
+   OR NOT _aggregate_arch STREQUAL SYNTH_ARCHITECTURE
+   OR NOT _aggregate_configuration STREQUAL SYNTH_CONFIGURATION)
     message(FATAL_ERROR "standalone lifecycle aggregate header/status is inconsistent")
-endif()
-
-if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
-    set(_expected_legacy_settings_path
-        "<USER_HOME>/Library/Application Support/MiniMoog.settings")
-elseif(SYNTH_SYSTEM_NAME STREQUAL "Windows")
-    set(_expected_legacy_settings_path
-        "<USER_APPDATA>/MiniMoog/MiniMoog.settings")
-elseif(SYNTH_SYSTEM_NAME STREQUAL "Linux")
-    set(_expected_legacy_settings_path "<USER_HOME>/.config/MiniMoog.settings")
-else()
-    message(FATAL_ERROR "unsupported platform in legacy standalone settings proof")
-endif()
-string(JSON _legacy_path GET "${_aggregate}" legacy_default_settings path)
-string(JSON _legacy_exists_before GET "${_aggregate}" legacy_default_settings exists_before)
-string(JSON _legacy_symlink_before GET "${_aggregate}" legacy_default_settings symlink_before)
-string(JSON _legacy_sha256_before GET "${_aggregate}" legacy_default_settings sha256_before)
-string(JSON _legacy_exists_after GET "${_aggregate}" legacy_default_settings exists_after)
-string(JSON _legacy_symlink_after GET "${_aggregate}" legacy_default_settings symlink_after)
-string(JSON _legacy_sha256_after GET "${_aggregate}" legacy_default_settings sha256_after)
-string(JSON _legacy_unchanged GET "${_aggregate}" legacy_default_settings unchanged)
-if(NOT _legacy_path STREQUAL _expected_legacy_settings_path
-   OR NOT _legacy_unchanged
-   OR NOT "${_legacy_exists_before}" STREQUAL "${_legacy_exists_after}"
-   OR NOT "${_legacy_symlink_before}" STREQUAL "${_legacy_symlink_after}"
-   OR NOT _legacy_sha256_before STREQUAL _legacy_sha256_after)
-    message(FATAL_ERROR "legacy default standalone settings sentinel changed during validation")
 endif()
 
 string(JSON _product_count LENGTH "${_build_manifest}" products)
@@ -347,6 +323,11 @@ foreach(_mode IN LISTS _expected_modes)
                 custom_editor_visible
                 custom_editor_showing
                 custom_editor_bounds_nonempty
+                editor_constrainer_present
+                editor_constrainer_limits_valid
+                window_decorator_constrainer_active
+                editor_resize_propagated_to_window
+                editor_resize_round_trip
                 status_label_showing
                 status_label_bounds_nonempty
                 piano_note_round_trip
@@ -366,6 +347,57 @@ foreach(_mode IN LISTS _expected_modes)
         string(JSON _piano_key_count GET "${_app_report}" assertions visible_piano_key_count)
         if(_piano_key_count LESS 1)
             message(FATAL_ERROR "standalone run ${_run_index} found no visible PianoKey components")
+        endif()
+
+        foreach(_resize_field IN ITEMS
+                minimum_editor_width minimum_editor_height
+                maximum_editor_width maximum_editor_height
+                original_editor_width original_editor_height
+                requested_editor_width requested_editor_height
+                resized_editor_width resized_editor_height
+                resized_content_width resized_content_height
+                original_window_width original_window_height
+                resized_window_width resized_window_height
+                restored_editor_width restored_editor_height
+                restored_content_width restored_content_height
+                restored_window_width restored_window_height)
+            string(JSON _resize_${_resize_field} GET "${_app_report}" resize ${_resize_field})
+        endforeach()
+        if(_resize_minimum_editor_width LESS 1
+           OR _resize_minimum_editor_height LESS 1
+           OR _resize_maximum_editor_width LESS _resize_minimum_editor_width
+           OR _resize_maximum_editor_height LESS _resize_minimum_editor_height
+           OR _resize_original_editor_width LESS _resize_minimum_editor_width
+           OR _resize_original_editor_width GREATER _resize_maximum_editor_width
+           OR _resize_original_editor_height LESS _resize_minimum_editor_height
+           OR _resize_original_editor_height GREATER _resize_maximum_editor_height
+           OR (_resize_requested_editor_width EQUAL _resize_original_editor_width
+               AND _resize_requested_editor_height EQUAL _resize_original_editor_height)
+           OR _resize_requested_editor_width LESS _resize_minimum_editor_width
+           OR _resize_requested_editor_width GREATER _resize_maximum_editor_width
+           OR _resize_requested_editor_height LESS _resize_minimum_editor_height
+           OR _resize_requested_editor_height GREATER _resize_maximum_editor_height
+           OR NOT _resize_resized_editor_width EQUAL _resize_requested_editor_width
+           OR NOT _resize_resized_editor_height EQUAL _resize_requested_editor_height
+           OR NOT _resize_resized_content_width EQUAL _resize_requested_editor_width
+           OR NOT _resize_resized_content_height EQUAL _resize_requested_editor_height)
+            message(FATAL_ERROR
+                "standalone run ${_run_index} editor constrainer/resize evidence is inconsistent")
+        endif()
+        math(EXPR _expected_resized_window_width
+             "${_resize_original_window_width} + ${_resize_requested_editor_width} - ${_resize_original_editor_width}")
+        math(EXPR _expected_resized_window_height
+             "${_resize_original_window_height} + ${_resize_requested_editor_height} - ${_resize_original_editor_height}")
+        if(NOT _resize_resized_window_width EQUAL _expected_resized_window_width
+           OR NOT _resize_resized_window_height EQUAL _expected_resized_window_height
+           OR NOT _resize_restored_editor_width EQUAL _resize_original_editor_width
+           OR NOT _resize_restored_editor_height EQUAL _resize_original_editor_height
+           OR NOT _resize_restored_content_width EQUAL _resize_original_editor_width
+           OR NOT _resize_restored_content_height EQUAL _resize_original_editor_height
+           OR NOT _resize_restored_window_width EQUAL _resize_original_window_width
+           OR NOT _resize_restored_window_height EQUAL _resize_original_window_height)
+            message(FATAL_ERROR
+                "standalone run ${_run_index} editor-driven resize round-trip is inconsistent")
         endif()
 
         string(JSON _current_device GET "${_app_report}" device current_device)

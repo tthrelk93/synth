@@ -120,6 +120,7 @@ string(JSON _standalone_version GET "${_standalone}" tool_version)
 string(JSON _standalone_repeat_count GET "${_standalone}" repeat_count)
 string(JSON _standalone_os GET "${_standalone}" environment os)
 string(JSON _standalone_arch GET "${_standalone}" environment architecture)
+string(JSON _standalone_configuration GET "${_standalone}" environment configuration)
 string(JSON _standalone_product_path GET "${_standalone}" executable product_relative_path)
 string(JSON _standalone_product_sha256 GET "${_standalone}" executable product_aggregate_sha256)
 string(JSON _standalone_executable_path GET "${_standalone}" executable relative_path)
@@ -131,6 +132,8 @@ if(NOT _standalone_status STREQUAL "pass"
    OR NOT _standalone_repeat_count STREQUAL SYNTH_REPEAT_COUNT
    OR NOT _standalone_os STREQUAL SYNTH_SYSTEM_NAME
    OR NOT _standalone_arch STREQUAL SYNTH_ARCHITECTURE
+   OR NOT _standalone_configuration STREQUAL SYNTH_CONFIGURATION
+   OR NOT _standalone_configuration STREQUAL _build_configuration
    OR NOT _standalone_product_path STREQUAL _final_standalone_relative_path
    OR NOT _standalone_product_sha256 STREQUAL _final_standalone_sha256
    OR _standalone_executable_path STREQUAL ""

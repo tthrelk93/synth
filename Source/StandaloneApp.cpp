@@ -69,14 +69,19 @@ static LifecycleOptions parseLifecycleOptions()
     else
         result.parseError = "Unsupported standalone lifecycle mode: " + arguments[1];
 
+    if (! File::isAbsolutePath (arguments[3])
+        || ! File::isAbsolutePath (arguments[5])
+        || ! File::isAbsolutePath (arguments[7])
+        || ! File::isAbsolutePath (arguments[9]))
+    {
+        result.parseError = "Lifecycle report, screenshot, settings, and preset paths must be absolute";
+        return result;
+    }
+
     result.report = File (arguments[3]);
     result.screenshot = File (arguments[5]);
     result.settings = File (arguments[7]);
     result.presetDirectory = File (arguments[9]);
-    for (const auto& file : { result.report, result.screenshot, result.settings,
-                              result.presetDirectory })
-        if (! File::isAbsolutePath (file.getFullPathName()))
-            result.parseError = "Lifecycle report, screenshot, settings, and preset paths must be absolute";
    #endif
 
     return result;
@@ -138,7 +143,8 @@ public:
     virtual void requestApplicationQuit() = 0;
 };
 
-class EditorContent final : public Component
+class EditorContent final : public Component,
+                            private ComponentListener
 {
 public:
     explicit EditorContent (AudioProcessor& processor)
@@ -148,29 +154,98 @@ public:
     {
         if (editor != nullptr)
         {
+            editor->addComponentListener (this);
+            handleEditorMovedOrResized();
             addAndMakeVisible (*editor);
-            setSize (editor->getWidth(), editor->getHeight());
         }
     }
 
     ~EditorContent() override
     {
         if (editor != nullptr)
+        {
+            editor->removeComponentListener (this);
             processor.editorBeingDeleted (editor.get());
+        }
         editor.reset();
     }
 
-    void resized() override
-    {
-        if (editor != nullptr)
-            editor->setBounds (getLocalBounds());
-    }
+    void resized() override { handleContentResized(); }
 
     AudioProcessorEditor* getEditor() const noexcept { return editor.get(); }
 
+    ComponentBoundsConstrainer* getEditorConstrainer() const noexcept
+    {
+        return editor != nullptr ? editor->getConstrainer() : nullptr;
+    }
+
 private:
+    void handleContentResized()
+    {
+        if (editor == nullptr)
+            return;
+
+        const auto contentBounds = getLocalBounds();
+        const auto newPosition = contentBounds.getTopLeft().toFloat()
+                                     .transformedBy (editor->getTransform().inverted())
+                                     .roundToInt();
+        if (preventResizingEditor)
+            editor->setTopLeftPosition (newPosition);
+        else
+            editor->setBoundsConstrained (
+                editor->getLocalArea (this, contentBounds.toFloat())
+                    .withPosition (newPosition.toFloat()).toNearestInt());
+    }
+
+    void handleEditorMovedOrResized()
+    {
+        const ScopedValueSetter<bool> scope (preventResizingEditor, true);
+        if (editor != nullptr)
+        {
+            const auto editorArea = getLocalArea (editor.get(), editor->getLocalBounds());
+            setSize (editorArea.getWidth(), editorArea.getHeight());
+        }
+    }
+
+    void componentMovedOrResized (Component&, bool, bool) override
+    {
+        handleEditorMovedOrResized();
+    }
+
     AudioProcessor& processor;
     std::unique_ptr<AudioProcessorEditor> editor;
+    bool preventResizingEditor = false;
+};
+
+class StandaloneDecoratorConstrainer final : public BorderedComponentBoundsConstrainer
+{
+public:
+    ComponentBoundsConstrainer* getWrappedConstrainer() const override
+    {
+        return content != nullptr ? content->getEditorConstrainer() : nullptr;
+    }
+
+    BorderSize<int> getAdditionalBorder() const override
+    {
+        if (window == nullptr)
+            return {};
+
+        const auto nativeFrame = [&]() -> BorderSize<int>
+        {
+            if (auto* peer = window->getPeer())
+                if (const auto frame = peer->getFrameSizeIfPresent())
+                    return *frame;
+            return {};
+        }();
+        return nativeFrame.addedTo (window->getContentComponentBorder());
+    }
+
+    void setWindow (DocumentWindow* windowIn) { window = windowIn; }
+    void setEditorContent (EditorContent* contentIn) { content = contentIn; }
+
+private:
+    DocumentWindow* window = nullptr;
+    EditorContent* content = nullptr;
 };
 
 class ProjectStandaloneWindow final : public DocumentWindow
@@ -184,6 +259,8 @@ public:
                           DocumentWindow::minimiseButton | DocumentWindow::closeButton),
           actions (actionsIn), settings (settingsIn), optionsButton ("Options")
     {
+        decoratorConstrainer.setWindow (this);
+        setConstrainer (&decoratorConstrainer);
         setTitleBarButtonsRequired (DocumentWindow::minimiseButton | DocumentWindow::closeButton, false);
         optionsButton.setTriggeredOnMouseDown (true);
         optionsButton.onClick = [safe = SafePointer<ProjectStandaloneWindow> (this)]
@@ -211,6 +288,7 @@ public:
     {
         auto content = std::make_unique<EditorContent> (processor);
         editorContent = content.get();
+        decoratorConstrainer.setEditorContent (editorContent);
         setContentOwned (content.release(), true);
         if (auto* editor = getEditor())
             setResizable (editor->isResizable(), false);
@@ -219,6 +297,7 @@ public:
 
     void clearProcessorEditor()
     {
+        decoratorConstrainer.setEditorContent (nullptr);
         editorContent = nullptr;
         clearContentComponent();
     }
@@ -226,6 +305,21 @@ public:
     AudioProcessorEditor* getEditor() const noexcept
     {
         return editorContent != nullptr ? editorContent->getEditor() : nullptr;
+    }
+
+    ComponentBoundsConstrainer* getEditorConstrainer() const noexcept
+    {
+        return editorContent != nullptr ? editorContent->getEditorConstrainer() : nullptr;
+    }
+
+    Rectangle<int> getEditorContentBounds() const noexcept
+    {
+        return editorContent != nullptr ? editorContent->getBounds() : Rectangle<int>{};
+    }
+
+    bool isDecoratorConstrainerActive() noexcept
+    {
+        return getConstrainer() == &decoratorConstrainer;
     }
 
     void resized() override
@@ -273,7 +367,7 @@ private:
         const auto limits = displays.getDisplayForRect (requested)->userArea;
         requested.setPosition (jlimit (limits.getX(), jmax (limits.getX(), limits.getRight() - requested.getWidth()), requested.getX()),
                                jlimit (limits.getY(), jmax (limits.getY(), limits.getBottom() - requested.getHeight()), requested.getY()));
-        setBounds (requested);
+        setBoundsConstrained (requested);
     }
 
     void showOptionsMenu()
@@ -302,6 +396,7 @@ private:
     TextButton optionsButton;
     Label statusLabel;
     EditorContent* editorContent = nullptr;
+    StandaloneDecoratorConstrainer decoratorConstrainer;
 };
 
 class AudioMidiSettingsComponent final : public Component
@@ -674,11 +769,11 @@ private:
         };
 
         const auto hasWindow = mainWindow != nullptr;
-        const auto windowBounds = hasWindow ? mainWindow->getBounds() : Rectangle<int>{};
+        const auto originalWindowBounds = hasWindow ? mainWindow->getBounds() : Rectangle<int>{};
         assertThat ("top_level_visible", hasWindow && mainWindow->isVisible(), "Top-level window is not visible");
         assertThat ("top_level_showing", hasWindow && mainWindow->isShowing(), "Top-level window is not showing");
         assertThat ("native_peer_present", hasWindow && mainWindow->getPeer() != nullptr, "Top-level window has no native peer");
-        assertThat ("window_bounds_nonempty", ! windowBounds.isEmpty(), "Top-level window bounds are empty");
+        assertThat ("window_bounds_nonempty", ! originalWindowBounds.isEmpty(), "Top-level window bounds are empty");
         assertThat ("visible_before_device_configuration",
                     windowVisibleSequence > 0 && deviceConfigurationStartSequence > windowVisibleSequence,
                     "Device configuration did not begin after first visibility");
@@ -689,9 +784,81 @@ private:
 
         auto* editor = hasWindow ? mainWindow->getEditor() : nullptr;
         const auto editorBounds = editor != nullptr ? editor->getBounds() : Rectangle<int>{};
+        auto* editorConstrainer = hasWindow ? mainWindow->getEditorConstrainer() : nullptr;
+        const auto minimumEditorWidth = editorConstrainer != nullptr ? editorConstrainer->getMinimumWidth() : 0;
+        const auto minimumEditorHeight = editorConstrainer != nullptr ? editorConstrainer->getMinimumHeight() : 0;
+        const auto maximumEditorWidth = editorConstrainer != nullptr ? editorConstrainer->getMaximumWidth() : 0;
+        const auto maximumEditorHeight = editorConstrainer != nullptr ? editorConstrainer->getMaximumHeight() : 0;
+        const auto editorConstrainerLimitsValid = editorConstrainer != nullptr
+            && minimumEditorWidth > 0 && minimumEditorHeight > 0
+            && maximumEditorWidth >= minimumEditorWidth
+            && maximumEditorHeight >= minimumEditorHeight
+            && editorBounds.getWidth() >= minimumEditorWidth
+            && editorBounds.getWidth() <= maximumEditorWidth
+            && editorBounds.getHeight() >= minimumEditorHeight
+            && editorBounds.getHeight() <= maximumEditorHeight;
+
+        const auto chooseResizeDimension = [] (int current, int minimum, int maximum)
+        {
+            const auto larger = jmin (maximum, current + 16);
+            return larger != current ? larger : jmax (minimum, current - 16);
+        };
+        const auto requestedEditorWidth = editorConstrainerLimitsValid
+            ? chooseResizeDimension (editorBounds.getWidth(), minimumEditorWidth, maximumEditorWidth)
+            : editorBounds.getWidth();
+        const auto requestedEditorHeight = editorConstrainerLimitsValid
+            ? chooseResizeDimension (editorBounds.getHeight(), minimumEditorHeight, maximumEditorHeight)
+            : editorBounds.getHeight();
+
+        Rectangle<int> resizedWindowBounds;
+        Rectangle<int> resizedContentBounds;
+        Rectangle<int> restoredWindowBounds;
+        Rectangle<int> restoredContentBounds;
+        Rectangle<int> resizedEditorBounds;
+        Rectangle<int> restoredEditorBounds;
+        bool editorResizePropagatedToWindow = false;
+        bool editorResizeRoundTrip = false;
+        const auto rectangleSize = [] (const Rectangle<int>& rectangle)
+        {
+            return Point<int> (rectangle.getWidth(), rectangle.getHeight());
+        };
+        if (editor != nullptr && hasWindow
+            && (requestedEditorWidth != editorBounds.getWidth()
+                || requestedEditorHeight != editorBounds.getHeight()))
+        {
+            editor->setSize (requestedEditorWidth, requestedEditorHeight);
+            resizedEditorBounds = editor->getBounds();
+            resizedContentBounds = mainWindow->getEditorContentBounds();
+            resizedWindowBounds = mainWindow->getBounds();
+            editorResizePropagatedToWindow = rectangleSize (resizedEditorBounds)
+                                                  == Point<int> (requestedEditorWidth, requestedEditorHeight)
+                && rectangleSize (resizedContentBounds) == rectangleSize (resizedEditorBounds)
+                && resizedWindowBounds.getWidth() - originalWindowBounds.getWidth()
+                       == requestedEditorWidth - editorBounds.getWidth()
+                && resizedWindowBounds.getHeight() - originalWindowBounds.getHeight()
+                       == requestedEditorHeight - editorBounds.getHeight();
+
+            editor->setSize (editorBounds.getWidth(), editorBounds.getHeight());
+            restoredEditorBounds = editor->getBounds();
+            restoredContentBounds = mainWindow->getEditorContentBounds();
+            restoredWindowBounds = mainWindow->getBounds();
+            editorResizeRoundTrip = rectangleSize (restoredEditorBounds) == rectangleSize (editorBounds)
+                && rectangleSize (restoredContentBounds) == rectangleSize (editorBounds)
+                && rectangleSize (restoredWindowBounds) == rectangleSize (originalWindowBounds);
+        }
+
         assertThat ("custom_editor_visible", editor != nullptr && editor->isVisible(), "Custom editor is not visible");
         assertThat ("custom_editor_showing", editor != nullptr && editor->isShowing(), "Custom editor is not showing");
         assertThat ("custom_editor_bounds_nonempty", ! editorBounds.isEmpty(), "Custom editor bounds are empty");
+        assertThat ("editor_constrainer_present", editorConstrainer != nullptr, "Custom editor has no bounds constrainer");
+        assertThat ("editor_constrainer_limits_valid", editorConstrainerLimitsValid, "Custom editor constrainer limits are invalid");
+        assertThat ("window_decorator_constrainer_active",
+                    hasWindow && mainWindow->isDecoratorConstrainerActive(),
+                    "Standalone window is not using the decorated editor constrainer");
+        assertThat ("editor_resize_propagated_to_window", editorResizePropagatedToWindow,
+                    "Editor-driven resize did not propagate to content and window bounds");
+        assertThat ("editor_resize_round_trip", editorResizeRoundTrip,
+                    "Editor-driven resize did not round-trip to the original bounds");
         assertThat ("status_label_showing", hasWindow && mainWindow->isStatusLabelShowing(), "Status label is not showing");
         assertThat ("status_label_bounds_nonempty", hasWindow && ! mainWindow->getStatusLabelBounds().isEmpty(), "Status label bounds are empty");
 
@@ -750,6 +917,7 @@ private:
 
         bool pngValid = false;
         bool pngDimensionsMatch = false;
+        const auto windowBounds = hasWindow ? mainWindow->getBounds() : Rectangle<int>{};
         if (hasWindow && ! windowBounds.isEmpty())
         {
             const auto image = mainWindow->createComponentSnapshot (mainWindow->getLocalBounds(), true);
@@ -785,6 +953,30 @@ private:
         window->setProperty ("width", windowBounds.getWidth());
         window->setProperty ("height", windowBounds.getHeight());
         report->setProperty ("window", var (window.get()));
+        auto resize = DynamicObject::Ptr (new DynamicObject());
+        resize->setProperty ("minimum_editor_width", minimumEditorWidth);
+        resize->setProperty ("minimum_editor_height", minimumEditorHeight);
+        resize->setProperty ("maximum_editor_width", maximumEditorWidth);
+        resize->setProperty ("maximum_editor_height", maximumEditorHeight);
+        resize->setProperty ("original_editor_width", editorBounds.getWidth());
+        resize->setProperty ("original_editor_height", editorBounds.getHeight());
+        resize->setProperty ("requested_editor_width", requestedEditorWidth);
+        resize->setProperty ("requested_editor_height", requestedEditorHeight);
+        resize->setProperty ("resized_editor_width", resizedEditorBounds.getWidth());
+        resize->setProperty ("resized_editor_height", resizedEditorBounds.getHeight());
+        resize->setProperty ("resized_content_width", resizedContentBounds.getWidth());
+        resize->setProperty ("resized_content_height", resizedContentBounds.getHeight());
+        resize->setProperty ("original_window_width", originalWindowBounds.getWidth());
+        resize->setProperty ("original_window_height", originalWindowBounds.getHeight());
+        resize->setProperty ("resized_window_width", resizedWindowBounds.getWidth());
+        resize->setProperty ("resized_window_height", resizedWindowBounds.getHeight());
+        resize->setProperty ("restored_editor_width", restoredEditorBounds.getWidth());
+        resize->setProperty ("restored_editor_height", restoredEditorBounds.getHeight());
+        resize->setProperty ("restored_content_width", restoredContentBounds.getWidth());
+        resize->setProperty ("restored_content_height", restoredContentBounds.getHeight());
+        resize->setProperty ("restored_window_width", restoredWindowBounds.getWidth());
+        resize->setProperty ("restored_window_height", restoredWindowBounds.getHeight());
+        report->setProperty ("resize", var (resize.get()));
         auto discovery = DynamicObject::Ptr (new DynamicObject());
         discovery->setProperty ("audio_device_discovery_count", deviceManager.audioDeviceDiscoveryCount);
         discovery->setProperty ("midi_enumeration_performed", midiEnumerationPerformed);
