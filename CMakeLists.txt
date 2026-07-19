@@ -1,0 +1,182 @@
+cmake_minimum_required(VERSION 3.24)
+
+project(ModelD VERSION 1.0.0 LANGUAGES C CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(SYNTH_JUCE_SOURCE_DIR "" CACHE PATH
+    "Optional path to a local JUCE checkout at the required revision")
+option(SYNTH_BUILD_TESTS "Build developer and CI tests" ON)
+option(SYNTH_BUILD_VALIDATORS "Build optional plug-in validators" OFF)
+option(SYNTH_WARNINGS_AS_ERRORS "Treat project-source warnings as errors" OFF)
+option(SYNTH_ENABLE_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
+option(SYNTH_VALIDATE_DISTRIBUTION_IDENTITY
+       "Require approved legal identity for distribution validation" OFF)
+
+include(cmake/ProductIdentity.cmake)
+
+set(_synth_identity_errors "")
+if(SYNTH_MANUFACTURER_NAME STREQUAL ""
+   OR SYNTH_MANUFACTURER_NAME STREQUAL "yourcompany")
+    list(APPEND _synth_identity_errors "manufacturer name is empty or placeholder")
+endif()
+
+if(SYNTH_MANUFACTURER_DOMAIN STREQUAL ""
+   OR SYNTH_MANUFACTURER_DOMAIN MATCHES "(^|\\.)yourcompany($|\\.)"
+   OR SYNTH_MANUFACTURER_DOMAIN MATCHES "(^|\\.)example\\.(com|net|org)$")
+    list(APPEND _synth_identity_errors "reverse-DNS domain is empty or placeholder")
+endif()
+
+if(NOT SYNTH_IDENTITY_APPROVED)
+    list(APPEND _synth_identity_errors "identity is not approved")
+endif()
+
+if(SYNTH_VALIDATE_DISTRIBUTION_IDENTITY AND _synth_identity_errors)
+    list(JOIN _synth_identity_errors "; " _synth_identity_error_text)
+    message(FATAL_ERROR
+        "Distribution identity validation failed (BLD-007): ${_synth_identity_error_text}.")
+endif()
+
+include(cmake/Dependencies.cmake)
+
+add_library(SynthProjectOptions INTERFACE)
+target_compile_features(SynthProjectOptions INTERFACE cxx_std_20)
+
+if(MSVC)
+    target_compile_options(SynthProjectOptions INTERFACE /W4)
+    if(SYNTH_WARNINGS_AS_ERRORS)
+        target_compile_options(SynthProjectOptions INTERFACE /WX)
+    endif()
+else()
+    target_compile_options(SynthProjectOptions INTERFACE -Wall -Wextra -Wpedantic)
+    if(SYNTH_WARNINGS_AS_ERRORS)
+        target_compile_options(SynthProjectOptions INTERFACE -Werror)
+    endif()
+endif()
+
+if(SYNTH_ENABLE_SANITIZERS)
+    if(MSVC)
+        message(FATAL_ERROR "SYNTH_ENABLE_SANITIZERS is not supported with MSVC")
+    endif()
+    target_compile_options(SynthProjectOptions INTERFACE
+        -fsanitize=address,undefined -fno-omit-frame-pointer)
+    target_link_options(SynthProjectOptions INTERFACE -fsanitize=address,undefined)
+endif()
+
+set(MODEL_D_CORE_SOURCES
+    Source/CircularBuffer.cpp
+    Source/EnvelopeGenerator.cpp
+    Source/LadderFilter.cpp
+    Source/ModWheel.cpp
+    Source/Oscillator.cpp
+    Source/PresetLibrary.cpp
+    Source/SynthPreset.cpp)
+
+add_library(ModelDCore STATIC ${MODEL_D_CORE_SOURCES})
+add_library(ModelD::Core ALIAS ModelDCore)
+target_include_directories(ModelDCore
+    PUBLIC
+        Source
+        cmake/core_compat)
+target_compile_definitions(ModelDCore
+    PUBLIC
+        JUCE_STRICT_REFCOUNTEDPOINTER=1
+        JUCE_VST3_CAN_REPLACE_VST2=0
+    PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+target_link_libraries(ModelDCore
+    PUBLIC
+        juce::juce_audio_basics
+        juce::juce_core
+        juce::juce_dsp
+    PRIVATE
+        SynthProjectOptions
+        juce::juce_recommended_config_flags)
+
+juce_add_binary_data(ModelDAssets
+    NAMESPACE BinaryData
+    SOURCES
+        Source/blackPlastic.jpg
+        Source/brooding.png
+        Source/dalle.png
+        Source/dalleBG.png
+        Source/synthBack.png
+        Source/synthBack2.png
+        Source/synthBrooding.png
+        Source/woodgrain.jpeg)
+
+set(_model_d_formats VST3 Standalone)
+if(APPLE)
+    list(APPEND _model_d_formats AU)
+endif()
+
+juce_add_plugin(ModelDPlugin
+    COMPANY_NAME "${SYNTH_MANUFACTURER_NAME}"
+    COMPANY_WEBSITE "${SYNTH_MANUFACTURER_WEBSITE}"
+    COMPANY_EMAIL "${SYNTH_MANUFACTURER_EMAIL}"
+    BUNDLE_ID "${SYNTH_BUNDLE_ID}"
+    PLUGIN_MANUFACTURER_CODE "${SYNTH_MANUFACTURER_CODE}"
+    PLUGIN_CODE "${SYNTH_PRODUCT_CODE}"
+    PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
+    VERSION "${PROJECT_VERSION}"
+    FORMATS ${_model_d_formats}
+    IS_SYNTH FALSE
+    NEEDS_MIDI_INPUT FALSE
+    NEEDS_MIDI_OUTPUT FALSE
+    IS_MIDI_EFFECT FALSE
+    COPY_PLUGIN_AFTER_BUILD FALSE)
+
+target_sources(ModelDPlugin
+    PRIVATE
+        Source/BlackBackgroundComponent.cpp
+        Source/CustomPanelComponent.cpp
+        Source/CustomSliderLookAndFeel.cpp
+        Source/ModWheelSlider.cpp
+        Source/PianoKey.cpp
+        Source/PitchWheelLookAndFeel.cpp
+        Source/PitchWheelSlider.cpp
+        Source/PluginEditor.cpp
+        Source/PluginProcessor.cpp
+        Source/PresetManager.cpp
+        Source/SignalFlowOverlay.cpp
+        Source/SmokeComponent.cpp
+        Source/VintageLookAndFeel.cpp
+        Source/WaveformDisplay.cpp
+        Source/WaveformSlider.cpp)
+target_include_directories(ModelDPlugin
+    BEFORE PRIVATE
+        Source
+        cmake/plugin_compat)
+target_compile_definitions(ModelDPlugin
+    PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0)
+target_link_libraries(ModelDPlugin
+    PRIVATE
+        ModelDCore
+        ModelDAssets
+        SynthProjectOptions
+        juce::juce_audio_devices
+        juce::juce_audio_formats
+        juce::juce_audio_processors
+        juce::juce_audio_utils
+        juce::juce_data_structures
+        juce::juce_dsp
+        juce::juce_events
+        juce::juce_graphics
+        juce::juce_gui_basics
+        juce::juce_gui_extra
+        juce::juce_recommended_config_flags)
+
+add_executable(ModelDOfflineRenderer Tools/ModelDOfflineRenderer.cpp)
+target_link_libraries(ModelDOfflineRenderer PRIVATE ModelDCore SynthProjectOptions)
+
+if(SYNTH_BUILD_TESTS)
+    enable_testing()
+    add_executable(ModelDTests Tests/ModelDTests.cpp)
+    target_link_libraries(ModelDTests PRIVATE ModelDCore SynthProjectOptions)
+    add_test(NAME ModelDCoreFoundation COMMAND ModelDTests)
+endif()
