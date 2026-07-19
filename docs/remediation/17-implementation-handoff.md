@@ -18,6 +18,7 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
 | Source prompt | [Agent 01 kickoff](16-agent-01-workstream-02-kickoff.md) |
+| Successor package | Planned untracked artifact `Agent-02-Workstream-02-Continuation-Context.zip`; build it from the final protocol commit and report its outer SHA-256 after construction. |
 | First action | Execute `.github/workflows/ci.yml` from a fresh clone on all eight supported rows and retain its uploaded validation evidence; local implementation work through BLD-012 is complete. |
 | First unmet gate | BLD-001 — supported-CI fresh-clone configure/build evidence |
 | Next owner if incomplete | Workstream 02 / F0 continuation at the first dependency-ordered non-passing BLD requirement |
@@ -80,6 +81,35 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 - The fixed product, compatibility, phase, and evidence policies remain those in the roadmap and Workstream 02.
 - A missing reviewed legal identity blocks BLD-007 and any distribution artifact that depends on it; it is not permission to invent values.
 - Early lifecycle diagnostics exposed two pre-existing unconditional user writes. The newly created real settings file and Desktop log were moved recoverably to `/tmp/model-d-task7-settings-recovery.q2FbjJ/MiniMoog.settings` and `/tmp/model-d-task7-desktop-log-recovery.mRiFyV/my_plugin_log.txt`; the original user locations are absent. No pre-existing file was overwritten or deleted.
+
+## Successor handoff package protocol
+
+Every implementation agent must produce a verified successor ZIP before ending
+its session, including when work is incomplete or externally blocked.
+
+Required order:
+
+1. Reconcile the roadmap, owner plan, traceability evidence, canonical handoff,
+   and requirement statuses.
+2. Commit every tracked implementation, documentation, and evidence change.
+3. Build one untracked ZIP from that exact commit with one top-level directory.
+4. Include `START-HERE.md`, `HANDOFF.md`, the complete planning/evidence suite,
+   required primary references, repository/commit state, verification summary,
+   and `MANIFEST.sha256` covering every other packaged regular file.
+5. Exclude `.git`, build/cache trees, validator downloads, credentials, user
+   settings, recovery files, prior ZIPs, and unrelated workspace files.
+6. Run `unzip -t`; reject absolute, drive/UNC, or `..` entry paths and symbolic
+   links; extract into a new bounded temporary directory; verify every internal
+   manifest entry; and compare copied planning/reference files to their sources.
+7. Remove only the agent-owned temporary construction/extraction directories.
+   Leave the verified ZIP untracked at the repository root.
+8. Report the ZIP's clickable absolute path, size, outer SHA-256, verification
+   result, and exact first action for the next agent.
+
+An archive cannot contain its own final outer hash without recursive
+self-reference. The internal manifest verifies archive contents; the final
+assistant response reports the outer ZIP SHA-256. The successor's
+`START-HERE.md` must repeat this protocol so the package chain does not stop.
 
 ## Exact resumption point
 
@@ -148,6 +178,7 @@ Copy this section, replace every placeholder, and append it under **Handoff hist
 - **Decisions and assumptions:** <what changed, authority, and compatibility impact>
 - **Blockers and known defects:** <exact failure, needed input/access, safe workaround if any>
 - **Temporary work/cleanup:** <scaffolding, sentinels, flags, uncommitted edits>
+- **Successor package:** <filename, untracked status, verification result; report the outer SHA-256 after final archive construction>
 - **First unmet gate:** <requirement and acceptance criterion>
 - **Exact resumption point:** <first file/symbol/command and expected next result>
 - **Next phase/workstream:** <continue current workstream unless every exit gate passes>

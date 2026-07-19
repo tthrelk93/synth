@@ -117,6 +117,13 @@ Your handoff must state exactly:
 - the first unmet gate and the exact files/commands where the next agent should resume;
 - the next agent’s workstream and roadmap phase.
 
+Before ending the session, create and verify a self-contained successor ZIP
+from the final committed planning/handoff state. Leave the ZIP untracked and
+report its absolute path, size, outer SHA-256, and verification result. The
+archive must follow the canonical package protocol in
+`17-implementation-handoff.md`, and the successor's `START-HERE.md` must repeat
+this obligation so the chain continues for every agent.
+
 The next-owner rule is deterministic:
 
 - If any BLD-001–BLD-012 requirement is not `pass`, the next agent remains in **Workstream 02 / F0** and starts at the first unmet dependency-ordered BLD requirement. Do not advance the roadmap.

@@ -15,6 +15,30 @@ The core planning baseline is this roadmap, the traceability matrix, and Workstr
 | F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Not started | Workstream 02 test/offline targets and Workstream 03 contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4. |
 | F1–F6 | Workstreams 04–15 | Not started | The phase gates below | Follow the fixed roadmap order; no agent skips an unmet gate. |
 
+## Successor handoff package policy
+
+Every implementation agent must end its session by creating one verified,
+self-contained successor ZIP that the user can attach to the next agent. This
+obligation applies whether the workstream is complete, incomplete, failed, or
+externally blocked.
+
+The agent first reconciles and commits all tracked implementation, planning,
+evidence, and canonical handoff changes. It then builds the ZIP from that exact
+committed state and leaves the archive untracked. The archive must have one
+top-level directory and contain a copy-ready `START-HERE.md`, current
+`HANDOFF.md`, complete planning/evidence suite, required primary references,
+repository/commit state, verification summary, and an internal SHA-256 content
+manifest. It must exclude Git metadata, build trees, downloaded validators,
+credentials, user settings, recovery files, prior archives, and unrelated
+workspace content.
+
+Before reporting completion, the agent verifies ZIP integrity, safe entry paths,
+absence of symbolic links, fresh extraction, internal manifest hashes, and
+source-to-package equality. The final response gives the archive's clickable
+absolute path, size, outer SHA-256, verification result, and the successor's
+first action. `START-HERE.md` must repeat this policy so every successor
+continues the handoff-package chain.
+
 ## Product outcome
 
 A musician must be able to copy a documented Minimoog Model D panel setting into this product and first obtain the behavior of an authentic, calibrated Model D signal path. A separate Recording Recreation layer may then add sourced information about the reference instrument, performance, feedback routing, effects, amplification, tape, microphones, EQ, compression, mixing, and multitracking.
