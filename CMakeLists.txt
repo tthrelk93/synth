@@ -195,6 +195,17 @@ target_link_libraries(ModelDPlugin
         juce::juce_gui_extra
         juce::juce_recommended_config_flags)
 
+target_sources(ModelDPlugin_Standalone PRIVATE Source/StandaloneApp.cpp)
+synth_enable_project_warnings(Source/StandaloneApp.cpp)
+target_include_directories(ModelDPlugin_Standalone
+    BEFORE PRIVATE
+        Source
+        cmake/plugin_compat)
+target_compile_definitions(ModelDPlugin_Standalone
+    PRIVATE
+        JUCE_USE_CUSTOM_PLUGIN_STANDALONE_APP=1
+        SYNTH_ENABLE_STANDALONE_LIFECYCLE_TESTS=$<BOOL:${SYNTH_BUILD_TESTS}>)
+
 function(synth_get_plugin_artifact output_variable target_name)
     get_target_property(_synth_artifact_path "${target_name}" JUCE_PLUGIN_ARTEFACT_FILE)
     if(NOT _synth_artifact_path OR _synth_artifact_path MATCHES "-NOTFOUND$")
@@ -273,6 +284,10 @@ add_custom_target(ModelDVerifyStagedArtifacts
     VERBATIM)
 
 if(SYNTH_BUILD_VALIDATORS)
+    if(NOT SYNTH_BUILD_TESTS)
+        message(FATAL_ERROR
+            "SYNTH_BUILD_VALIDATORS requires SYNTH_BUILD_TESTS for actual-product lifecycle hooks")
+    endif()
     if(NOT SYNTH_VALIDATION_REPEAT_COUNT MATCHES "^[1-9][0-9]*$")
         message(FATAL_ERROR
             "SYNTH_VALIDATION_REPEAT_COUNT must be a positive integer")
@@ -306,7 +321,6 @@ if(SYNTH_BUILD_VALIDATORS)
     add_custom_target(ModelDRunActualWrapperSmoke
         DEPENDS
             ModelDActualWrapperSmoke
-            ModelDStageDevelopmentArtifacts
         COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_SMOKE_EXECUTABLE=$<TARGET_FILE:ModelDActualWrapperSmoke>"
             "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
@@ -321,6 +335,45 @@ if(SYNTH_BUILD_VALIDATORS)
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunActualWrapperSmoke.cmake"
         COMMENT "Scanning and exercising the staged Model D VST3 wrapper"
         VERBATIM)
+
+    set(_model_d_standalone_lifecycle_report
+        "${CMAKE_BINARY_DIR}/validation/standalone-lifecycle-report.json")
+    set(_model_d_standalone_lifecycle_byproducts "")
+    foreach(_mode IN ITEMS normal invalid no-device)
+        foreach(_repeat RANGE 1 ${SYNTH_VALIDATION_REPEAT_COUNT})
+            list(APPEND _model_d_standalone_lifecycle_byproducts
+                "${CMAKE_BINARY_DIR}/validation/standalone/${_mode}/repeat-${_repeat}/report.json"
+                "${CMAKE_BINARY_DIR}/validation/standalone/${_mode}/repeat-${_repeat}/screenshot.png"
+                "${CMAKE_BINARY_DIR}/validation/standalone/${_mode}/repeat-${_repeat}/process.log")
+        endforeach()
+    endforeach()
+    add_custom_command(
+        OUTPUT "${_model_d_standalone_lifecycle_report}"
+        BYPRODUCTS ${_model_d_standalone_lifecycle_byproducts}
+        DEPENDS
+            ${_model_d_stage_dependencies}
+            Source/StandaloneApp.cpp
+            cmake/RunStandaloneLifecycle.cmake
+            cmake/VerifyStandaloneLifecycleEvidence.cmake
+            cmake/StageDevelopmentArtifacts.cmake
+        COMMAND "${CMAKE_COMMAND}" ${_model_d_stage_arguments}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StageDevelopmentArtifacts.cmake"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_STANDALONE_REPORT_PATH=${_model_d_standalone_lifecycle_report}"
+            "-DSYNTH_VALIDATION_DIRECTORY=${CMAKE_BINARY_DIR}/validation"
+            "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
+            "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+            "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
+            "-DSYNTH_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunStandaloneLifecycle.cmake"
+        COMMENT "Launching the staged standalone in three device modes and fresh processes"
+        VERBATIM)
+    add_custom_target(ModelDRunStandaloneLifecycle
+        DEPENDS "${_model_d_standalone_lifecycle_report}")
+    add_dependencies(ModelDRunActualWrapperSmoke ModelDRunStandaloneLifecycle)
 
     if(APPLE)
         set(_model_d_pluginval_asset "pluginval_macOS.zip")
@@ -392,7 +445,6 @@ if(SYNTH_BUILD_VALIDATORS)
     add_custom_target(ModelDRunPluginval
         DEPENDS
             ModelDProvisionPluginval
-            ModelDStageDevelopmentArtifacts
         COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
             "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
@@ -438,6 +490,8 @@ if(SYNTH_BUILD_VALIDATORS)
         COPYONLY)
 
     set(_model_d_validation_reports
+        "${_model_d_standalone_lifecycle_report}"
+        ${_model_d_standalone_lifecycle_byproducts}
         "${_model_d_wrapper_smoke_report}"
         "${_model_d_wrapper_smoke_log}"
         "${_model_d_pluginval_metadata}"
@@ -483,6 +537,7 @@ if(SYNTH_BUILD_VALIDATORS)
             "-DSYNTH_WRAPPER_REPORT_PATH=${_model_d_wrapper_smoke_report}"
             "-DSYNTH_WRAPPER_LOG_PATH=${_model_d_wrapper_smoke_log}"
             "-DSYNTH_AUVAL_REPORT_PATH=${_model_d_auval_report}"
+            "-DSYNTH_STANDALONE_REPORT_PATH=${_model_d_standalone_lifecycle_report}"
             "-DSYNTH_HOST_MATRIX_PATH=${_model_d_host_matrix_source}"
             "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
             "-DSYNTH_SEED=0x4d6f64656c44"
@@ -546,6 +601,23 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDMidiSampleZero midi midi)
     synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)
     synth_add_model_d_test(ModelDHostContract host host)
+
+    if(SYNTH_BUILD_VALIDATORS)
+        add_test(NAME ModelDStandaloneLifecycle
+            COMMAND "${CMAKE_COMMAND}"
+                    "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+                    "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+                    "-DSYNTH_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+                    "-DSYNTH_CONFIGURATION=$<CONFIG>"
+                    "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
+                    "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+                    "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+                    "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/Tests/StandaloneLifecycleContracts.cmake")
+        set_tests_properties(ModelDStandaloneLifecycle PROPERTIES
+            LABELS host
+            TIMEOUT 1800)
+    endif()
 
     set(_model_d_artifact_test_arguments
         "-DVST3_ARTIFACT=${_model_d_vst3_artifact}"

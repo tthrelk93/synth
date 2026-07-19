@@ -9,6 +9,7 @@ foreach(_required_variable IN ITEMS
         SYNTH_WRAPPER_REPORT_PATH
         SYNTH_WRAPPER_LOG_PATH
         SYNTH_AUVAL_REPORT_PATH
+        SYNTH_STANDALONE_REPORT_PATH
         SYNTH_HOST_MATRIX_PATH
         SYNTH_REPEAT_COUNT
         SYNTH_SEED
@@ -74,10 +75,12 @@ _synth_read_json(_provision "${SYNTH_PLUGINVAL_METADATA_PATH}" "pluginval provis
 _synth_read_json(_pluginval "${SYNTH_PLUGINVAL_REPORT_PATH}" "pluginval run report")
 _synth_read_json(_wrapper "${SYNTH_WRAPPER_REPORT_PATH}" "actual-wrapper report")
 _synth_read_json(_auval "${SYNTH_AUVAL_REPORT_PATH}" "auval report")
+_synth_read_json(_standalone "${SYNTH_STANDALONE_REPORT_PATH}" "standalone lifecycle report")
 _synth_read_json(_host_definition "${SYNTH_HOST_MATRIX_PATH}" "required host matrix")
 
 string(JSON _product_count LENGTH "${_build_manifest}" products)
 set(_vst3_count 0)
+set(_standalone_count 0)
 if(_product_count GREATER 0)
     math(EXPR _last_product "${_product_count} - 1")
     foreach(_product_index RANGE 0 ${_last_product})
@@ -86,11 +89,42 @@ if(_product_count GREATER 0)
             math(EXPR _vst3_count "${_vst3_count} + 1")
             string(JSON _final_vst3_relative_path GET "${_build_manifest}" products ${_product_index} relative_path)
             string(JSON _final_vst3_sha256 GET "${_build_manifest}" products ${_product_index} aggregate_sha256)
+        elseif(_format STREQUAL "Standalone")
+            math(EXPR _standalone_count "${_standalone_count} + 1")
+            string(JSON _final_standalone_relative_path GET "${_build_manifest}" products ${_product_index} relative_path)
+            string(JSON _final_standalone_sha256 GET "${_build_manifest}" products ${_product_index} aggregate_sha256)
         endif()
     endforeach()
 endif()
 if(NOT _vst3_count EQUAL 1)
     message(FATAL_ERROR "final build manifest must declare exactly one VST3 product")
+endif()
+if(NOT _standalone_count EQUAL 1)
+    message(FATAL_ERROR "final build manifest must declare exactly one Standalone product")
+endif()
+
+string(JSON _standalone_status GET "${_standalone}" status)
+string(JSON _standalone_version GET "${_standalone}" tool_version)
+string(JSON _standalone_repeat_count GET "${_standalone}" repeat_count)
+string(JSON _standalone_os GET "${_standalone}" environment os)
+string(JSON _standalone_arch GET "${_standalone}" environment architecture)
+string(JSON _standalone_product_path GET "${_standalone}" executable product_relative_path)
+string(JSON _standalone_product_sha256 GET "${_standalone}" executable product_aggregate_sha256)
+string(JSON _standalone_executable_path GET "${_standalone}" executable relative_path)
+string(JSON _standalone_executable_sha256 GET "${_standalone}" executable sha256)
+string(JSON _standalone_run_count LENGTH "${_standalone}" runs)
+math(EXPR _expected_standalone_runs "3 * ${SYNTH_REPEAT_COUNT}")
+if(NOT _standalone_status STREQUAL "pass"
+   OR NOT _standalone_version STREQUAL SYNTH_PROJECT_VERSION
+   OR NOT _standalone_repeat_count STREQUAL SYNTH_REPEAT_COUNT
+   OR NOT _standalone_os STREQUAL SYNTH_SYSTEM_NAME
+   OR NOT _standalone_arch STREQUAL SYNTH_ARCHITECTURE
+   OR NOT _standalone_product_path STREQUAL _final_standalone_relative_path
+   OR NOT _standalone_product_sha256 STREQUAL _final_standalone_sha256
+   OR _standalone_executable_path STREQUAL ""
+   OR _standalone_executable_sha256 STREQUAL ""
+   OR NOT _standalone_run_count EQUAL _expected_standalone_runs)
+    message(FATAL_ERROR "standalone lifecycle report does not satisfy the actual-product contract")
 endif()
 
 string(JSON _pluginval_status GET "${_pluginval}" status)
@@ -215,7 +249,7 @@ foreach(_row_index RANGE 0 ${_last_host_row})
     _synth_json_set_string(_row executed_architecture "")
     if(_kind STREQUAL "standalone")
         _synth_json_set_string(_row status "not-run")
-        _synth_json_set_string(_row reason "Standalone lifecycle validation belongs to Task 7 and was not run")
+        _synth_json_set_string(_row reason "BLD-009 lifecycle evidence does not cover the full standalone host matrix")
     else()
         _synth_json_set_string(_row status "blocked")
         _synth_json_set_string(_row reason "Commercial host is unavailable and was not executed by this local harness")
@@ -256,7 +290,7 @@ if(NOT _auval_status STREQUAL "pass")
     string(JSON _validation_reasons SET "${_validation_reasons}" ${_reason_index} "${_reason}")
     math(EXPR _reason_index "${_reason_index} + 1")
 endif()
-_synth_json_quote(_reason "Required commercial-host and standalone rows are blocked/not-run")
+_synth_json_quote(_reason "Required commercial-host and standalone host-matrix rows remain blocked/not-run")
 string(JSON _validation_reasons SET "${_validation_reasons}" ${_reason_index} "${_reason}")
 set(_validation_aggregate "{}")
 _synth_json_set_string(_validation_aggregate status "blocked")
@@ -307,6 +341,7 @@ string(JSON _pluginval_tool SET "${_pluginval_tool}" provision "${_provision}")
 string(JSON _pluginval_tool SET "${_pluginval_tool}" run "${_pluginval}")
 string(JSON _manifest SET "${_manifest}" pluginval "${_pluginval_tool}")
 string(JSON _manifest SET "${_manifest}" auval "${_auval}")
+string(JSON _manifest SET "${_manifest}" standalone_lifecycle "${_standalone}")
 string(JSON _manifest SET "${_manifest}" vst3_sdk_validator "${_vst3_validator_json}")
 string(JSON _manifest SET "${_manifest}" hosts "${_hosts}")
 string(JSON _manifest SET "${_manifest}" evidence "${_evidence_json}")
