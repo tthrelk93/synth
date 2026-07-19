@@ -23,7 +23,7 @@ void VintageLookAndFeel::setHandleColours(juce::Colour onColour, juce::Colour of
 }
 
 void VintageLookAndFeel::drawToggleButton(juce::Graphics& g, juce::ToggleButton& toggleButton,
-                                          bool shouldDrawButtonAsHighlighted, bool shouldDrawButtonAsDown) {
+                                          bool, bool) {
     auto bounds = toggleButton.getLocalBounds().toFloat();
     float cornerRadius = 6.0f; // Rounded corners radius
 

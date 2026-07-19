@@ -20,7 +20,6 @@ public:
 private:
     juce::Image woodgrainImage;
     juce::Image blackPanelImage;
-    int borderThickness = 20; // Adjust as needed for the border size
 };
 
 

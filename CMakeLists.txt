@@ -44,17 +44,24 @@ include(cmake/Dependencies.cmake)
 add_library(SynthProjectOptions INTERFACE)
 target_compile_features(SynthProjectOptions INTERFACE cxx_std_20)
 
-if(MSVC)
-    target_compile_options(SynthProjectOptions INTERFACE /W4)
-    if(SYNTH_WARNINGS_AS_ERRORS)
-        target_compile_options(SynthProjectOptions INTERFACE /WX)
+function(synth_enable_project_warnings)
+    if(MSVC)
+        set(_synth_warning_options /W4)
+        if(SYNTH_WARNINGS_AS_ERRORS)
+            list(APPEND _synth_warning_options /WX)
+        endif()
+    else()
+        set(_synth_warning_options -Wall -Wextra -Wpedantic)
+        if(SYNTH_WARNINGS_AS_ERRORS)
+            list(APPEND _synth_warning_options -Werror)
+        endif()
     endif()
-else()
-    target_compile_options(SynthProjectOptions INTERFACE -Wall -Wextra -Wpedantic)
-    if(SYNTH_WARNINGS_AS_ERRORS)
-        target_compile_options(SynthProjectOptions INTERFACE -Werror)
-    endif()
-endif()
+
+    foreach(_synth_source IN LISTS ARGN)
+        set_property(SOURCE "${_synth_source}" APPEND PROPERTY
+            COMPILE_OPTIONS ${_synth_warning_options})
+    endforeach()
+endfunction()
 
 if(SYNTH_ENABLE_SANITIZERS)
     if(MSVC)
@@ -73,6 +80,8 @@ set(MODEL_D_CORE_SOURCES
     Source/Oscillator.cpp
     Source/PresetLibrary.cpp
     Source/SynthPreset.cpp)
+
+synth_enable_project_warnings(${MODEL_D_CORE_SOURCES})
 
 add_library(ModelDCore STATIC ${MODEL_D_CORE_SOURCES})
 add_library(ModelD::Core ALIAS ModelDCore)
@@ -129,8 +138,7 @@ juce_add_plugin(ModelDPlugin
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE)
 
-target_sources(ModelDPlugin
-    PRIVATE
+set(MODEL_D_PLUGIN_SOURCES
         Source/BlackBackgroundComponent.cpp
         Source/CustomPanelComponent.cpp
         Source/CustomSliderLookAndFeel.cpp
@@ -146,6 +154,8 @@ target_sources(ModelDPlugin
         Source/VintageLookAndFeel.cpp
         Source/WaveformDisplay.cpp
         Source/WaveformSlider.cpp)
+target_sources(ModelDPlugin PRIVATE ${MODEL_D_PLUGIN_SOURCES})
+synth_enable_project_warnings(${MODEL_D_PLUGIN_SOURCES})
 target_include_directories(ModelDPlugin
     BEFORE PRIVATE
         Source
@@ -172,11 +182,13 @@ target_link_libraries(ModelDPlugin
         juce::juce_recommended_config_flags)
 
 add_executable(ModelDOfflineRenderer Tools/ModelDOfflineRenderer.cpp)
+synth_enable_project_warnings(Tools/ModelDOfflineRenderer.cpp)
 target_link_libraries(ModelDOfflineRenderer PRIVATE ModelDCore SynthProjectOptions)
 
 if(SYNTH_BUILD_TESTS)
     enable_testing()
     add_executable(ModelDTests Tests/ModelDTests.cpp)
+    synth_enable_project_warnings(Tests/ModelDTests.cpp)
     target_link_libraries(ModelDTests PRIVATE ModelDCore SynthProjectOptions)
     add_test(NAME ModelDCoreFoundation COMMAND ModelDTests)
 endif()

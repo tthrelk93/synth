@@ -366,7 +366,6 @@ void CustomSliderLookAndFeel::drawWaveform(juce::Graphics& g, int index, int x, 
 
     juce::Path waveform;
     //juce::Logger::writeToLog("index: " + juce::String(index));
-    bool highSegment = true;
     switch (index) {
         case 0: // Triangle Waveform
             waveform.startNewSubPath(center.x - radius, center.y);
@@ -442,4 +441,3 @@ void CustomSliderLookAndFeel::drawWaveform(juce::Graphics& g, int index, int x, 
 
     g.strokePath(waveform, juce::PathStrokeType(1.8f));
 }
-

@@ -9,8 +9,8 @@
 #include "PitchWheelLookAndFeel.h"
 
 void PitchWheelLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
-                                         float sliderPos, float minSliderPos, float maxSliderPos,
-                                         const juce::Slider::SliderStyle style, juce::Slider& slider) {
+                                         float sliderPos, float, float,
+                                         const juce::Slider::SliderStyle, juce::Slider& slider) {
     // Draw the track
     g.setColour(slider.findColour(juce::Slider::trackColourId));
     if (slider.isHorizontal()) {

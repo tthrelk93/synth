@@ -23,12 +23,6 @@ void WaveformDisplay::paint(juce::Graphics& g) {
     if (circularBuffer.read(leftWaveform, rightWaveform, bufferSize)) {
         //g.fillAll(juce::Colours::black); // Background color
         
-        auto width = static_cast<float>(getWidth());
-        auto height = static_cast<float>(getHeight());
-        
-        //drawStereoScope(g, leftWaveform, rightWaveform, width, height);
-
-        
         if (waveformDisplayKey == WaveformDisplayKey::Osc1Raw && audioProcessor.osc1.isActive()) {
             const auto& osc1Buffer = audioProcessor.getOsc1Buffer();
             drawWaveform(g, osc1Buffer.data(), juce::Colours::darkorange, 1, audioProcessor.waveformBufferSize);

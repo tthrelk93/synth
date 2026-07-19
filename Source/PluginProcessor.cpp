@@ -325,16 +325,16 @@ int MoogMiniAudioProcessor::getCurrentProgram()
     return 0;
 }
 
-void MoogMiniAudioProcessor::setCurrentProgram (int index)
+void MoogMiniAudioProcessor::setCurrentProgram (int)
 {
 }
 
-const juce::String MoogMiniAudioProcessor::getProgramName (int index)
+const juce::String MoogMiniAudioProcessor::getProgramName (int)
 {
     return {};
 }
 
-void MoogMiniAudioProcessor::changeProgramName (int index, const juce::String& newName)
+void MoogMiniAudioProcessor::changeProgramName (int, const juce::String&)
 {
 }
 
@@ -409,7 +409,6 @@ float MoogMiniAudioProcessor::generateRedNoise() {
 }
 
 float MoogMiniAudioProcessor::normalizedToMilliseconds(float normalizedValue) {
-    float milliseconds;
     if(normalizedValue == 0){
         return 0.01 * 10000;
     } else {

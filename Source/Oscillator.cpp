@@ -139,8 +139,6 @@ float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
     phaseIncrement = finalFrequency / sampleRate; // Recalculate phase increment
     float curvature = 0.8f; // A value between 0 and 1, where 1 is a straight line.
     // Phase points
-    float nonlinearRiseEnd = 0.3f; // End of the nonlinear rise
-    float toothEnd = 0.5f; // End of the sharp tooth, start of the nonlinear fall
     // Reset the phase to zero at the end of each cycle
 //      if (phase >= 1.0f) {
 //        phase = 0.0f;
@@ -148,8 +146,6 @@ float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
     juce::String isGap;
     float triangularSample = 0.0f;
     float sawtoothSample;
-    float blendWeight;
-    float blend;
     // Generate waveform based on the current waveform setting
     float sample = 0.0f;
     switch (waveform) {

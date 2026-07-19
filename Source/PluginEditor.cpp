@@ -47,7 +47,6 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     
     // Set bounds for pitch and mod wheels
     int wheelSize = 200;
-    int padding = 30;
    
     customPanel.addAndMakeVisible(pitchWheelSlider);
     customPanel.addAndMakeVisible(modWheelSlider);
@@ -1132,7 +1131,7 @@ bool MoogMiniAudioProcessorEditor::sliderHasChanged(juce::Slider* slider) {
     return currentValue != newValue; // Return true if the values are different
 }
 
-float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, float enumSizeLessOne) {
+float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, float) {
     float index = slider->getValue();
     //juce::Logger::writeToLog("Slider Raw Value: " + juce::String(index));
     if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob ) {
@@ -1411,7 +1410,7 @@ void MoogMiniAudioProcessorEditor::pianoKeyReleased(int noteNumber) {
 }
 
 
-void MoogMiniAudioProcessorEditor::pianoKeyDragged(int noteNumber, const juce::MouseEvent& event) {
+void MoogMiniAudioProcessorEditor::pianoKeyDragged(int, const juce::MouseEvent& event) {
   PianoKey* currentKey = nullptr;
 
     // Adjust the mouse position by the offset

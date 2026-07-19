@@ -9,7 +9,7 @@
 #include "ModWheel.h"
 
 ModWheel::ModWheel()
-    : modulationMix(0.0f), oscillatorModulationOn(false), filterModulationOn(false), modulatedSignal(0.0f) {
+    : modulatedSignal(0.0f), modulationMix(0.0f), oscillatorModulationOn(false), filterModulationOn(false) {
 }
 
 void ModWheel::processModulation(float modulationSignal, float modWheelValue) {
