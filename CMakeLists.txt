@@ -213,15 +213,24 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)
     synth_add_model_d_test(ModelDHostContract host host)
 
+    function(synth_get_plugin_artifact output_variable target_name)
+        get_target_property(_synth_artifact_path "${target_name}" JUCE_PLUGIN_ARTEFACT_FILE)
+        if(NOT _synth_artifact_path OR _synth_artifact_path MATCHES "-NOTFOUND$")
+            message(FATAL_ERROR
+                "Required JUCE_PLUGIN_ARTEFACT_FILE property is missing for ${target_name}")
+        endif()
+        set("${output_variable}" "${_synth_artifact_path}" PARENT_SCOPE)
+    endfunction()
+
+    synth_get_plugin_artifact(_model_d_vst3_artifact ModelDPlugin_VST3)
+    synth_get_plugin_artifact(_model_d_standalone_artifact ModelDPlugin_Standalone)
+    set(_model_d_artifact_test_arguments
+        "-DVST3_ARTIFACT=${_model_d_vst3_artifact}"
+        "-DSTANDALONE_ARTIFACT=${_model_d_standalone_artifact}")
     if(APPLE)
-        set(_model_d_artifact_test_arguments
-            "-DVST3_ARTIFACT=$<TARGET_BUNDLE_DIR:ModelDPlugin_VST3>"
-            "-DSTANDALONE_ARTIFACT=$<TARGET_BUNDLE_DIR:ModelDPlugin_Standalone>"
-            "-DAU_ARTIFACT=$<TARGET_BUNDLE_DIR:ModelDPlugin_AU>")
-    else()
-        set(_model_d_artifact_test_arguments
-            "-DVST3_ARTIFACT=$<TARGET_FILE:ModelDPlugin_VST3>"
-            "-DSTANDALONE_ARTIFACT=$<TARGET_FILE:ModelDPlugin_Standalone>")
+        synth_get_plugin_artifact(_model_d_au_artifact ModelDPlugin_AU)
+        list(APPEND _model_d_artifact_test_arguments
+             "-DAU_ARTIFACT=${_model_d_au_artifact}")
     endif()
     add_test(NAME ModelDFormatArtifacts
         COMMAND ${CMAKE_COMMAND} ${_model_d_artifact_test_arguments}

@@ -84,8 +84,10 @@ jobs:
           foreach ($label in $labels) {
             Write-Host "Discovering CTest label: $label"
             ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} -N -L $label
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
             Write-Host "Running CTest label: $label"
             ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} --no-tests=error -L $label --output-on-failure
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
   sentinel-proof:
