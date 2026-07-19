@@ -16,6 +16,10 @@ option(SYNTH_CI_INJECT_FAILING_SENTINEL
        "Register the deterministic CI CTest failure sentinel" OFF)
 option(SYNTH_VALIDATE_DISTRIBUTION_IDENTITY
        "Require approved legal identity for distribution validation" OFF)
+set(SYNTH_STAGE_ROOT "${CMAKE_BINARY_DIR}/development-stage" CACHE PATH
+    "Root for non-distribution development artifact staging")
+set(SYNTH_TEST_REPORTS "" CACHE STRING
+    "Semicolon-separated test reports beneath this build tree to declare in the development manifest")
 
 include(cmake/ProductIdentity.cmake)
 
@@ -183,6 +187,81 @@ target_link_libraries(ModelDPlugin
         juce::juce_gui_extra
         juce::juce_recommended_config_flags)
 
+function(synth_get_plugin_artifact output_variable target_name)
+    get_target_property(_synth_artifact_path "${target_name}" JUCE_PLUGIN_ARTEFACT_FILE)
+    if(NOT _synth_artifact_path OR _synth_artifact_path MATCHES "-NOTFOUND$")
+        message(FATAL_ERROR
+            "Required JUCE_PLUGIN_ARTEFACT_FILE property is missing for ${target_name}")
+    endif()
+    set("${output_variable}" "${_synth_artifact_path}" PARENT_SCOPE)
+endfunction()
+
+synth_get_plugin_artifact(_model_d_vst3_artifact ModelDPlugin_VST3)
+synth_get_plugin_artifact(_model_d_standalone_artifact ModelDPlugin_Standalone)
+set(_model_d_stage_dependencies ModelDPlugin_VST3 ModelDPlugin_Standalone)
+string(REPLACE ";" "\\;" _model_d_test_reports_command_argument "${SYNTH_TEST_REPORTS}")
+if(APPLE)
+    set(_model_d_sdk_identifier "macosx")
+    execute_process(
+        COMMAND xcrun --sdk macosx --show-sdk-version
+        RESULT_VARIABLE _model_d_sdk_version_status
+        OUTPUT_VARIABLE _model_d_sdk_version
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(_model_d_sdk_version_status OR _model_d_sdk_version STREQUAL "")
+        set(_model_d_sdk_version "system-default")
+    endif()
+else()
+    set(_model_d_sdk_identifier "${CMAKE_SYSTEM_NAME}-system-default")
+    set(_model_d_sdk_version "${CMAKE_SYSTEM_VERSION}")
+endif()
+set(_model_d_stage_arguments
+    "-DSYNTH_STAGE_ROOT=${SYNTH_STAGE_ROOT}"
+    "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+    "-DSYNTH_STAGE_VST3_ARTIFACT=${_model_d_vst3_artifact}"
+    "-DSYNTH_STAGE_STANDALONE_ARTIFACT=${_model_d_standalone_artifact}"
+    "-DSYNTH_SOURCE_ROOT=${CMAKE_SOURCE_DIR}"
+    "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+    "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
+    "-DSYNTH_REQUIRED_JUCE_COMMIT=${SYNTH_REQUIRED_JUCE_COMMIT}"
+    "-DSYNTH_RESOLVED_JUCE_COMMIT=${SYNTH_RESOLVED_JUCE_COMMIT}"
+    "-DSYNTH_COMPILER_ID=${CMAKE_CXX_COMPILER_ID}"
+    "-DSYNTH_COMPILER_VERSION=${CMAKE_CXX_COMPILER_VERSION}"
+    "-DSYNTH_SDK_IDENTIFIER=${_model_d_sdk_identifier}"
+    "-DSYNTH_SDK_VERSION=${_model_d_sdk_version}"
+    "-DSYNTH_CONFIGURATION=$<CONFIG>"
+    "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+    "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+    "-DSYNTH_PRODUCT_NAME=${SYNTH_PRODUCT_NAME}"
+    "-DSYNTH_MANUFACTURER_NAME=${SYNTH_MANUFACTURER_NAME}"
+    "-DSYNTH_MANUFACTURER_DOMAIN=${SYNTH_MANUFACTURER_DOMAIN}"
+    "-DSYNTH_BUNDLE_ID=${SYNTH_BUNDLE_ID}"
+    "-DSYNTH_MANUFACTURER_CODE=${SYNTH_MANUFACTURER_CODE}"
+    "-DSYNTH_PRODUCT_CODE=${SYNTH_PRODUCT_CODE}"
+    "-DSYNTH_IDENTITY_APPROVED=${SYNTH_IDENTITY_APPROVED}"
+    "-DSYNTH_TEST_REPORTS=${_model_d_test_reports_command_argument}")
+if(APPLE)
+    synth_get_plugin_artifact(_model_d_au_artifact ModelDPlugin_AU)
+    list(APPEND _model_d_stage_dependencies ModelDPlugin_AU)
+    list(APPEND _model_d_stage_arguments "-DSYNTH_STAGE_AU_ARTIFACT=${_model_d_au_artifact}")
+endif()
+
+add_custom_target(ModelDStageDevelopmentArtifacts
+    DEPENDS ${_model_d_stage_dependencies}
+    COMMAND "${CMAKE_COMMAND}" ${_model_d_stage_arguments}
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StageDevelopmentArtifacts.cmake"
+    COMMENT "Staging Model D development artifacts and deterministic build manifest"
+    VERBATIM)
+
+add_custom_target(ModelDVerifyStagedArtifacts
+    DEPENDS ModelDStageDevelopmentArtifacts
+    COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyStagedArtifacts.cmake"
+    COMMENT "Verifying Model D development artifact staging manifest"
+    VERBATIM)
+
 add_executable(ModelDOfflineRenderer Tools/ModelDOfflineRenderer.cpp)
 synth_enable_project_warnings(Tools/ModelDOfflineRenderer.cpp)
 target_link_libraries(ModelDOfflineRenderer PRIVATE ModelDCore SynthProjectOptions)
@@ -213,17 +292,6 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)
     synth_add_model_d_test(ModelDHostContract host host)
 
-    function(synth_get_plugin_artifact output_variable target_name)
-        get_target_property(_synth_artifact_path "${target_name}" JUCE_PLUGIN_ARTEFACT_FILE)
-        if(NOT _synth_artifact_path OR _synth_artifact_path MATCHES "-NOTFOUND$")
-            message(FATAL_ERROR
-                "Required JUCE_PLUGIN_ARTEFACT_FILE property is missing for ${target_name}")
-        endif()
-        set("${output_variable}" "${_synth_artifact_path}" PARENT_SCOPE)
-    endfunction()
-
-    synth_get_plugin_artifact(_model_d_vst3_artifact ModelDPlugin_VST3)
-    synth_get_plugin_artifact(_model_d_standalone_artifact ModelDPlugin_Standalone)
     set(_model_d_artifact_test_arguments
         "-DVST3_ARTIFACT=${_model_d_vst3_artifact}"
         "-DSTANDALONE_ARTIFACT=${_model_d_standalone_artifact}")
