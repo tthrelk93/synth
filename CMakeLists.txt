@@ -12,6 +12,8 @@ option(SYNTH_BUILD_TESTS "Build developer and CI tests" ON)
 option(SYNTH_BUILD_VALIDATORS "Build optional plug-in validators" OFF)
 option(SYNTH_WARNINGS_AS_ERRORS "Treat project-source warnings as errors" OFF)
 option(SYNTH_ENABLE_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
+option(SYNTH_CI_INJECT_FAILING_SENTINEL
+       "Register the deterministic CI CTest failure sentinel" OFF)
 option(SYNTH_VALIDATE_DISTRIBUTION_IDENTITY
        "Require approved legal identity for distribution validation" OFF)
 
@@ -198,5 +200,38 @@ if(SYNTH_BUILD_TESTS)
         PRIVATE
             ModelDPlugin
             SynthProjectOptions)
-    add_test(NAME ModelDProcessorContract COMMAND ModelDTests)
+
+    function(synth_add_model_d_test test_name test_label test_mode)
+        add_test(NAME "${test_name}" COMMAND ModelDTests "${test_mode}")
+        set_tests_properties("${test_name}" PROPERTIES LABELS "${test_label}")
+    endfunction()
+
+    synth_add_model_d_test(ModelDUnitContract unit unit)
+    synth_add_model_d_test(ModelDStateSmoke state state)
+    synth_add_model_d_test(ModelDDspContract dsp dsp)
+    synth_add_model_d_test(ModelDMidiSampleZero midi midi)
+    synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)
+    synth_add_model_d_test(ModelDHostContract host host)
+
+    if(APPLE)
+        set(_model_d_artifact_test_arguments
+            "-DVST3_ARTIFACT=$<TARGET_BUNDLE_DIR:ModelDPlugin_VST3>"
+            "-DSTANDALONE_ARTIFACT=$<TARGET_BUNDLE_DIR:ModelDPlugin_Standalone>"
+            "-DAU_ARTIFACT=$<TARGET_BUNDLE_DIR:ModelDPlugin_AU>")
+    else()
+        set(_model_d_artifact_test_arguments
+            "-DVST3_ARTIFACT=$<TARGET_FILE:ModelDPlugin_VST3>"
+            "-DSTANDALONE_ARTIFACT=$<TARGET_FILE:ModelDPlugin_Standalone>")
+    endif()
+    add_test(NAME ModelDFormatArtifacts
+        COMMAND ${CMAKE_COMMAND} ${_model_d_artifact_test_arguments}
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/Tests/VerifyArtifacts.cmake")
+    set_tests_properties(ModelDFormatArtifacts PROPERTIES LABELS artifact)
+
+    if(SYNTH_CI_INJECT_FAILING_SENTINEL)
+        add_test(NAME ModelDCiFailingSentinel
+            COMMAND ${CMAKE_COMMAND}
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/Tests/FailingSentinel.cmake")
+        set_tests_properties(ModelDCiFailingSentinel PROPERTIES LABELS sentinel)
+    endif()
 endif()

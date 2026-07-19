@@ -1,0 +1,122 @@
+name: Model D CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      inject_sentinel:
+        description: Run the deliberately failing Linux Debug CTest sentinel proof
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }} / ${{ matrix.config }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            runner: ubuntu-24.04
+            config: Debug
+          - name: Linux x86_64
+            runner: ubuntu-24.04
+            config: Release
+          - name: Windows x86_64
+            runner: windows-2025
+            config: Debug
+          - name: Windows x86_64
+            runner: windows-2025
+            config: Release
+          - name: macOS arm64
+            runner: macos-15
+            config: Debug
+          - name: macOS arm64
+            runner: macos-15
+            config: Release
+          - name: macOS x86_64
+            runner: macos-15-intel
+            config: Debug
+          - name: macOS x86_64
+            runner: macos-15-intel
+            config: Release
+    env:
+      BUILD_DIR: ${{ github.workspace }}/build with spaces/${{ matrix.config }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install JUCE Linux build prerequisites
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev
+
+      - name: Configure (CMake 3.24+ and warnings as errors)
+        shell: pwsh
+        run: |
+          cmake --version
+          cmake -S . -B "$env:BUILD_DIR" "-DCMAKE_BUILD_TYPE=${{ matrix.config }}" "-DSYNTH_WARNINGS_AS_ERRORS=ON" "-DSYNTH_BUILD_TESTS=ON"
+
+      - name: Build all targets
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --parallel
+
+      - name: Run full CTest suite
+        shell: pwsh
+        run: ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} --output-on-failure
+
+      - name: Display and run every required CTest label
+        shell: pwsh
+        run: |
+          $labels = 'unit', 'state', 'dsp', 'midi', 'realtime', 'host', 'artifact'
+          foreach ($label in $labels) {
+            Write-Host "Discovering CTest label: $label"
+            ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} -N -L $label
+            Write-Host "Running CTest label: $label"
+            ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} --no-tests=error -L $label --output-on-failure
+          }
+
+  sentinel-proof:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.inject_sentinel }}
+    name: Linux x86_64 / Debug / raw failing sentinel
+    runs-on: ubuntu-24.04
+    env:
+      BUILD_DIR: ${{ github.workspace }}/sentinel build with spaces/Debug
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install JUCE Linux build prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev
+
+      - name: Configure sentinel proof
+        shell: pwsh
+        run: |
+          cmake --version
+          cmake -S . -B "$env:BUILD_DIR" "-DCMAKE_BUILD_TYPE=Debug" "-DSYNTH_WARNINGS_AS_ERRORS=ON" "-DSYNTH_BUILD_TESTS=ON" "-DSYNTH_CI_INJECT_FAILING_SENTINEL=ON"
+
+      - name: Build sentinel proof targets
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config Debug --parallel
+
+      - name: Raw CTest sentinel failure (expected to make this workflow red)
+        shell: pwsh
+        run: ctest --test-dir "$env:BUILD_DIR" -C Debug --output-on-failure

@@ -547,28 +547,133 @@ void testProcessingContract (TestContext& test)
         }
     }
 }
-} // namespace
 
-int main()
+void testUnitContract (TestContext& test)
+{
+    Oscillator oscillator;
+    oscillator.setSampleRate (48000.0f);
+    oscillator.setRange (Oscillator::Eight);
+    oscillator.setWaveform (Oscillator::Sin);
+    oscillator.start (440.0f);
+
+    double renderedMagnitude = 0.0;
+    for (int sample = 0; sample < 480; ++sample)
+    {
+        const auto value = oscillator.processNextSample (0.0f, true);
+        test.expect (std::isfinite (value), "foundational oscillator samples must be finite");
+        renderedMagnitude += std::abs (value);
+    }
+
+    test.expect (renderedMagnitude > 0.0,
+                 "foundational oscillator render must be non-silent");
+}
+
+void testStateSmoke (TestContext& test)
+{
+    MoogMiniAudioProcessor source;
+    setParameter (source, "filterCutoff", 0.75f, test);
+
+    juce::MemoryBlock state;
+    source.getStateInformation (state);
+    test.expect (state.getSize() > 0, "existing processor state must serialize");
+
+    MoogMiniAudioProcessor restored;
+    restored.setStateInformation (state.getData(), static_cast<int> (state.getSize()));
+    const auto* sourceParameter = source.apvts.getParameter ("filterCutoff");
+    const auto* restoredParameter = restored.apvts.getParameter ("filterCutoff");
+    test.expect (sourceParameter != nullptr && restoredParameter != nullptr,
+                 "existing state-smoke parameter must be available");
+    if (sourceParameter != nullptr && restoredParameter != nullptr)
+        test.expect (std::abs (sourceParameter->getValue() - restoredParameter->getValue()) < 1.0e-6f,
+                     "existing processor state must restore its serialized parameter value");
+    test.expect (! restored.shouldAutoLoadLastPreset(),
+                 "restored processor state must retain the existing host-restore marker");
+}
+
+void testMidiSampleZeroSmoke (TestContext& test)
+{
+    MoogMiniAudioProcessor processor;
+    setParameter (processor, "osc1OnOff", 1.0f, test);
+    setParameter (processor, "osc1Vol", 1.0f, test);
+    setParameter (processor, "outputVolKnob", 1.0f, test);
+    setParameter (processor, "filterCutoff", 1.0f, test);
+    processor.setRateAndBufferSizeDetails (48000.0, 512);
+    processor.prepareToPlay (48000.0, 512);
+
+    juce::AudioBuffer<float> buffer (processor.getTotalNumOutputChannels(), 512);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    midi.addEvent (juce::MidiMessage::noteOn (1, 69, 1.0f), 0);
+    processor.processBlock (buffer, midi);
+
+    test.expect (isFinite (buffer), "sample-zero MIDI note-on render must be finite");
+    test.expect (absoluteSum (buffer) > 0.01,
+                 "sample-zero MIDI note-on under the existing oscillator patch must be non-silent");
+}
+
+void testRealtimeSmoke (TestContext& test)
+{
+    MoogMiniAudioProcessor processor;
+    setParameter (processor, "a440HzOnOff", 1.0f, test);
+    setParameter (processor, "outputVolKnob", 1.0f, test);
+
+    for (const auto blockSize : { 0, 1, 128, 511 })
+    {
+        processor.setRateAndBufferSizeDetails (48000.0, blockSize);
+        processor.prepareToPlay (48000.0, blockSize);
+        juce::AudioBuffer<float> buffer (processor.getTotalNumOutputChannels(), blockSize);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        processor.processBlock (buffer, midi);
+        test.expect (isFinite (buffer), "zero and bounded realtime smoke buffers must be finite");
+        processor.releaseResources();
+        processor.reset();
+    }
+}
+
+int runMode (std::string_view mode)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
     TestContext test;
-    testGeneratedWrapperContract (test);
 
-    MoogMiniAudioProcessor processor;
-    const auto topologyReady = testDefaultBusContract (processor, test);
-    testVST3InputRole (processor, test);
-
-    if (topologyReady)
-    {
-        testLayoutTable (processor, test);
+    if (mode == "unit")
+        testUnitContract (test);
+    else if (mode == "state")
+        testStateSmoke (test);
+    else if (mode == "dsp")
         testProcessingContract (test);
+    else if (mode == "midi")
+        testMidiSampleZeroSmoke (test);
+    else if (mode == "realtime")
+        testRealtimeSmoke (test);
+    else if (mode == "host")
+    {
+        testGeneratedWrapperContract (test);
+        MoogMiniAudioProcessor processor;
+        const auto topologyReady = testDefaultBusContract (processor, test);
+        testVST3InputRole (processor, test);
+        if (topologyReady)
+        {
+            testLayoutTable (processor, test);
+            testExternalInputRouting (test);
+        }
+        else
+        {
+            test.expect (false,
+                         "layout and routing tables require the exact declared bus topology");
+        }
     }
     else
     {
-        test.expect (false,
-                     "layout and processing tables require the exact declared bus topology");
+        std::cerr << "Unknown or missing ModelDTests mode: " << mode << '\n';
+        return 2;
     }
 
     return test.result();
+}
+} // namespace
+
+int main (int argc, char* argv[])
+{
+    return argc == 2 ? runMode (argv[1]) : runMode ("");
 }
