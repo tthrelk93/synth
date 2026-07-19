@@ -625,6 +625,17 @@ if(SYNTH_BUILD_TESTS)
         set_tests_properties(ModelDStandaloneLifecycle PROPERTIES
             LABELS host
             TIMEOUT 1800)
+
+        add_test(NAME ModelDValidatorPathSafety
+            COMMAND "${CMAKE_COMMAND}"
+                    "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+                    "-DSYNTH_CONTRACT_ROOT=${CMAKE_BINARY_DIR}/validator-path-safety-contracts/$<CONFIG>"
+                    "-DSYNTH_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+                    "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/Tests/ValidatorPathSafetyContracts.cmake")
+        set_tests_properties(ModelDValidatorPathSafety PROPERTIES
+            LABELS artifact
+            TIMEOUT 120)
     endif()
 
     set(_model_d_artifact_test_arguments

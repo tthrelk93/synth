@@ -1,0 +1,150 @@
+cmake_minimum_required(VERSION 3.24)
+
+foreach(_required_variable IN ITEMS
+        SYNTH_BUILD_ROOT
+        SYNTH_CONTRACT_ROOT
+        SYNTH_SOURCE_ROOT
+        SYNTH_SYSTEM_NAME)
+    if(NOT DEFINED ${_required_variable} OR "${${_required_variable}}" STREQUAL "")
+        message(FATAL_ERROR "${_required_variable} is required for validator path-safety contracts")
+    endif()
+endforeach()
+
+cmake_path(ABSOLUTE_PATH SYNTH_BUILD_ROOT NORMALIZE OUTPUT_VARIABLE _build_root)
+cmake_path(ABSOLUTE_PATH SYNTH_CONTRACT_ROOT NORMALIZE OUTPUT_VARIABLE _contract_root)
+cmake_path(IS_PREFIX _build_root "${_contract_root}" NORMALIZE _contract_is_build_owned)
+if(NOT _contract_is_build_owned OR _contract_root STREQUAL _build_root)
+    message(FATAL_ERROR "validator path-safety fixture root must be nested under the build root")
+endif()
+if(IS_SYMLINK "${_contract_root}")
+    message(FATAL_ERROR "refusing to clean a symlinked validator path-safety fixture root")
+endif()
+if(EXISTS "${_contract_root}")
+    file(REMOVE_RECURSE "${_contract_root}")
+endif()
+file(MAKE_DIRECTORY "${_contract_root}")
+
+if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
+    set(_asset "pluginval_macOS.zip")
+    set(_archive_sha256 "3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f")
+    set(_executable_relative "pluginval.app/Contents/MacOS/pluginval")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Windows")
+    set(_asset "pluginval_Windows.zip")
+    set(_archive_sha256 "c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab")
+    set(_executable_relative "pluginval.exe")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+    set(_asset "pluginval_Linux.zip")
+    set(_archive_sha256 "c01c49d8063965c4c2dea8324468336768f5c9139e0b1caebde14c2400b55352")
+    set(_executable_relative "pluginval")
+else()
+    message(FATAL_ERROR "unsupported validator path-safety platform: ${SYNTH_SYSTEM_NAME}")
+endif()
+set(_download_url
+    "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/${_asset}")
+
+function(_synth_require_rejected_without_external_mutation
+         description status output external_directory)
+    if("${status}" STREQUAL "0")
+        message(FATAL_ERROR "${description} unexpectedly succeeded")
+    endif()
+    if(NOT "${output}" MATCHES "symlink ancestor")
+        message(FATAL_ERROR
+            "${description} failed for the wrong reason; expected symlink-ancestor rejection:\n${output}")
+    endif()
+    file(GLOB _external_entries LIST_DIRECTORIES true "${external_directory}/*")
+    if(_external_entries)
+        message(FATAL_ERROR
+            "${description} mutated outside its declared build root: ${_external_entries}")
+    endif()
+endfunction()
+
+# Provisioning must reject a symlinked validation-tools/pluginval parent before
+# it creates the version leaf or ownership marker at the external target.
+set(_provision_root "${_contract_root}/provision")
+set(_provision_build "${_provision_root}/build")
+set(_provision_external "${_provision_root}/external/pluginval")
+file(MAKE_DIRECTORY "${_provision_build}/validation-tools" "${_provision_external}")
+file(REAL_PATH "${_provision_build}" _provision_build_real)
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink
+            "${_provision_external}"
+            "${_provision_build}/validation-tools/pluginval"
+    RESULT_VARIABLE _symlink_status
+    ERROR_VARIABLE _symlink_error)
+if(NOT _symlink_status STREQUAL "0")
+    file(REMOVE_RECURSE "${_contract_root}")
+    message(STATUS
+        "Validator ancestor-symlink contracts skipped because symlink creation is unavailable: ${_symlink_error}")
+    return()
+endif()
+set(_provision_output
+    "${_provision_build_real}/validation-tools/pluginval/v1.0.4")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_BUILD_ROOT=${_provision_build_real}"
+        "-DSYNTH_PLUGINVAL_OUTPUT_DIRECTORY=${_provision_output}"
+        "-DSYNTH_PLUGINVAL_METADATA_PATH=${_provision_build_real}/validation/pluginval-provision.json"
+        "-DSYNTH_PLUGINVAL_STAMP_PATH=${_provision_output}/provision.stamp"
+        "-DSYNTH_PLUGINVAL_PLATFORM_ASSET=${_asset}"
+        "-DSYNTH_PLUGINVAL_EXPECTED_ARCHIVE_SHA256=${_archive_sha256}"
+        "-DSYNTH_PLUGINVAL_DOWNLOAD_URL=${_download_url}"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE_RELATIVE_PATH=${_executable_relative}"
+        "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+        -P "${SYNTH_SOURCE_ROOT}/cmake/ProvisionPluginval.cmake"
+    RESULT_VARIABLE _provision_status
+    OUTPUT_VARIABLE _provision_stdout
+    ERROR_VARIABLE _provision_stderr
+    ENCODING UTF-8)
+_synth_require_rejected_without_external_mutation(
+    "pluginval provisioning through a symlinked parent"
+    "${_provision_status}" "${_provision_stdout}${_provision_stderr}"
+    "${_provision_external}")
+if(EXISTS "${_provision_build}/validation/pluginval-provision.json")
+    message(FATAL_ERROR "rejected pluginval provisioning wrote metadata")
+endif()
+
+# Validation must reject a symlinked validation-ownership parent before it
+# creates the ownership marker, evidence root, or top-level report.
+set(_run_root "${_contract_root}/run")
+set(_run_build "${_run_root}/build")
+set(_run_external "${_run_root}/external/validation-ownership")
+file(MAKE_DIRECTORY "${_run_build}/validation" "${_run_external}")
+file(REAL_PATH "${_run_build}" _run_build_real)
+execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E create_symlink
+            "${_run_external}" "${_run_build}/validation-ownership"
+    RESULT_VARIABLE _run_symlink_status
+    ERROR_VARIABLE _run_symlink_error)
+if(NOT _run_symlink_status STREQUAL "0")
+    file(REMOVE_RECURSE "${_contract_root}")
+    message(FATAL_ERROR
+        "provision symlink creation succeeded but ownership symlink creation failed: ${_run_symlink_error}")
+endif()
+set(_run_report "${_run_build_real}/validation/pluginval-run-report.json")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_BUILD_ROOT=${_run_build_real}"
+        "-DSYNTH_STAGE_DIRECTORY=${_run_build_real}/stage"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE=${_run_build_real}/missing-pluginval"
+        "-DSYNTH_PLUGINVAL_METADATA_PATH=${_run_build_real}/missing-provision.json"
+        "-DSYNTH_PLUGINVAL_REPORT_PATH=${_run_report}"
+        "-DSYNTH_VALIDATION_DIRECTORY=${_run_build_real}/validation"
+        "-DSYNTH_REPEAT_COUNT=1"
+        "-DSYNTH_SEED=0x4d6f64656c44"
+        "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+        "-DSYNTH_ARCHITECTURE=contract-architecture"
+        "-DSYNTH_CONFIGURATION=Contract"
+        -P "${SYNTH_SOURCE_ROOT}/cmake/RunPluginval.cmake"
+    RESULT_VARIABLE _run_status
+    OUTPUT_VARIABLE _run_stdout
+    ERROR_VARIABLE _run_stderr
+    ENCODING UTF-8)
+_synth_require_rejected_without_external_mutation(
+    "pluginval validation through a symlinked ownership parent"
+    "${_run_status}" "${_run_stdout}${_run_stderr}" "${_run_external}")
+if(EXISTS "${_run_report}" OR EXISTS "${_run_build}/validation/pluginval")
+    message(FATAL_ERROR "rejected pluginval validation created build evidence")
+endif()
+
+file(REMOVE_RECURSE "${_contract_root}")
+message(STATUS "Validator ancestor-symlink path-safety contracts passed")

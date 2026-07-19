@@ -64,6 +64,52 @@ function(_synth_json_set_string json_variable key value)
     set(${json_variable} "${_updated}" PARENT_SCOPE)
 endfunction()
 
+function(_synth_validate_build_owned_directory_ancestry
+         build_root_real build_root_lexical candidate_directory description)
+    cmake_path(ABSOLUTE_PATH candidate_directory NORMALIZE
+               OUTPUT_VARIABLE _candidate_directory)
+    cmake_path(IS_PREFIX build_root_lexical "${_candidate_directory}" NORMALIZE
+               _candidate_is_lexically_owned)
+    if(NOT _candidate_is_lexically_owned
+       OR _candidate_directory STREQUAL build_root_lexical)
+        message(FATAL_ERROR
+            "${description} is not a nested build-owned directory: ${_candidate_directory}")
+    endif()
+
+    file(RELATIVE_PATH _relative_directory
+         "${build_root_lexical}" "${_candidate_directory}")
+    string(REPLACE "\\" "/" _relative_directory "${_relative_directory}")
+    if(IS_ABSOLUTE "${_relative_directory}"
+       OR _relative_directory MATCHES "(^|/)[.][.](/|$)")
+        message(FATAL_ERROR
+            "${description} escapes the lexical build root: ${_candidate_directory}")
+    endif()
+
+    string(REPLACE "/" ";" _directory_components "${_relative_directory}")
+    set(_ancestor "${build_root_lexical}")
+    foreach(_directory_component IN LISTS _directory_components)
+        set(_ancestor "${_ancestor}/${_directory_component}")
+        if(IS_SYMLINK "${_ancestor}")
+            message(FATAL_ERROR
+                "${description} has a symlink ancestor: ${_ancestor}")
+        endif()
+        if(EXISTS "${_ancestor}")
+            if(NOT IS_DIRECTORY "${_ancestor}")
+                message(FATAL_ERROR
+                    "${description} has a non-directory ancestor: ${_ancestor}")
+            endif()
+            file(REAL_PATH "${_ancestor}" _ancestor_real)
+            cmake_path(IS_PREFIX build_root_real "${_ancestor_real}" NORMALIZE
+                       _ancestor_is_really_owned)
+            if(NOT _ancestor_is_really_owned
+               OR _ancestor_real STREQUAL build_root_real)
+                message(FATAL_ERROR
+                    "${description} resolves outside the build root: ${_ancestor}")
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
 function(_synth_safe_existing_path output_variable root_directory relative_path description)
     string(REPLACE "\\" "/" _relative_path "${relative_path}")
     if(_relative_path STREQUAL ""
@@ -84,6 +130,46 @@ function(_synth_safe_existing_path output_variable root_directory relative_path 
     endif()
     set(${output_variable} "${_candidate_real}" PARENT_SCOPE)
 endfunction()
+
+# Resolve and validate every path that this script may mutate before inspecting
+# the validator or staged product. This ordering makes a path-safety failure
+# side-effect free even when an attacker replaces an intermediate directory
+# with a symlink.
+file(REAL_PATH "${SYNTH_BUILD_ROOT}" _build_root)
+cmake_path(ABSOLUTE_PATH SYNTH_BUILD_ROOT NORMALIZE OUTPUT_VARIABLE _build_root_lexical)
+file(TO_NATIVE_PATH "${_build_root}" _build_root_native)
+file(TO_NATIVE_PATH "${_build_root_lexical}" _build_root_lexical_native)
+file(REAL_PATH "${SYNTH_VALIDATION_DIRECTORY}" _validation_directory)
+set(_expected_validation_directory "${_build_root}/validation")
+cmake_path(NORMAL_PATH _expected_validation_directory
+           OUTPUT_VARIABLE _expected_validation_directory)
+if(NOT _validation_directory STREQUAL _expected_validation_directory)
+    message(FATAL_ERROR
+        "SYNTH_VALIDATION_DIRECTORY must be the fixed build-owned validation directory")
+endif()
+cmake_path(ABSOLUTE_PATH SYNTH_PLUGINVAL_REPORT_PATH NORMALIZE
+           OUTPUT_VARIABLE _pluginval_report_path)
+if(NOT _pluginval_report_path STREQUAL "${_build_root_lexical}/validation/pluginval-run-report.json")
+    message(FATAL_ERROR "pluginval report path must be the fixed build-owned report path")
+endif()
+set(_pluginval_evidence_root "${_validation_directory}/pluginval")
+set(_pluginval_evidence_marker
+    "${_build_root_lexical}/validation-ownership/pluginval-evidence-root.marker")
+get_filename_component(_pluginval_evidence_marker_directory
+                       "${_pluginval_evidence_marker}" DIRECTORY)
+_synth_validate_build_owned_directory_ancestry(
+    "${_build_root}" "${_build_root_lexical}" "${_pluginval_evidence_root}"
+    "pluginval evidence root")
+_synth_validate_build_owned_directory_ancestry(
+    "${_build_root}" "${_build_root_lexical}"
+    "${_pluginval_evidence_marker_directory}"
+    "pluginval evidence ownership directory")
+if(IS_SYMLINK "${_pluginval_evidence_marker}")
+    message(FATAL_ERROR "pluginval evidence ownership marker is symlinked")
+endif()
+if(IS_SYMLINK "${_pluginval_report_path}")
+    message(FATAL_ERROR "pluginval run report is symlinked")
+endif()
 
 if(NOT EXISTS "${SYNTH_PLUGINVAL_EXECUTABLE}")
     message(FATAL_ERROR "pluginval executable is missing: ${SYNTH_PLUGINVAL_EXECUTABLE}")
@@ -148,32 +234,12 @@ set(_staged_vst3_lexical "${SYNTH_STAGE_DIRECTORY}/${_vst3_relative_path}")
 _synth_safe_existing_path(_staged_vst3 "${SYNTH_STAGE_DIRECTORY}"
                           "${_vst3_relative_path}" "staged VST3 product")
 
-file(REAL_PATH "${SYNTH_BUILD_ROOT}" _build_root)
-cmake_path(ABSOLUTE_PATH SYNTH_BUILD_ROOT NORMALIZE OUTPUT_VARIABLE _build_root_lexical)
-file(TO_NATIVE_PATH "${_build_root}" _build_root_native)
-file(TO_NATIVE_PATH "${_build_root_lexical}" _build_root_lexical_native)
-file(REAL_PATH "${SYNTH_VALIDATION_DIRECTORY}" _validation_directory)
-set(_expected_validation_directory "${_build_root}/validation")
-cmake_path(NORMAL_PATH _expected_validation_directory
-           OUTPUT_VARIABLE _expected_validation_directory)
-if(NOT _validation_directory STREQUAL _expected_validation_directory)
-    message(FATAL_ERROR
-        "SYNTH_VALIDATION_DIRECTORY must be the fixed build-owned validation directory")
-endif()
-cmake_path(ABSOLUTE_PATH SYNTH_PLUGINVAL_REPORT_PATH NORMALIZE
-           OUTPUT_VARIABLE _pluginval_report_path)
-if(NOT _pluginval_report_path STREQUAL "${_build_root_lexical}/validation/pluginval-run-report.json")
-    message(FATAL_ERROR "pluginval report path must be the fixed build-owned report path")
-endif()
 file(RELATIVE_PATH _staged_vst3_from_build "${_build_root_lexical}" "${_staged_vst3_lexical}")
 string(REPLACE "\\" "/" _staged_vst3_from_build "${_staged_vst3_from_build}")
 if(IS_ABSOLUTE "${_staged_vst3_from_build}"
    OR _staged_vst3_from_build MATCHES "(^|/)[.][.](/|$)")
     message(FATAL_ERROR "staged VST3 product is not build-owned")
 endif()
-set(_pluginval_evidence_root "${_validation_directory}/pluginval")
-set(_pluginval_evidence_marker
-    "${_build_root_lexical}/validation-ownership/pluginval-evidence-root.marker")
 if(EXISTS "${_pluginval_evidence_root}" OR IS_SYMLINK "${_pluginval_evidence_root}")
     if(IS_SYMLINK "${_pluginval_evidence_root}")
         message(FATAL_ERROR "refusing to clean a symlinked pluginval evidence root")
@@ -196,8 +262,6 @@ if(EXISTS "${_pluginval_evidence_root}" OR IS_SYMLINK "${_pluginval_evidence_roo
     file(REMOVE_RECURSE "${_pluginval_evidence_root}")
 endif()
 file(MAKE_DIRECTORY "${_pluginval_evidence_root}")
-get_filename_component(_pluginval_evidence_marker_directory
-                       "${_pluginval_evidence_marker}" DIRECTORY)
 file(MAKE_DIRECTORY "${_pluginval_evidence_marker_directory}")
 file(WRITE "${_pluginval_evidence_marker}"
      "model-d-pluginval-evidence-root-v1\n")

@@ -88,6 +88,52 @@ function(_synth_json_set_string json_variable key value)
     set(${json_variable} "${_updated}" PARENT_SCOPE)
 endfunction()
 
+function(_synth_validate_build_owned_directory_ancestry
+         build_root_real build_root_lexical candidate_directory description)
+    cmake_path(ABSOLUTE_PATH candidate_directory NORMALIZE
+               OUTPUT_VARIABLE _candidate_directory)
+    cmake_path(IS_PREFIX build_root_lexical "${_candidate_directory}" NORMALIZE
+               _candidate_is_lexically_owned)
+    if(NOT _candidate_is_lexically_owned
+       OR _candidate_directory STREQUAL build_root_lexical)
+        message(FATAL_ERROR
+            "${description} is not a nested build-owned directory: ${_candidate_directory}")
+    endif()
+
+    file(RELATIVE_PATH _relative_directory
+         "${build_root_lexical}" "${_candidate_directory}")
+    string(REPLACE "\\" "/" _relative_directory "${_relative_directory}")
+    if(IS_ABSOLUTE "${_relative_directory}"
+       OR _relative_directory MATCHES "(^|/)[.][.](/|$)")
+        message(FATAL_ERROR
+            "${description} escapes the lexical build root: ${_candidate_directory}")
+    endif()
+
+    string(REPLACE "/" ";" _directory_components "${_relative_directory}")
+    set(_ancestor "${build_root_lexical}")
+    foreach(_directory_component IN LISTS _directory_components)
+        set(_ancestor "${_ancestor}/${_directory_component}")
+        if(IS_SYMLINK "${_ancestor}")
+            message(FATAL_ERROR
+                "${description} has a symlink ancestor: ${_ancestor}")
+        endif()
+        if(EXISTS "${_ancestor}")
+            if(NOT IS_DIRECTORY "${_ancestor}")
+                message(FATAL_ERROR
+                    "${description} has a non-directory ancestor: ${_ancestor}")
+            endif()
+            file(REAL_PATH "${_ancestor}" _ancestor_real)
+            cmake_path(IS_PREFIX build_root_real "${_ancestor_real}" NORMALIZE
+                       _ancestor_is_really_owned)
+            if(NOT _ancestor_is_really_owned
+               OR _ancestor_real STREQUAL build_root_real)
+                message(FATAL_ERROR
+                    "${description} resolves outside the build root: ${_ancestor}")
+            endif()
+        endif()
+    endforeach()
+endfunction()
+
 file(REAL_PATH "${SYNTH_BUILD_ROOT}" _build_root)
 cmake_path(ABSOLUTE_PATH SYNTH_BUILD_ROOT NORMALIZE OUTPUT_VARIABLE _build_root_lexical)
 cmake_path(ABSOLUTE_PATH SYNTH_PLUGINVAL_OUTPUT_DIRECTORY NORMALIZE
@@ -115,6 +161,17 @@ if(NOT _metadata_path STREQUAL "${_build_root_lexical}/validation/pluginval-prov
     message(FATAL_ERROR "pluginval metadata/stamp paths must use the fixed build-owned filenames")
 endif()
 
+get_filename_component(_metadata_directory "${_metadata_path}" DIRECTORY)
+_synth_validate_build_owned_directory_ancestry(
+    "${_build_root}" "${_build_root_lexical}" "${_output_directory}"
+    "pluginval tool root")
+_synth_validate_build_owned_directory_ancestry(
+    "${_build_root}" "${_build_root_lexical}" "${_metadata_directory}"
+    "pluginval metadata directory")
+if(IS_SYMLINK "${_metadata_path}")
+    message(FATAL_ERROR "refusing to write symlinked pluginval metadata")
+endif()
+
 set(_tool_root_marker "${_output_directory}/.synth-pluginval-tool-root")
 if(EXISTS "${_output_directory}" OR IS_SYMLINK "${_output_directory}")
     if(IS_SYMLINK "${_output_directory}")
@@ -125,6 +182,9 @@ if(EXISTS "${_output_directory}" OR IS_SYMLINK "${_output_directory}")
                _existing_output_is_build_owned)
     if(NOT _existing_output_is_build_owned OR _existing_output_real STREQUAL _build_root)
         message(FATAL_ERROR "refusing to clean pluginval tools outside the build root")
+    endif()
+    if(IS_SYMLINK "${_tool_root_marker}")
+        message(FATAL_ERROR "pluginval tool-root ownership marker is symlinked")
     endif()
     if(NOT EXISTS "${_tool_root_marker}")
         message(FATAL_ERROR
@@ -260,7 +320,6 @@ endif()
 string(REPLACE "\\" "/" _executable_relative_path "${_executable_relative_path}")
 _synth_json_set_string(_metadata executable "${_executable_relative_path}")
 
-get_filename_component(_metadata_directory "${_metadata_path}" DIRECTORY)
 file(MAKE_DIRECTORY "${_metadata_directory}")
 file(WRITE "${_metadata_path}" "${_metadata}\n")
 file(WRITE "${_stamp_path}"
