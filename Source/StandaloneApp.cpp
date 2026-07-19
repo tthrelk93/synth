@@ -1,27 +1,27 @@
 #include <JuceHeader.h>
-#include <juce_audio_plugin_client/Standalone/juce_StandaloneFilterWindow.h>
+#include <juce_audio_plugin_client/detail/juce_CreatePluginFilter.h>
 
 #include "PianoKey.h"
+#include "PresetManager.h"
 
 namespace
 {
 using namespace juce;
 
+#if SYNTH_ENABLE_STANDALONE_LIFECYCLE_TESTS
 constexpr auto lifecycleFlag = "--synth-lifecycle-test";
+#endif
 constexpr auto invalidDeviceName = "ModelD lifecycle test - deliberately nonexistent output";
 
 struct LifecycleOptions
 {
-    enum class Mode
-    {
-        normal,
-        invalid,
-        noDevice
-    };
+    enum class Mode { normal, invalid, noDevice };
 
     Mode mode = Mode::normal;
     File report;
     File screenshot;
+    File settings;
+    File presetDirectory;
     bool enabled = false;
     String parseError;
 
@@ -49,12 +49,14 @@ static LifecycleOptions parseLifecycleOptions()
         return result;
 
     result.enabled = true;
-    if (arguments.size() != 6
+    if (arguments.size() != 10
         || arguments[0] != lifecycleFlag
         || arguments[2] != "--report"
-        || arguments[4] != "--screenshot")
+        || arguments[4] != "--screenshot"
+        || arguments[6] != "--settings"
+        || arguments[8] != "--preset-dir")
     {
-        result.parseError = "Expected --synth-lifecycle-test <normal|invalid|no-device> --report <absolute-path> --screenshot <absolute-path>";
+        result.parseError = "Expected --synth-lifecycle-test <normal|invalid|no-device> --report <absolute-path> --screenshot <absolute-path> --settings <absolute-path> --preset-dir <absolute-path>";
         return result;
     }
 
@@ -69,22 +71,29 @@ static LifecycleOptions parseLifecycleOptions()
 
     result.report = File (arguments[3]);
     result.screenshot = File (arguments[5]);
-    if (! File::isAbsolutePath (result.report.getFullPathName())
-        || ! File::isAbsolutePath (result.screenshot.getFullPathName()))
-        result.parseError = "Lifecycle report and screenshot paths must be absolute";
+    result.settings = File (arguments[7]);
+    result.presetDirectory = File (arguments[9]);
+    for (const auto& file : { result.report, result.screenshot, result.settings,
+                              result.presetDirectory })
+        if (! File::isAbsolutePath (file.getFullPathName()))
+            result.parseError = "Lifecycle report, screenshot, settings, and preset paths must be absolute";
    #endif
 
     return result;
 }
 
-static int countEnabledMidiInputs (AudioDeviceManager& manager)
+static PropertiesFile::Options makeSettingsOptions()
 {
-    int count = 0;
-    for (const auto& device : MidiInput::getAvailableDevices())
-        if (manager.isMidiInputDeviceEnabled (device.identifier))
-            ++count;
-
-    return count;
+    PropertiesFile::Options options;
+    options.applicationName = CharPointer_UTF8 (JucePlugin_Name);
+    options.filenameSuffix = ".settings";
+    options.osxLibrarySubFolder = "Application Support";
+   #if JUCE_LINUX || JUCE_BSD
+    options.folderName = "~/.config";
+   #else
+    options.folderName = {};
+   #endif
+    return options;
 }
 
 template <typename Visitor>
@@ -95,22 +104,95 @@ static void visitComponents (Component& parent, Visitor&& visitor)
         visitComponents (*child, visitor);
 }
 
-static AudioProcessorEditor* findActiveEditor (StandaloneFilterWindow& window)
-{
-    if (auto* processor = window.getAudioProcessor())
-        return processor->getActiveEditor();
-
-    return nullptr;
-}
-
-class LifecycleStandaloneWindow final : public StandaloneFilterWindow
+class DeferredAudioDeviceManager final : public AudioDeviceManager
 {
 public:
-    LifecycleStandaloneWindow (const String& title,
-                               Colour background,
-                               std::unique_ptr<StandalonePluginHolder> holder)
-        : StandaloneFilterWindow (title, background, std::move (holder))
+    void setSequenceRecorder (std::function<int()> recorder)
     {
+        sequenceRecorder = std::move (recorder);
+    }
+
+    void createAudioDeviceTypes (OwnedArray<AudioIODeviceType>& types) override
+    {
+        ++audioDeviceDiscoveryCount;
+        if (firstAudioDeviceDiscoverySequence == 0 && sequenceRecorder)
+            firstAudioDeviceDiscoverySequence = sequenceRecorder();
+        AudioDeviceManager::createAudioDeviceTypes (types);
+    }
+
+    int audioDeviceDiscoveryCount = 0;
+    int firstAudioDeviceDiscoverySequence = 0;
+
+private:
+    std::function<int()> sequenceRecorder;
+};
+
+class StandaloneActions
+{
+public:
+    virtual ~StandaloneActions() = default;
+    virtual void showAudioMidiSettings() = 0;
+    virtual void askUserToSaveState() = 0;
+    virtual void askUserToLoadState() = 0;
+    virtual void resetPluginState() = 0;
+    virtual void requestApplicationQuit() = 0;
+};
+
+class EditorContent final : public Component
+{
+public:
+    explicit EditorContent (AudioProcessor& processor)
+        : processor (processor),
+          editor (processor.hasEditor() ? processor.createEditorIfNeeded()
+                                        : new GenericAudioProcessorEditor (processor))
+    {
+        if (editor != nullptr)
+        {
+            addAndMakeVisible (*editor);
+            setSize (editor->getWidth(), editor->getHeight());
+        }
+    }
+
+    ~EditorContent() override
+    {
+        if (editor != nullptr)
+            processor.editorBeingDeleted (editor.get());
+        editor.reset();
+    }
+
+    void resized() override
+    {
+        if (editor != nullptr)
+            editor->setBounds (getLocalBounds());
+    }
+
+    AudioProcessorEditor* getEditor() const noexcept { return editor.get(); }
+
+private:
+    AudioProcessor& processor;
+    std::unique_ptr<AudioProcessorEditor> editor;
+};
+
+class ProjectStandaloneWindow final : public DocumentWindow
+{
+public:
+    ProjectStandaloneWindow (const String& title,
+                             Colour background,
+                             StandaloneActions& actionsIn,
+                             PropertiesFile& settingsIn)
+        : DocumentWindow (title, background,
+                          DocumentWindow::minimiseButton | DocumentWindow::closeButton),
+          actions (actionsIn), settings (settingsIn), optionsButton ("Options")
+    {
+        setTitleBarButtonsRequired (DocumentWindow::minimiseButton | DocumentWindow::closeButton, false);
+        optionsButton.setTriggeredOnMouseDown (true);
+        optionsButton.onClick = [safe = SafePointer<ProjectStandaloneWindow> (this)]
+        {
+            if (safe != nullptr)
+                safe->showOptionsMenu();
+        };
+        Component::addAndMakeVisible (&optionsButton);
+
         statusLabel.setJustificationType (Justification::centredLeft);
         statusLabel.setColour (Label::textColourId,
                                getLookAndFeel().findColour (DocumentWindow::textColourId));
@@ -119,11 +201,42 @@ public:
         setStatus ("Audio: initialising | MIDI inputs enabled: 0");
     }
 
+    ~ProjectStandaloneWindow() override
+    {
+        saveWindowPosition();
+        clearProcessorEditor();
+    }
+
+    void attachProcessorEditor (AudioProcessor& processor)
+    {
+        auto content = std::make_unique<EditorContent> (processor);
+        editorContent = content.get();
+        setContentOwned (content.release(), true);
+        if (auto* editor = getEditor())
+            setResizable (editor->isResizable(), false);
+        restoreWindowPosition();
+    }
+
+    void clearProcessorEditor()
+    {
+        editorContent = nullptr;
+        clearContentComponent();
+    }
+
+    AudioProcessorEditor* getEditor() const noexcept
+    {
+        return editorContent != nullptr ? editorContent->getEditor() : nullptr;
+    }
+
     void resized() override
     {
-        StandaloneFilterWindow::resized();
-        statusLabel.setBounds (76, 2, jmax (0, getWidth() - 84), jmax (0, getTitleBarHeight() - 4));
+        DocumentWindow::resized();
+        optionsButton.setBounds (8, 6, 60, jmax (0, getTitleBarHeight() - 8));
+        statusLabel.setBounds (76, 2, jmax (0, getWidth() - 84),
+                               jmax (0, getTitleBarHeight() - 4));
     }
+
+    void closeButtonPressed() override { actions.requestApplicationQuit(); }
 
     void setStatus (const String& status)
     {
@@ -131,33 +244,88 @@ public:
         statusLabel.setTooltip (status);
     }
 
-    String getStatus() const
+    String getStatus() const { return statusLabel.getText(); }
+    bool isStatusLabelShowing() const { return statusLabel.isShowing(); }
+    Rectangle<int> getStatusLabelBounds() const { return statusLabel.getBounds(); }
+
+    void saveWindowPosition()
     {
-        return statusLabel.getText();
+        settings.setValue ("windowX", getX());
+        settings.setValue ("windowY", getY());
     }
 
 private:
+    void restoreWindowPosition()
+    {
+        const auto& displays = Desktop::getInstance().getDisplays();
+        if (displays.displays.isEmpty())
+            return;
+
+        constexpr int missing = -100000;
+        const auto savedX = settings.getIntValue ("windowX", missing);
+        const auto savedY = settings.getIntValue ("windowY", missing);
+        Rectangle<int> requested;
+        if (savedX != missing && savedY != missing)
+            requested = { savedX, savedY, getWidth(), getHeight() };
+        else
+            requested = getLocalBounds().withCentre (displays.getPrimaryDisplay()->userArea.getCentre());
+
+        const auto limits = displays.getDisplayForRect (requested)->userArea;
+        requested.setPosition (jlimit (limits.getX(), jmax (limits.getX(), limits.getRight() - requested.getWidth()), requested.getX()),
+                               jlimit (limits.getY(), jmax (limits.getY(), limits.getBottom() - requested.getHeight()), requested.getY()));
+        setBounds (requested);
+    }
+
+    void showOptionsMenu()
+    {
+        PopupMenu menu;
+        menu.addItem (1, TRANS ("Audio/MIDI Settings..."));
+        menu.addSeparator();
+        menu.addItem (2, TRANS ("Save current state..."));
+        menu.addItem (3, TRANS ("Load a saved state..."));
+        menu.addSeparator();
+        menu.addItem (4, TRANS ("Reset to default state"));
+        menu.showMenuAsync (PopupMenu::Options().withTargetComponent (&optionsButton),
+                            [safe = SafePointer<ProjectStandaloneWindow> (this)] (int result)
+                            {
+                                if (safe == nullptr)
+                                    return;
+                                if (result == 1) safe->actions.showAudioMidiSettings();
+                                if (result == 2) safe->actions.askUserToSaveState();
+                                if (result == 3) safe->actions.askUserToLoadState();
+                                if (result == 4) safe->actions.resetPluginState();
+                            });
+    }
+
+    StandaloneActions& actions;
+    PropertiesFile& settings;
+    TextButton optionsButton;
     Label statusLabel;
+    EditorContent* editorContent = nullptr;
+};
+
+class AudioMidiSettingsComponent final : public Component
+{
+public:
+    AudioMidiSettingsComponent (AudioDeviceManager& manager, AudioProcessor& processor)
+        : selector (manager, 0, 0, 0, 2, true, processor.producesMidi(), true, false)
+    {
+        addAndMakeVisible (selector);
+        setSize (500, 550);
+    }
+
+    void resized() override { selector.setBounds (getLocalBounds()); }
+
+private:
+    AudioDeviceSelectorComponent selector;
 };
 
 class ModelDStandaloneApplication final : public JUCEApplication,
-                                          private Timer
+                                          private Timer,
+                                          private ChangeListener,
+                                          private StandaloneActions
 {
 public:
-    ModelDStandaloneApplication()
-    {
-        PropertiesFile::Options options;
-        options.applicationName = CharPointer_UTF8 (JucePlugin_Name);
-        options.filenameSuffix = ".settings";
-        options.osxLibrarySubFolder = "Application Support";
-       #if JUCE_LINUX || JUCE_BSD
-        options.folderName = "~/.config";
-       #else
-        options.folderName = {};
-       #endif
-        applicationProperties.setStorageParameters (options);
-    }
-
     const String getApplicationName() override { return CharPointer_UTF8 (JucePlugin_Name); }
     const String getApplicationVersion() override { return JucePlugin_VersionString; }
     bool moreThanOneInstanceAllowed() override { return true; }
@@ -166,33 +334,56 @@ public:
     void initialise (const String&) override
     {
         lifecycle = parseLifecycleOptions();
-        applicationStartMs = Time::getMillisecondCounterHiRes();
-
         if (lifecycle.enabled && lifecycle.parseError.isNotEmpty())
         {
-            failBeforeWindow (lifecycle.parseError);
+            writeEarlyFailure (lifecycle.parseError);
             return;
         }
 
         if (Desktop::getInstance().getDisplays().displays.isEmpty())
         {
-            failBeforeWindow ("No display is available for the standalone editor");
+            writeEarlyFailure ("No display is available for the standalone editor");
             return;
         }
 
-        Array<StandalonePluginHolder::PluginInOuts> initialChannels;
-        initialChannels.add ({ 0, 0 });
-        auto holder = std::make_unique<StandalonePluginHolder> (
-            applicationProperties.getUserSettings(), false, String{}, nullptr, initialChannels, false);
+        const auto options = makeSettingsOptions();
+        if (lifecycle.enabled)
+        {
+            lifecycle.settings.getParentDirectory().createDirectory();
+            settings = std::make_unique<PropertiesFile> (lifecycle.settings, options);
+        }
+        else
+        {
+            settings = std::make_unique<PropertiesFile> (options);
+        }
 
-        mainWindow = std::make_unique<LifecycleStandaloneWindow> (
+        if (! settings->isValidFile())
+        {
+            writeEarlyFailure ("Standalone settings file is invalid: " + settings->getFile().getFullPathName());
+            return;
+        }
+
+        if (lifecycle.enabled
+            && ! PresetManager::setStandaloneLifecycleTestDirectory (lifecycle.presetDirectory))
+        {
+            writeEarlyFailure ("Standalone preset directory is invalid: "
+                               + lifecycle.presetDirectory.getFullPathName());
+            return;
+        }
+
+        deviceManager.setSequenceRecorder ([this] { return nextSequence(); });
+        deviceManager.addChangeListener (this);
+        createPlugin();
+
+        mainWindow = std::make_unique<ProjectStandaloneWindow> (
             getApplicationName(),
             LookAndFeel::getDefaultLookAndFeel().findColour (ResizableWindow::backgroundColourId),
-            std::move (holder));
+            static_cast<StandaloneActions&> (*this), *settings);
+        mainWindow->attachProcessorEditor (*processor);
         mainWindow->setVisible (true);
-        mainWindow->toFront (true);
+        mainWindow->toFront (false);
+        windowVisibleSequence = nextSequence();
 
-        firstVisibleMs = Time::getMillisecondCounterHiRes() - applicationStartMs;
         startTimer (50);
     }
 
@@ -200,16 +391,22 @@ public:
     {
         stopTimer();
         if (mainWindow != nullptr)
-            mainWindow->pluginHolder->savePluginState();
+            mainWindow->saveWindowPosition();
+        savePluginState();
+        saveAudioDeviceState();
         mainWindow = nullptr;
-        applicationProperties.saveIfNeeded();
+        stopAudioAndMidiCallbacks();
+        player.setProcessor (nullptr);
+        processor = nullptr;
+        deviceManager.removeChangeListener (this);
+        if (settings != nullptr)
+            settings->saveIfNeeded();
+        settings = nullptr;
     }
 
     void systemRequestedQuit() override
     {
-        if (mainWindow != nullptr)
-            mainWindow->pluginHolder->savePluginState();
-
+        savePluginState();
         if (ModalComponentManager::getInstance()->cancelAllModalComponents())
         {
             Timer::callAfterDelay (100, []
@@ -225,11 +422,18 @@ public:
     }
 
 private:
-    enum class TimerPhase
+    enum class TimerPhase { configureDevice, captureEvidence };
+
+    int nextSequence() { return ++logicalSequence; }
+
+    void createPlugin()
     {
-        configureDevice,
-        captureEvidence
-    };
+        processor = createPluginFilterOfType (AudioProcessor::wrapperType_Standalone);
+        processor->disableNonMainBuses();
+        processor->setRateAndBufferSizeDetails (44100.0, 512);
+        reloadPluginState();
+        player.setProcessor (processor.get());
+    }
 
     void timerCallback() override
     {
@@ -244,7 +448,7 @@ private:
         {
             configureDeviceAfterWindowIsVisible();
             timerPhase = TimerPhase::captureEvidence;
-            startTimer (150);
+            startTimer (250);
             return;
         }
 
@@ -253,19 +457,20 @@ private:
 
     void configureDeviceAfterWindowIsVisible()
     {
-        deviceConfigurationStartMs = Time::getMillisecondCounterHiRes() - applicationStartMs;
-        auto& holder = *mainWindow->pluginHolder;
-        auto& deviceManager = holder.deviceManager;
-        holder.channelConfiguration.clearQuick();
-        holder.channelConfiguration.add ({ 0, 2 });
-
+        deviceConfigurationStartSequence = nextSequence();
         if (lifecycle.enabled && lifecycle.mode == LifecycleOptions::Mode::noDevice)
         {
-            for (const auto& device : MidiInput::getAvailableDevices())
-                deviceManager.setMidiInputDeviceEnabled (device.identifier, false);
             deviceOpenError.clear();
+            enabledMidiInputCount = 0;
+            updateStatusText();
+            return;
         }
-        else if (lifecycle.enabled && lifecycle.mode == LifecycleOptions::Mode::invalid)
+
+        deviceManager.addAudioCallback (&player);
+        deviceManager.addMidiInputDeviceCallback ({}, &player);
+        callbacksWired = true;
+
+        if (lifecycle.enabled && lifecycle.mode == LifecycleOptions::Mode::invalid)
         {
             AudioDeviceManager::AudioDeviceSetup setup;
             setup.inputDeviceName.clear();
@@ -274,50 +479,182 @@ private:
         }
         else
         {
-            std::unique_ptr<XmlElement> savedState;
-            if (holder.settings != nullptr)
-                savedState = holder.settings->getXmlValue ("audioSetup");
+            auto savedState = settings->getXmlValue ("audioSetup");
             deviceOpenError = deviceManager.initialise (0, 2, savedState.get(), true);
         }
 
+        refreshEnabledMidiInputCount();
         updateStatusText();
+    }
+
+    void changeListenerCallback (ChangeBroadcaster* source) override
+    {
+        if (source == &deviceManager)
+        {
+            if (! (lifecycle.enabled && lifecycle.mode == LifecycleOptions::Mode::noDevice))
+                refreshEnabledMidiInputCount();
+            updateStatusText();
+        }
+    }
+
+    void refreshEnabledMidiInputCount()
+    {
+        midiEnumerationPerformed = true;
+        enabledMidiInputCount = 0;
+        for (const auto& device : MidiInput::getAvailableDevices())
+            if (deviceManager.isMidiInputDeviceEnabled (device.identifier))
+                ++enabledMidiInputCount;
     }
 
     void updateStatusText()
     {
-        auto& manager = mainWindow->pluginHolder->deviceManager;
-        const auto midiCount = countEnabledMidiInputs (manager);
-
+        if (mainWindow == nullptr)
+            return;
         if (lifecycle.enabled && lifecycle.mode == LifecycleOptions::Mode::noDevice)
         {
             mainWindow->setStatus ("Audio: disabled (no-device test) | MIDI inputs enabled: 0");
             return;
         }
-
-        if (const auto* device = manager.getCurrentAudioDevice())
+        if (const auto* device = deviceManager.getCurrentAudioDevice())
         {
             mainWindow->setStatus ("Audio: " + device->getName()
-                                   + " | MIDI inputs enabled: " + String (midiCount));
+                                   + " | MIDI inputs enabled: " + String (enabledMidiInputCount));
             return;
         }
-
-        auto reason = deviceOpenError.isNotEmpty() ? deviceOpenError : String ("no output device available");
+        const auto reason = deviceOpenError.isNotEmpty() ? deviceOpenError
+                                                         : String ("no output device available");
         mainWindow->setStatus ("Audio unavailable: " + reason
-                               + " | MIDI inputs enabled: " + String (midiCount));
+                               + " | MIDI inputs enabled: " + String (enabledMidiInputCount));
     }
 
-    void failBeforeWindow (const String& error)
+    void savePluginState()
     {
-        if (! lifecycle.enabled)
-        {
-            Logger::writeToLog (error);
-            setApplicationReturnValue (1);
-            quit();
+        if (settings == nullptr || processor == nullptr)
             return;
-        }
+        MemoryBlock data;
+        processor->getStateInformation (data);
+        settings->setValue ("filterState", data.toBase64Encoding());
+    }
 
-        failureBeforeWindow = error;
-        finishLifecycleTest (error);
+    void reloadPluginState()
+    {
+        if (settings == nullptr || processor == nullptr)
+            return;
+        MemoryBlock data;
+        if (data.fromBase64Encoding (settings->getValue ("filterState")) && data.getSize() > 0)
+            processor->setStateInformation (data.getData(), (int) data.getSize());
+    }
+
+    void saveAudioDeviceState()
+    {
+        if (settings != nullptr && callbacksWired)
+            settings->setValue ("audioSetup", deviceManager.createStateXml().get());
+    }
+
+    void stopAudioAndMidiCallbacks()
+    {
+        if (! callbacksWired)
+            return;
+        deviceManager.removeMidiInputDeviceCallback ({}, &player);
+        deviceManager.removeAudioCallback (&player);
+        callbacksWired = false;
+    }
+
+    File getLastStateFile() const
+    {
+        auto file = File (settings->getValue ("lastStateFile"));
+        return file == File() ? File::getSpecialLocation (File::userDocumentsDirectory) : file;
+    }
+
+    void showAudioMidiSettings() override
+    {
+        if (processor == nullptr)
+            return;
+        DialogWindow::LaunchOptions options;
+        options.content.setOwned (new AudioMidiSettingsComponent (deviceManager, *processor));
+        options.dialogTitle = TRANS ("Audio/MIDI Settings");
+        options.dialogBackgroundColour = options.content->getLookAndFeel().findColour (ResizableWindow::backgroundColourId);
+        options.escapeKeyTriggersCloseButton = true;
+        options.useNativeTitleBar = true;
+        options.resizable = false;
+        options.launchAsync();
+    }
+
+    void askUserToSaveState() override
+    {
+        stateFileChooser = std::make_unique<FileChooser> (TRANS ("Save current state"), getLastStateFile());
+        stateFileChooser->launchAsync (FileBrowserComponent::saveMode
+                                           | FileBrowserComponent::canSelectFiles
+                                           | FileBrowserComponent::warnAboutOverwriting,
+                                       [this] (const FileChooser& chooser)
+                                       {
+                                           const auto file = chooser.getResult();
+                                           if (file == File() || processor == nullptr)
+                                               return;
+                                           settings->setValue ("lastStateFile", file.getFullPathName());
+                                           MemoryBlock data;
+                                           processor->getStateInformation (data);
+                                           if (! file.replaceWithData (data.getData(), data.getSize()))
+                                               showFileError (TRANS ("Couldn't write to the specified file!"));
+                                       });
+    }
+
+    void askUserToLoadState() override
+    {
+        stateFileChooser = std::make_unique<FileChooser> (TRANS ("Load a saved state"), getLastStateFile());
+        stateFileChooser->launchAsync (FileBrowserComponent::openMode | FileBrowserComponent::canSelectFiles,
+                                       [this] (const FileChooser& chooser)
+                                       {
+                                           const auto file = chooser.getResult();
+                                           if (file == File() || processor == nullptr)
+                                               return;
+                                           settings->setValue ("lastStateFile", file.getFullPathName());
+                                           MemoryBlock data;
+                                           if (file.loadFileAsData (data))
+                                               processor->setStateInformation (data.getData(), (int) data.getSize());
+                                           else
+                                               showFileError (TRANS ("Couldn't read from the specified file!"));
+                                       });
+    }
+
+    void showFileError (const String& message)
+    {
+        const auto options = MessageBoxOptions::makeOptionsOk (AlertWindow::WarningIcon,
+                                                               TRANS ("Standalone state error"), message);
+        messageBox = AlertWindow::showScopedAsync (options, nullptr);
+    }
+
+    void resetPluginState() override
+    {
+        if (mainWindow == nullptr)
+            return;
+        player.setProcessor (nullptr);
+        mainWindow->clearProcessorEditor();
+        settings->removeValue ("filterState");
+        processor = nullptr;
+        createPlugin();
+        mainWindow->attachProcessorEditor (*processor);
+    }
+
+    void requestApplicationQuit() override { systemRequestedQuit(); }
+
+    void writeEarlyFailure (const String& error)
+    {
+        Logger::writeToLog (error);
+        if (lifecycle.enabled && lifecycle.report != File())
+        {
+            auto report = DynamicObject::Ptr (new DynamicObject());
+            report->setProperty ("schema_version", 1);
+            report->setProperty ("tool_version", JucePlugin_VersionString);
+            report->setProperty ("mode", lifecycle.modeName());
+            report->setProperty ("status", "fail");
+            report->setProperty ("failures", Array<var> { error });
+            lifecycle.report.getParentDirectory().createDirectory();
+            lifecycle.report.replaceWithText (JSON::toString (var (report.get()), true) + newLine,
+                                               false, false, "\n");
+        }
+        setApplicationReturnValue (1);
+        quit();
     }
 
     void finishLifecycleTest (const String& preconditionFailure)
@@ -328,9 +665,8 @@ private:
         StringArray failures;
         if (preconditionFailure.isNotEmpty())
             failures.add (preconditionFailure);
-
         auto assertions = DynamicObject::Ptr (new DynamicObject());
-        const auto recordAssertion = [&] (const Identifier& name, bool passed, const String& failure)
+        const auto assertThat = [&] (const Identifier& name, bool passed, const String& failure)
         {
             assertions->setProperty (name, passed);
             if (! passed)
@@ -339,29 +675,33 @@ private:
 
         const auto hasWindow = mainWindow != nullptr;
         const auto windowBounds = hasWindow ? mainWindow->getBounds() : Rectangle<int>{};
-        recordAssertion ("top_level_visible", hasWindow && mainWindow->isVisible(), "Top-level window is not visible");
-        recordAssertion ("top_level_showing", hasWindow && mainWindow->isShowing(), "Top-level window is not showing");
-        recordAssertion ("native_peer_present", hasWindow && mainWindow->getPeer() != nullptr, "Top-level window has no native peer");
-        recordAssertion ("window_bounds_nonempty", ! windowBounds.isEmpty(), "Top-level window bounds are empty");
-        recordAssertion ("visible_before_device_configuration",
-                         firstVisibleMs >= 0.0 && deviceConfigurationStartMs > firstVisibleMs,
-                         "Device configuration did not begin after first visibility");
+        assertThat ("top_level_visible", hasWindow && mainWindow->isVisible(), "Top-level window is not visible");
+        assertThat ("top_level_showing", hasWindow && mainWindow->isShowing(), "Top-level window is not showing");
+        assertThat ("native_peer_present", hasWindow && mainWindow->getPeer() != nullptr, "Top-level window has no native peer");
+        assertThat ("window_bounds_nonempty", ! windowBounds.isEmpty(), "Top-level window bounds are empty");
+        assertThat ("visible_before_device_configuration",
+                    windowVisibleSequence > 0 && deviceConfigurationStartSequence > windowVisibleSequence,
+                    "Device configuration did not begin after first visibility");
+        assertThat ("device_discovery_after_visibility",
+                    deviceManager.firstAudioDeviceDiscoverySequence == 0
+                        || deviceManager.firstAudioDeviceDiscoverySequence > windowVisibleSequence,
+                    "Audio device discovery began before first visibility");
 
-        auto* editor = hasWindow ? findActiveEditor (*mainWindow) : nullptr;
+        auto* editor = hasWindow ? mainWindow->getEditor() : nullptr;
         const auto editorBounds = editor != nullptr ? editor->getBounds() : Rectangle<int>{};
-        recordAssertion ("custom_editor_visible", editor != nullptr && editor->isVisible(), "Custom editor is not visible");
-        recordAssertion ("custom_editor_showing", editor != nullptr && editor->isShowing(), "Custom editor is not showing");
-        recordAssertion ("custom_editor_bounds_nonempty", ! editorBounds.isEmpty(), "Custom editor bounds are empty");
+        assertThat ("custom_editor_visible", editor != nullptr && editor->isVisible(), "Custom editor is not visible");
+        assertThat ("custom_editor_showing", editor != nullptr && editor->isShowing(), "Custom editor is not showing");
+        assertThat ("custom_editor_bounds_nonempty", ! editorBounds.isEmpty(), "Custom editor bounds are empty");
+        assertThat ("status_label_showing", hasWindow && mainWindow->isStatusLabelShowing(), "Status label is not showing");
+        assertThat ("status_label_bounds_nonempty", hasWindow && ! mainWindow->getStatusLabelBounds().isEmpty(), "Status label bounds are empty");
 
         Array<PianoKey*> visiblePianoKeys;
         if (editor != nullptr)
-        {
             visitComponents (*editor, [&] (Component& component)
             {
                 if (auto* key = dynamic_cast<PianoKey*> (&component); key != nullptr && key->isShowing())
                     visiblePianoKeys.add (key);
             });
-        }
         assertions->setProperty ("visible_piano_key_count", visiblePianoKeys.size());
         if (visiblePianoKeys.isEmpty())
             failures.add ("No visible PianoKey components were found");
@@ -376,33 +716,40 @@ private:
             keyReleased = ! key->isCurrentlyPressed();
             noteRoundTrip = pressed && keyReleased;
         }
-        recordAssertion ("piano_note_round_trip", noteRoundTrip, "Visible piano key note-on/note-off round trip failed");
-        recordAssertion ("piano_key_released", keyReleased, "Visible piano key did not return to released state");
+        assertThat ("piano_note_round_trip", noteRoundTrip, "Visible piano key note round trip failed");
+        assertThat ("piano_key_released", keyReleased, "Visible piano key did not return to released state");
 
         const auto status = hasWindow ? mainWindow->getStatus() : String{};
-        recordAssertion ("status_nonempty", status.isNotEmpty(), "Standalone device status text is empty");
-        auto* manager = hasWindow ? &mainWindow->pluginHolder->deviceManager : nullptr;
-        const auto midiCount = manager != nullptr ? countEnabledMidiInputs (*manager) : -1;
-        const auto* currentDevice = manager != nullptr ? manager->getCurrentAudioDevice() : nullptr;
-        const auto stateFragment = "MIDI inputs enabled: " + String (midiCount);
-        recordAssertion ("status_matches_device_state",
-                         status.contains (stateFragment)
-                             && ((currentDevice != nullptr && status.contains (currentDevice->getName()))
-                                 || (currentDevice == nullptr && (status.containsIgnoreCase ("unavailable")
-                                                                  || status.containsIgnoreCase ("disabled")))),
-                         "Standalone status text does not match the resulting audio/MIDI state");
+        const auto* currentDevice = deviceManager.getCurrentAudioDevice();
+        assertThat ("status_nonempty", status.isNotEmpty(), "Standalone device status text is empty");
+        assertThat ("status_matches_device_state",
+                    status.contains ("MIDI inputs enabled: " + String (enabledMidiInputCount))
+                        && ((currentDevice != nullptr && status.contains (currentDevice->getName()))
+                            || (currentDevice == nullptr && (status.containsIgnoreCase ("unavailable")
+                                                             || status.containsIgnoreCase ("disabled")))),
+                    "Standalone status text does not match audio/MIDI state");
 
         const auto invalidMode = lifecycle.mode == LifecycleOptions::Mode::invalid;
         const auto noDeviceMode = lifecycle.mode == LifecycleOptions::Mode::noDevice;
-        recordAssertion ("invalid_error_nonempty", ! invalidMode || deviceOpenError.isNotEmpty(), "Invalid mode did not record a device-open error");
-        recordAssertion ("required_current_device_absent", (! invalidMode && ! noDeviceMode) || currentDevice == nullptr,
-                         "Invalid/no-device mode unexpectedly opened an audio device");
-        recordAssertion ("no_device_midi_inputs_disabled", ! noDeviceMode || midiCount == 0,
-                         "No-device mode left one or more MIDI inputs enabled");
+        assertThat ("invalid_error_nonempty", ! invalidMode || deviceOpenError.isNotEmpty(), "Invalid mode did not record a device-open error");
+        assertThat ("required_current_device_absent", (! invalidMode && ! noDeviceMode) || currentDevice == nullptr, "Invalid/no-device mode opened an audio device");
+        assertThat ("no_device_midi_inputs_disabled", ! noDeviceMode || enabledMidiInputCount == 0, "No-device mode enabled MIDI inputs");
+        assertThat ("no_device_discovery_skipped",
+                    ! noDeviceMode || (deviceManager.audioDeviceDiscoveryCount == 0
+                                       && ! midiEnumerationPerformed && ! callbacksWired),
+                    "No-device mode performed audio/MIDI discovery or wired callbacks");
+
+        const auto actualSettingsPath = settings != nullptr ? settings->getFile().getFullPathName() : String{};
+        const auto settingsPathMatches = actualSettingsPath == lifecycle.settings.getFullPathName();
+        assertThat ("settings_path_matches_request", settingsPathMatches,
+                    "Standalone did not use the explicit lifecycle settings path");
+        const auto actualPresetDirectory = PresetManager::getLastConstructedPresetDirectory().getFullPathName();
+        const auto presetDirectoryMatches = actualPresetDirectory == lifecycle.presetDirectory.getFullPathName();
+        assertThat ("preset_directory_matches_request", presetDirectoryMatches,
+                    "Standalone editor did not use the explicit lifecycle preset directory");
 
         bool pngValid = false;
         bool pngDimensionsMatch = false;
-        String screenshotError;
         if (hasWindow && ! windowBounds.isEmpty())
         {
             const auto image = mainWindow->createComponentSnapshot (mainWindow->getLocalBounds(), true);
@@ -421,59 +768,74 @@ private:
                 }
             }
         }
-        if (! pngValid)
-            screenshotError = "PNG screenshot is missing or invalid";
-        recordAssertion ("png_valid_nonempty", pngValid, screenshotError);
-        recordAssertion ("png_dimensions_match", pngDimensionsMatch, "PNG dimensions do not match the reported window dimensions");
+        assertThat ("png_valid_nonempty", pngValid, "PNG screenshot is missing or invalid");
+        assertThat ("png_dimensions_match", pngDimensionsMatch, "PNG dimensions do not match the window");
 
         auto report = DynamicObject::Ptr (new DynamicObject());
         report->setProperty ("schema_version", 1);
         report->setProperty ("tool_version", JucePlugin_VersionString);
         report->setProperty ("mode", lifecycle.modeName());
         report->setProperty ("status", failures.isEmpty() ? "pass" : "fail");
-        report->setProperty ("first_visible_ms", firstVisibleMs);
-        report->setProperty ("device_configuration_start_ms", deviceConfigurationStartMs);
-
+        auto sequence = DynamicObject::Ptr (new DynamicObject());
+        sequence->setProperty ("window_visible", windowVisibleSequence);
+        sequence->setProperty ("device_configuration_start", deviceConfigurationStartSequence);
+        sequence->setProperty ("first_audio_device_discovery", deviceManager.firstAudioDeviceDiscoverySequence);
+        report->setProperty ("sequence", var (sequence.get()));
         auto window = DynamicObject::Ptr (new DynamicObject());
         window->setProperty ("width", windowBounds.getWidth());
         window->setProperty ("height", windowBounds.getHeight());
         report->setProperty ("window", var (window.get()));
-
+        auto discovery = DynamicObject::Ptr (new DynamicObject());
+        discovery->setProperty ("audio_device_discovery_count", deviceManager.audioDeviceDiscoveryCount);
+        discovery->setProperty ("midi_enumeration_performed", midiEnumerationPerformed);
+        discovery->setProperty ("callbacks_wired", callbacksWired);
+        report->setProperty ("discovery", var (discovery.get()));
         auto device = DynamicObject::Ptr (new DynamicObject());
         device->setProperty ("current_device", currentDevice != nullptr ? currentDevice->getName() : String{});
         device->setProperty ("open_error", deviceOpenError);
-        device->setProperty ("enabled_midi_input_count", midiCount);
+        device->setProperty ("enabled_midi_input_count", enabledMidiInputCount);
         device->setProperty ("status_text", status);
         report->setProperty ("device", var (device.get()));
+        auto settingsJson = DynamicObject::Ptr (new DynamicObject());
+        settingsJson->setProperty ("path", actualSettingsPath);
+        settingsJson->setProperty ("matches_requested_path", settingsPathMatches);
+        report->setProperty ("settings", var (settingsJson.get()));
+        auto presetsJson = DynamicObject::Ptr (new DynamicObject());
+        presetsJson->setProperty ("path", actualPresetDirectory);
+        presetsJson->setProperty ("matches_requested_path", presetDirectoryMatches);
+        report->setProperty ("presets", var (presetsJson.get()));
         report->setProperty ("assertions", var (assertions.get()));
-
         Array<var> failureValues;
         for (const auto& failure : failures)
             failureValues.add (failure);
         report->setProperty ("failures", failureValues);
 
         lifecycle.report.getParentDirectory().createDirectory();
-        const auto reportText = JSON::toString (var (report.get()), true) + newLine;
-        const auto reportWritten = lifecycle.report.replaceWithText (reportText, false, false, "\n");
+        const auto reportWritten = lifecycle.report.replaceWithText (
+            JSON::toString (var (report.get()), true) + newLine, false, false, "\n");
         if (! reportWritten)
-        {
-            Logger::writeToLog ("Unable to write lifecycle diagnostic report: " + lifecycle.report.getFullPathName());
             failures.add ("Diagnostic report could not be written");
-        }
 
         setApplicationReturnValue (failures.isEmpty() ? 0 : 1);
         quit();
     }
 
-    ApplicationProperties applicationProperties;
-    std::unique_ptr<LifecycleStandaloneWindow> mainWindow;
     LifecycleOptions lifecycle;
+    std::unique_ptr<PropertiesFile> settings;
+    std::unique_ptr<AudioProcessor> processor;
+    DeferredAudioDeviceManager deviceManager;
+    AudioProcessorPlayer player;
+    std::unique_ptr<ProjectStandaloneWindow> mainWindow;
+    std::unique_ptr<FileChooser> stateFileChooser;
+    ScopedMessageBox messageBox;
     TimerPhase timerPhase = TimerPhase::configureDevice;
-    double applicationStartMs = 0.0;
-    double firstVisibleMs = -1.0;
-    double deviceConfigurationStartMs = -1.0;
+    int logicalSequence = 0;
+    int windowVisibleSequence = 0;
+    int deviceConfigurationStartSequence = 0;
+    int enabledMidiInputCount = 0;
+    bool midiEnumerationPerformed = false;
+    bool callbacksWired = false;
     String deviceOpenError;
-    String failureBeforeWindow;
 };
 }
 

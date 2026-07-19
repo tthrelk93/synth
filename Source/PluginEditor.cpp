@@ -282,7 +282,6 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     int loudnessSustainLevelKnobPos[2];
     int decaySwitchPos[2];
     int glideSwitchPos[2];
-    int outputPhonesVolKnobPos[2];
     int feedbackKnobPos[2];
     int ouputMainOutputSwitchPos[2];
     int extInputVolSwitchPos[2];
@@ -382,9 +381,6 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
                     } else if(sliderKey == "loudnessSustainLevelKnob") {
                         loudnessSustainLevelKnobPos[0] = row;
                         loudnessSustainLevelKnobPos[1] = col;
-                    } else if(sliderKey == "outputPhonesVolKnob") {
-                        outputPhonesVolKnobPos[0] = row;
-                        outputPhonesVolKnobPos[1] = col;
                     } else if(sliderKey == "feedbackKnob") {
                         feedbackKnobPos[0] = row;
                         feedbackKnobPos[1] = col;
@@ -538,8 +534,10 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     
     createSliderKnob(loudnessSustainLevelKnob, "loudnessSustainLevelKnob", 11, 0, 10, 1.0, "loudnessSustainLevelKnob", true, loudnessSustainLevelKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(outputPhonesVolKnob, "outputPhonesVolKnob", 11, 0, 10, 1.0, "outputPhonesVolKnob", true, outputPhonesVolKnobPos, cellWidth, cellHeight, false);
-    
+    // The current panel intentionally omits the Phones Vol control (its grid
+    // entry is disabled above); keep the pointer null rather than positioning
+    // it from an uninitialised stack coordinate.
+
     //createSliderKnob(feedbackKnob, "feedbackKnob", 11, 0, 10, 1.0, "feedbackKnob", true, feedbackKnobPos, cellWidth, cellHeight, false);
 
     auto configureToggleSlider = [&](WaveformSlider* slider, const juce::String& paramId, bool drivesSmoke) {

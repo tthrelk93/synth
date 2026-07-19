@@ -197,10 +197,43 @@ file(MAKE_DIRECTORY "${_standalone_marker_directory}")
 file(WRITE "${_standalone_root_marker}"
      "model-d-standalone-evidence-root-v1\n")
 
+# Snapshot the exact legacy settings location used by a normal, non-test launch.
+# Lifecycle launches must leave this path byte-for-byte untouched.
+if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
+    set(_legacy_settings_path "$ENV{HOME}/Library/Application Support/MiniMoog.settings")
+    set(_legacy_settings_display "<USER_HOME>/Library/Application Support/MiniMoog.settings")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Windows")
+    if(DEFINED ENV{APPDATA} AND NOT "$ENV{APPDATA}" STREQUAL "")
+        set(_legacy_settings_path "$ENV{APPDATA}/MiniMoog/MiniMoog.settings")
+    else()
+        set(_legacy_settings_path "$ENV{USERPROFILE}/AppData/Roaming/MiniMoog/MiniMoog.settings")
+    endif()
+    set(_legacy_settings_display "<USER_APPDATA>/MiniMoog/MiniMoog.settings")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+    set(_legacy_settings_path "$ENV{HOME}/.config/MiniMoog.settings")
+    set(_legacy_settings_display "<USER_HOME>/.config/MiniMoog.settings")
+else()
+    message(FATAL_ERROR "unsupported platform for legacy standalone settings sentinel")
+endif()
+cmake_path(NORMAL_PATH _legacy_settings_path OUTPUT_VARIABLE _legacy_settings_path)
+if(EXISTS "${_legacy_settings_path}")
+    set(_legacy_exists_before true)
+else()
+    set(_legacy_exists_before false)
+endif()
+if(IS_SYMLINK "${_legacy_settings_path}")
+    set(_legacy_symlink_before true)
+else()
+    set(_legacy_symlink_before false)
+endif()
+_synth_hash_if_file(_legacy_sha256_before "${_legacy_settings_path}")
+
 set(_runs "[]")
 set(_run_index 0)
 set(_all_processes_passed true)
+set(_determinism_failure "")
 foreach(_mode IN ITEMS normal invalid no-device)
+    string(REPLACE "-" "_" _mode_key "${_mode}")
     foreach(_repeat RANGE 1 ${SYNTH_REPEAT_COUNT})
         set(_run_relative "validation/standalone/${_mode}/repeat-${_repeat}")
         set(_run_directory "${_build_root}/${_run_relative}")
@@ -210,11 +243,22 @@ foreach(_mode IN ITEMS normal invalid no-device)
         set(_report_path "${_build_root}/${_report_relative}")
         set(_screenshot_path "${_build_root}/${_screenshot_relative}")
         set(_log_path "${_build_root}/${_log_relative}")
-        set(_isolation_relative "${_run_relative}/isolated")
+        set(_runtime_isolation_root "${_standalone_root}/runtime-isolation")
+        set(_isolation_relative "validation/standalone/runtime-isolation/${_mode}")
         set(_isolation_root "${_build_root}/${_isolation_relative}")
-        foreach(_directory IN ITEMS home config data cache appdata localappdata tmp)
+        if(EXISTS "${_runtime_isolation_root}" OR IS_SYMLINK "${_runtime_isolation_root}")
+            if(IS_SYMLINK "${_runtime_isolation_root}")
+                message(FATAL_ERROR "refusing to clean a symlinked standalone runtime-isolation root")
+            endif()
+            file(REMOVE_RECURSE "${_runtime_isolation_root}")
+        endif()
+        foreach(_directory IN ITEMS home config data cache appdata localappdata tmp settings presets)
             file(MAKE_DIRECTORY "${_isolation_root}/${_directory}")
         endforeach()
+        set(_settings_relative "${_isolation_relative}/settings/MiniMoog.settings")
+        set(_preset_relative "${_isolation_relative}/presets")
+        set(_settings_path "${_build_root}/${_settings_relative}")
+        set(_preset_path "${_build_root}/${_preset_relative}")
 
         set(_normalized_command cmake -E env
             "HOME=${_isolation_relative}/home"
@@ -246,12 +290,16 @@ foreach(_mode IN ITEMS normal invalid no-device)
             "${_stage_from_build}/${_standalone_executable_relative}"
             --synth-lifecycle-test "${_mode}"
             --report "${_report_relative}"
-            --screenshot "${_screenshot_relative}")
+            --screenshot "${_screenshot_relative}"
+            --settings "${_settings_relative}"
+            --preset-dir "${_preset_relative}")
         list(APPEND _actual_command
             "${_standalone_executable}"
             --synth-lifecycle-test "${_mode}"
             --report "${_report_path}"
-            --screenshot "${_screenshot_path}")
+            --screenshot "${_screenshot_path}"
+            --settings "${_settings_path}"
+            --preset-dir "${_preset_path}")
 
         execute_process(
             COMMAND ${_actual_command}
@@ -265,10 +313,17 @@ foreach(_mode IN ITEMS normal invalid no-device)
         string(REPLACE "${_build_root}" "<BUILD_ROOT>" _stderr "${_stderr}")
         string(REPLACE "\\" "/" _stdout "${_stdout}")
         string(REPLACE "\\" "/" _stderr "${_stderr}")
-        list(JOIN _normalized_command "\ncommand-token=" _command_lines)
+        foreach(_stream IN ITEMS _stdout _stderr)
+            string(REGEX REPLACE "Log started:[^\r\n]*" "Log started: <NORMALIZED>"
+                   ${_stream} "${${_stream}}")
+            string(REGEX REPLACE "0x[0-9A-Fa-f]+" "<POINTER>"
+                   ${_stream} "${${_stream}}")
+        endforeach()
+        set(_log_command ${_normalized_command})
+        string(REPLACE "repeat-${_repeat}" "repeat-<REPEAT>" _log_command "${_log_command}")
+        list(JOIN _log_command "\ncommand-token=" _command_lines)
         file(WRITE "${_log_path}"
             "command-token=${_command_lines}\nexit-code=${_process_status}\nstdout-begin\n${_stdout}stdout-end\nstderr-begin\n${_stderr}stderr-end\n")
-        file(REMOVE_RECURSE "${_isolation_root}")
 
         set(_run_status "pass")
         if(NOT _process_status STREQUAL "0"
@@ -287,13 +342,58 @@ foreach(_mode IN ITEMS normal invalid no-device)
                 if(_status_error OR NOT _application_status STREQUAL "pass")
                     set(_run_status "fail")
                     set(_all_processes_passed false)
+                else()
+                    string(JSON _reported_settings ERROR_VARIABLE _settings_error
+                           GET "${_application_report}" settings path)
+                    string(JSON _settings_match ERROR_VARIABLE _settings_match_error
+                           GET "${_application_report}" settings matches_requested_path)
+                    string(JSON _reported_presets ERROR_VARIABLE _presets_error
+                           GET "${_application_report}" presets path)
+                    string(JSON _presets_match ERROR_VARIABLE _presets_match_error
+                           GET "${_application_report}" presets matches_requested_path)
+                    if(_settings_error OR _settings_match_error OR _presets_error OR _presets_match_error
+                       OR NOT _reported_settings STREQUAL _settings_path
+                       OR NOT _reported_presets STREQUAL _preset_path
+                       OR NOT _settings_match OR NOT _presets_match
+                       OR NOT EXISTS "${_settings_path}" OR IS_DIRECTORY "${_settings_path}"
+                       OR IS_SYMLINK "${_settings_path}"
+                       OR NOT IS_DIRECTORY "${_preset_path}" OR IS_SYMLINK "${_preset_path}")
+                        set(_run_status "fail")
+                        set(_all_processes_passed false)
+                    else()
+                        file(REAL_PATH "${_isolation_root}" _isolation_root_real)
+                        file(REAL_PATH "${_settings_path}" _settings_path_real)
+                        file(REAL_PATH "${_preset_path}" _preset_path_real)
+                        cmake_path(IS_PREFIX _isolation_root_real "${_settings_path_real}"
+                                   NORMALIZE _settings_is_isolated)
+                        cmake_path(IS_PREFIX _isolation_root_real "${_preset_path_real}"
+                                   NORMALIZE _presets_are_isolated)
+                        if(NOT _settings_is_isolated OR NOT _presets_are_isolated)
+                            set(_run_status "fail")
+                            set(_all_processes_passed false)
+                        else()
+                            _synth_json_quote(_settings_relative_json "${_settings_relative}")
+                            _synth_json_quote(_preset_relative_json "${_preset_relative}")
+                            string(JSON _application_report SET "${_application_report}"
+                                   settings path "${_settings_relative_json}")
+                            string(JSON _application_report SET "${_application_report}"
+                                   presets path "${_preset_relative_json}")
+                            file(WRITE "${_report_path}" "${_application_report}\n")
+                        endif()
+                    endif()
                 endif()
             endif()
+        endif()
+
+        file(REMOVE_RECURSE "${_runtime_isolation_root}")
+        if(EXISTS "${_runtime_isolation_root}" OR IS_SYMLINK "${_runtime_isolation_root}")
+            message(FATAL_ERROR "standalone runtime-isolation cleanup failed")
         endif()
 
         _synth_hash_if_file(_report_sha256 "${_report_path}")
         _synth_hash_if_file(_screenshot_sha256 "${_screenshot_path}")
         file(SHA256 "${_log_path}" _log_sha256)
+        set(_process_log_sha256 "${_log_sha256}")
 
         set(_command_json "[]")
         set(_token_index 0)
@@ -315,9 +415,43 @@ foreach(_mode IN ITEMS normal invalid no-device)
         _synth_json_set_string(_run process_log_path "${_log_relative}")
         _synth_json_set_string(_run process_log_sha256 "${_log_sha256}")
         string(JSON _runs SET "${_runs}" ${_run_index} "${_run}")
+
+        if(_run_status STREQUAL "pass")
+            foreach(_kind IN ITEMS report screenshot process_log)
+                set(_hash "${_${_kind}_sha256}")
+                set(_baseline_variable "_${_mode_key}_${_kind}_sha256")
+                if(_repeat EQUAL 1)
+                    set(${_baseline_variable} "${_hash}")
+                elseif(NOT _hash STREQUAL "${${_baseline_variable}}")
+                    set(_all_processes_passed false)
+                    string(APPEND _determinism_failure
+                           "${_mode} ${_kind} evidence differs at repeat ${_repeat}; ")
+                endif()
+            endforeach()
+        endif()
         math(EXPR _run_index "${_run_index} + 1")
     endforeach()
 endforeach()
+
+if(EXISTS "${_legacy_settings_path}")
+    set(_legacy_exists_after true)
+else()
+    set(_legacy_exists_after false)
+endif()
+if(IS_SYMLINK "${_legacy_settings_path}")
+    set(_legacy_symlink_after true)
+else()
+    set(_legacy_symlink_after false)
+endif()
+_synth_hash_if_file(_legacy_sha256_after "${_legacy_settings_path}")
+if("${_legacy_exists_before}" STREQUAL "${_legacy_exists_after}"
+   AND "${_legacy_symlink_before}" STREQUAL "${_legacy_symlink_after}"
+   AND "${_legacy_sha256_before}" STREQUAL "${_legacy_sha256_after}")
+    set(_legacy_unchanged true)
+else()
+    set(_legacy_unchanged false)
+    set(_all_processes_passed false)
+endif()
 
 set(_executable "{}")
 _synth_json_set_string(_executable product_relative_path "${_standalone_product_relative}")
@@ -327,6 +461,15 @@ _synth_json_set_string(_executable sha256 "${_standalone_executable_sha256}")
 set(_environment "{}")
 _synth_json_set_string(_environment os "${SYNTH_SYSTEM_NAME}")
 _synth_json_set_string(_environment architecture "${SYNTH_ARCHITECTURE}")
+set(_legacy_settings "{}")
+_synth_json_set_string(_legacy_settings path "${_legacy_settings_display}")
+string(JSON _legacy_settings SET "${_legacy_settings}" exists_before ${_legacy_exists_before})
+string(JSON _legacy_settings SET "${_legacy_settings}" symlink_before ${_legacy_symlink_before})
+_synth_json_set_string(_legacy_settings sha256_before "${_legacy_sha256_before}")
+string(JSON _legacy_settings SET "${_legacy_settings}" exists_after ${_legacy_exists_after})
+string(JSON _legacy_settings SET "${_legacy_settings}" symlink_after ${_legacy_symlink_after})
+_synth_json_set_string(_legacy_settings sha256_after "${_legacy_sha256_after}")
+string(JSON _legacy_settings SET "${_legacy_settings}" unchanged ${_legacy_unchanged})
 set(_aggregate "{}")
 string(JSON _aggregate SET "${_aggregate}" schema_version 1)
 _synth_json_set_string(_aggregate tool_version "${SYNTH_PROJECT_VERSION}")
@@ -338,8 +481,13 @@ endif()
 string(JSON _aggregate SET "${_aggregate}" environment "${_environment}")
 string(JSON _aggregate SET "${_aggregate}" repeat_count ${SYNTH_REPEAT_COUNT})
 string(JSON _aggregate SET "${_aggregate}" executable "${_executable}")
+string(JSON _aggregate SET "${_aggregate}" legacy_default_settings "${_legacy_settings}")
 string(JSON _aggregate SET "${_aggregate}" runs "${_runs}")
 file(WRITE "${_aggregate_path}" "${_aggregate}\n")
+
+if(NOT _determinism_failure STREQUAL "")
+    message(FATAL_ERROR "standalone lifecycle evidence is nondeterministic: ${_determinism_failure}")
+endif()
 
 execute_process(
     COMMAND "${CMAKE_COMMAND}"

@@ -9,7 +9,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <algorithm>
-#include <fstream>
 #include <cmath>
 #include "Oscillator.h"
 #include "LadderFilter.h"
@@ -50,7 +49,6 @@ MoogMiniAudioProcessor::MoogMiniAudioProcessor()
                   .withOutput ("Phones/Cue", juce::AudioChannelSet::stereo(), false)
                   ),
 apvts(*this, nullptr, "Parameters", createParameterLayout()),
-logFile(juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("my_plugin_log.txt")),
 circularBuffer(1024)
 #endif
 {
@@ -65,19 +63,10 @@ circularBuffer(1024)
     
     currentNoteNumber = -1; // Initialize current note number
     
-    fileLogger = std::make_unique<juce::FileLogger>(logFile, "My Plugin Log");
-    juce::Logger::setCurrentLogger(fileLogger.get());
-    
-    // Now you can use juce::Logger::writeToLog anywhere in your code
-    juce::Logger::writeToLog("Plugin constructed");
 }
 
 MoogMiniAudioProcessor::~MoogMiniAudioProcessor()
 {
-    
-    
-    juce::Logger::setCurrentLogger(nullptr);
-    
 }
 
 //==============================================================================

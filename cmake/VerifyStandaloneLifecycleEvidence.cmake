@@ -129,6 +129,33 @@ if(NOT _schema STREQUAL "1"
     message(FATAL_ERROR "standalone lifecycle aggregate header/status is inconsistent")
 endif()
 
+if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
+    set(_expected_legacy_settings_path
+        "<USER_HOME>/Library/Application Support/MiniMoog.settings")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Windows")
+    set(_expected_legacy_settings_path
+        "<USER_APPDATA>/MiniMoog/MiniMoog.settings")
+elseif(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+    set(_expected_legacy_settings_path "<USER_HOME>/.config/MiniMoog.settings")
+else()
+    message(FATAL_ERROR "unsupported platform in legacy standalone settings proof")
+endif()
+string(JSON _legacy_path GET "${_aggregate}" legacy_default_settings path)
+string(JSON _legacy_exists_before GET "${_aggregate}" legacy_default_settings exists_before)
+string(JSON _legacy_symlink_before GET "${_aggregate}" legacy_default_settings symlink_before)
+string(JSON _legacy_sha256_before GET "${_aggregate}" legacy_default_settings sha256_before)
+string(JSON _legacy_exists_after GET "${_aggregate}" legacy_default_settings exists_after)
+string(JSON _legacy_symlink_after GET "${_aggregate}" legacy_default_settings symlink_after)
+string(JSON _legacy_sha256_after GET "${_aggregate}" legacy_default_settings sha256_after)
+string(JSON _legacy_unchanged GET "${_aggregate}" legacy_default_settings unchanged)
+if(NOT _legacy_path STREQUAL _expected_legacy_settings_path
+   OR NOT _legacy_unchanged
+   OR NOT "${_legacy_exists_before}" STREQUAL "${_legacy_exists_after}"
+   OR NOT "${_legacy_symlink_before}" STREQUAL "${_legacy_symlink_after}"
+   OR NOT _legacy_sha256_before STREQUAL _legacy_sha256_after)
+    message(FATAL_ERROR "legacy default standalone settings sentinel changed during validation")
+endif()
+
 string(JSON _product_count LENGTH "${_build_manifest}" products)
 set(_standalone_count 0)
 set(_expected_executable_relative "")
@@ -212,6 +239,7 @@ endif()
 
 set(_run_index 0)
 foreach(_mode IN LISTS _expected_modes)
+    string(REPLACE "-" "_" _mode_key "${_mode}")
     foreach(_repeat RANGE 1 ${SYNTH_REPEAT_COUNT})
         string(JSON _run GET "${_aggregate}" runs ${_run_index})
         string(JSON _run_mode GET "${_run}" mode)
@@ -244,9 +272,18 @@ foreach(_mode IN LISTS _expected_modes)
             endif()
             _synth_verify_file("${_build_root}" "${_declared_path}" "${_declared_sha256}"
                                "Standalone ${_kind} evidence")
+            set(_baseline_variable "_${_mode_key}_${_kind}_sha256")
+            if(_repeat EQUAL 1)
+                set(${_baseline_variable} "${_declared_sha256}")
+            elseif(NOT _declared_sha256 STREQUAL "${${_baseline_variable}}")
+                message(FATAL_ERROR
+                    "standalone ${_mode} ${_kind} evidence is not byte-identical across repeats")
+            endif()
         endforeach()
 
-        set(_isolation_root "${_run_root}/isolated")
+        set(_isolation_root "validation/standalone/runtime-isolation/${_mode}")
+        set(_settings_relative "${_isolation_root}/settings/MiniMoog.settings")
+        set(_preset_relative "${_isolation_root}/presets")
         set(_expected_command cmake -E env
             "HOME=${_isolation_root}/home"
             "USERPROFILE=${_isolation_root}/home"
@@ -265,7 +302,9 @@ foreach(_mode IN LISTS _expected_modes)
             "${_stage_from_build}/${_expected_executable_relative}"
             --synth-lifecycle-test "${_mode}"
             --report "${_report_relative}"
-            --screenshot "${_screenshot_relative}")
+            --screenshot "${_screenshot_relative}"
+            --settings "${_settings_relative}"
+            --preset-dir "${_preset_relative}")
         set(_actual_command "")
         string(JSON _command_count LENGTH "${_run}" command)
         if(_command_count GREATER 0)
@@ -285,16 +324,17 @@ foreach(_mode IN LISTS _expected_modes)
         string(JSON _app_version GET "${_app_report}" tool_version)
         string(JSON _app_mode GET "${_app_report}" mode)
         string(JSON _app_status GET "${_app_report}" status)
-        string(JSON _first_visible GET "${_app_report}" first_visible_ms)
-        string(JSON _configuration_start GET "${_app_report}" device_configuration_start_ms)
+        string(JSON _window_visible GET "${_app_report}" sequence window_visible)
+        string(JSON _configuration_start GET "${_app_report}" sequence device_configuration_start)
+        string(JSON _first_discovery GET "${_app_report}" sequence first_audio_device_discovery)
         string(JSON _failure_count LENGTH "${_app_report}" failures)
         if(NOT _app_schema STREQUAL "1"
            OR NOT _app_version STREQUAL SYNTH_PROJECT_VERSION
            OR NOT _app_mode STREQUAL _mode
            OR NOT _app_status STREQUAL "pass"
            OR NOT _failure_count EQUAL 0
-           OR _first_visible LESS 0
-           OR NOT _configuration_start GREATER _first_visible)
+           OR _window_visible LESS 1
+           OR NOT _configuration_start GREATER _window_visible)
             message(FATAL_ERROR "standalone application report ${_run_index} header/order/status is inconsistent")
         endif()
         foreach(_assertion IN ITEMS
@@ -303,9 +343,12 @@ foreach(_mode IN LISTS _expected_modes)
                 native_peer_present
                 window_bounds_nonempty
                 visible_before_device_configuration
+                device_discovery_after_visibility
                 custom_editor_visible
                 custom_editor_showing
                 custom_editor_bounds_nonempty
+                status_label_showing
+                status_label_bounds_nonempty
                 piano_note_round_trip
                 piano_key_released
                 status_nonempty
@@ -313,6 +356,9 @@ foreach(_mode IN LISTS _expected_modes)
                 invalid_error_nonempty
                 required_current_device_absent
                 no_device_midi_inputs_disabled
+                no_device_discovery_skipped
+                settings_path_matches_request
+                preset_directory_matches_request
                 png_valid_nonempty
                 png_dimensions_match)
             _synth_require_true("${_app_report}" "${_assertion}" "Standalone run ${_run_index}")
@@ -326,14 +372,42 @@ foreach(_mode IN LISTS _expected_modes)
         string(JSON _open_error GET "${_app_report}" device open_error)
         string(JSON _midi_count GET "${_app_report}" device enabled_midi_input_count)
         string(JSON _status_text GET "${_app_report}" device status_text)
+        string(JSON _discovery_count GET "${_app_report}" discovery audio_device_discovery_count)
+        string(JSON _midi_enumerated GET "${_app_report}" discovery midi_enumeration_performed)
+        string(JSON _callbacks_wired GET "${_app_report}" discovery callbacks_wired)
         if(_status_text STREQUAL "" OR NOT _status_text MATCHES "MIDI inputs enabled: ${_midi_count}$")
             message(FATAL_ERROR "standalone run ${_run_index} status text does not bind its MIDI state")
         endif()
         if(_mode STREQUAL "invalid" AND (_open_error STREQUAL "" OR NOT _current_device STREQUAL ""))
             message(FATAL_ERROR "standalone invalid mode did not retain the required unavailable state")
         endif()
-        if(_mode STREQUAL "no-device" AND (NOT _current_device STREQUAL "" OR NOT _midi_count EQUAL 0))
-            message(FATAL_ERROR "standalone no-device mode opened a device or enabled MIDI")
+        if(_mode STREQUAL "no-device")
+            if(NOT _current_device STREQUAL ""
+               OR NOT _midi_count EQUAL 0
+               OR NOT _discovery_count EQUAL 0
+               OR NOT _first_discovery EQUAL 0
+               OR _midi_enumerated
+               OR _callbacks_wired)
+                message(FATAL_ERROR
+                    "standalone no-device mode performed forbidden audio/MIDI discovery")
+            endif()
+        elseif(_discovery_count LESS 1
+               OR NOT _first_discovery GREATER _configuration_start
+               OR NOT _midi_enumerated
+               OR NOT _callbacks_wired)
+            message(FATAL_ERROR
+                "standalone ${_mode} mode did not defer discovery until after visibility")
+        endif()
+
+        string(JSON _settings_path GET "${_app_report}" settings path)
+        string(JSON _settings_match GET "${_app_report}" settings matches_requested_path)
+        string(JSON _preset_path GET "${_app_report}" presets path)
+        string(JSON _preset_match GET "${_app_report}" presets matches_requested_path)
+        if(NOT _settings_path STREQUAL _settings_relative
+           OR NOT _preset_path STREQUAL _preset_relative
+           OR NOT _settings_match OR NOT _preset_match)
+            message(FATAL_ERROR
+                "standalone run ${_run_index} did not retain its isolated settings/preset paths")
         endif()
 
         _synth_existing_file_within(_screenshot "${_build_root}" "${_screenshot_relative}"
@@ -348,5 +422,10 @@ foreach(_mode IN LISTS _expected_modes)
         math(EXPR _run_index "${_run_index} + 1")
     endforeach()
 endforeach()
+
+if(EXISTS "${_build_root}/validation/standalone/runtime-isolation"
+   OR IS_SYMLINK "${_build_root}/validation/standalone/runtime-isolation")
+    message(FATAL_ERROR "standalone runtime-isolation directory remains after validation")
+endif()
 
 message(STATUS "Verified ${_expected_run_count} standalone lifecycle launches and evidence files")

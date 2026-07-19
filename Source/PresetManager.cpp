@@ -1,11 +1,56 @@
 #include "PresetManager.h"
 
+namespace {
+struct PresetDirectoryState {
+    juce::CriticalSection lock;
+    juce::File lifecycleTestDirectory;
+    juce::File lastConstructedDirectory;
+};
+
+PresetDirectoryState& getPresetDirectoryState() {
+    static PresetDirectoryState state;
+    return state;
+}
+}
+
+bool PresetManager::setStandaloneLifecycleTestDirectory(const juce::File& directory) {
+    if (!juce::File::isAbsolutePath(directory.getFullPathName())) {
+        return false;
+    }
+
+    auto& state = getPresetDirectoryState();
+    const juce::ScopedLock lock(state.lock);
+    state.lifecycleTestDirectory = directory;
+    return true;
+}
+
+juce::File PresetManager::getStandaloneLifecycleTestDirectory() {
+    auto& state = getPresetDirectoryState();
+    const juce::ScopedLock lock(state.lock);
+    return state.lifecycleTestDirectory;
+}
+
+juce::File PresetManager::getLastConstructedPresetDirectory() {
+    auto& state = getPresetDirectoryState();
+    const juce::ScopedLock lock(state.lock);
+    return state.lastConstructedDirectory;
+}
+
 PresetManager::PresetManager(juce::AudioProcessorValueTreeState& state)
     : apvts(state)
 {
-    presetDirectory = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                          .getChildFile("MiniMoog")
-                          .getChildFile("Presets");
+    presetDirectory = getStandaloneLifecycleTestDirectory();
+    if (presetDirectory == juce::File()) {
+        presetDirectory = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                              .getChildFile("MiniMoog")
+                              .getChildFile("Presets");
+    }
+
+    {
+        auto& directoryState = getPresetDirectoryState();
+        const juce::ScopedLock lock(directoryState.lock);
+        directoryState.lastConstructedDirectory = presetDirectory;
+    }
     presetDirectory.createDirectory();
 }
 

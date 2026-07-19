@@ -26,6 +26,44 @@ foreach(_required_file IN ITEMS
     endif()
 endforeach()
 
+file(READ "${SYNTH_SOURCE_ROOT}/Source/StandaloneApp.cpp" _standalone_source)
+if(_standalone_source MATCHES "StandalonePluginHolder|StandaloneFilterWindow")
+    message(FATAL_ERROR
+        "Standalone lifecycle implementation still constructs JUCE's non-deferrable holder/window")
+endif()
+if(_standalone_source MATCHES "ApplicationProperties|Time::getMillisecond")
+    message(FATAL_ERROR
+        "Standalone lifecycle still uses default-path settings or wall-clock ordering")
+endif()
+foreach(_required_contract IN ITEMS
+        "--settings"
+        "--preset-dir"
+        "std::make_unique<PropertiesFile> (lifecycle.settings"
+        "setStandaloneLifecycleTestDirectory"
+        "createAudioDeviceTypes"
+        "audio_device_discovery_count"
+        "status_label_showing")
+    string(FIND "${_standalone_source}" "${_required_contract}" _contract_position)
+    if(_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone lifecycle source is missing reviewed contract: ${_required_contract}")
+    endif()
+endforeach()
+
+file(READ "${SYNTH_SOURCE_ROOT}/Source/PluginProcessor.h" _processor_header)
+file(READ "${SYNTH_SOURCE_ROOT}/Source/PluginProcessor.cpp" _processor_source)
+if("${_processor_header}\n${_processor_source}" MATCHES
+        "FileLogger|my_plugin_log|userDesktopDirectory")
+    message(FATAL_ERROR
+        "Project processor still writes an unconditional desktop debug log")
+endif()
+
+file(READ "${SYNTH_SOURCE_ROOT}/Source/PluginEditor.cpp" _plugin_editor_source)
+if(_plugin_editor_source MATCHES "int outputPhonesVolKnobPos\\[2\\];")
+    message(FATAL_ERROR
+        "Phones Vol control still consumes an uninitialised grid position")
+endif()
+
 execute_process(
     COMMAND "${CMAKE_COMMAND}" --build "${SYNTH_BUILD_ROOT}"
             --config "${SYNTH_CONFIGURATION}"
@@ -107,6 +145,33 @@ function(_synth_run_runner_expect_failure name expected_pattern)
     endif()
 endfunction()
 
+function(_synth_run_runner_expect_success)
+    execute_process(
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${SYNTH_BUILD_ROOT}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_DIRECTORY}"
+            "-DSYNTH_STANDALONE_REPORT_PATH=${_aggregate_path}"
+            "-DSYNTH_VALIDATION_DIRECTORY=${SYNTH_BUILD_ROOT}/validation"
+            "-DSYNTH_REPEAT_COUNT=${SYNTH_REPEAT_COUNT}"
+            "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+            "-DSYNTH_ARCHITECTURE=${SYNTH_ARCHITECTURE}"
+            "-DSYNTH_PROJECT_VERSION=${SYNTH_PROJECT_VERSION}"
+            "-DSYNTH_SOURCE_ROOT=${SYNTH_SOURCE_ROOT}"
+            -P "${_runner}"
+        RESULT_VARIABLE _status
+        OUTPUT_VARIABLE _stdout
+        ERROR_VARIABLE _stderr
+        ENCODING UTF-8)
+    if(NOT _status EQUAL 0)
+        message(FATAL_ERROR
+            "Fresh standalone runner invocation failed:\n${_stdout}${_stderr}")
+    endif()
+    if(EXISTS "${SYNTH_BUILD_ROOT}/validation/standalone/runtime-isolation"
+       OR IS_SYMLINK "${SYNTH_BUILD_ROOT}/validation/standalone/runtime-isolation")
+        message(FATAL_ERROR "Fresh standalone runner left runtime-isolation behind")
+    endif()
+endfunction()
+
 function(_synth_set_json_string output_variable json)
     set(_arguments ${ARGN})
     list(POP_BACK _arguments _value)
@@ -139,6 +204,41 @@ _synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
 file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
 _synth_run_verifier_expect_failure("corrupt app report" "invalid JSON")
 file(WRITE "${_first_report}" "${_first_report_original}")
+file(WRITE "${_aggregate_path}" "${_aggregate_original}")
+
+# Explicit settings and preset paths are part of the evidence contract.
+file(READ "${_first_report}" _report_mutated)
+_synth_set_json_string(_report_mutated "${_report_mutated}"
+                       settings path "validation/standalone/outside-settings")
+file(WRITE "${_first_report}" "${_report_mutated}\n")
+file(SHA256 "${_first_report}" _mutated_report_sha256)
+_synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
+                       runs 0 report_sha256 "${_mutated_report_sha256}")
+file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
+_synth_run_verifier_expect_failure("settings path mismatch" "isolated settings/preset paths")
+file(WRITE "${_first_report}" "${_first_report_original}")
+file(WRITE "${_aggregate_path}" "${_aggregate_original}")
+
+# No-device evidence must prove that the discovery seam was never called.
+set(_no_device_report "${SYNTH_BUILD_ROOT}/validation/standalone/no-device/repeat-1/report.json")
+file(READ "${_no_device_report}" _no_device_report_original)
+string(JSON _no_device_report_mutated SET "${_no_device_report_original}"
+       discovery audio_device_discovery_count 1)
+file(WRITE "${_no_device_report}" "${_no_device_report_mutated}\n")
+file(SHA256 "${_no_device_report}" _no_device_report_sha256)
+math(EXPR _no_device_run_index "2 * ${SYNTH_REPEAT_COUNT}")
+_synth_set_json_string(_aggregate_mutated "${_aggregate_original}"
+                       runs ${_no_device_run_index} report_sha256 "${_no_device_report_sha256}")
+file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
+_synth_run_verifier_expect_failure("forbidden no-device discovery" "forbidden audio/MIDI discovery")
+file(WRITE "${_no_device_report}" "${_no_device_report_original}")
+file(WRITE "${_aggregate_path}" "${_aggregate_original}")
+
+# The legacy default settings before/after sentinel is mandatory.
+string(JSON _aggregate_mutated SET "${_aggregate_original}"
+       legacy_default_settings unchanged false)
+file(WRITE "${_aggregate_path}" "${_aggregate_mutated}\n")
+_synth_run_verifier_expect_failure("legacy settings mutation" "legacy default standalone settings sentinel")
 file(WRITE "${_aggregate_path}" "${_aggregate_original}")
 
 # Aggregate executable identity, run mode, and aggregate status are strict.
@@ -211,11 +311,16 @@ set(_symlink_target "${SYNTH_BUILD_ROOT}/standalone-negative-symlink-target")
 file(MAKE_DIRECTORY "${_symlink_target}")
 file(RENAME "${_standalone_root}" "${_standalone_backup}")
 file(CREATE_LINK "${_symlink_target}" "${_standalone_root}" SYMBOLIC RESULT _link_result)
-if(NOT _link_result STREQUAL "0")
-    message(FATAL_ERROR "Unable to create standalone symlink negative fixture: ${_link_result}")
+if(_link_result STREQUAL "0")
+    _synth_run_runner_expect_failure("symlinked evidence root" "symlinked standalone evidence root")
+    file(REMOVE "${_standalone_root}")
+else()
+    message(STATUS
+        "Standalone symlink-root negative not run: symbolic-link creation is unavailable (${_link_result})")
+    if(EXISTS "${_standalone_root}" OR IS_SYMLINK "${_standalone_root}")
+        file(REMOVE_RECURSE "${_standalone_root}")
+    endif()
 endif()
-_synth_run_runner_expect_failure("symlinked evidence root" "symlinked standalone evidence root")
-file(REMOVE "${_standalone_root}")
 file(RENAME "${_standalone_backup}" "${_standalone_root}")
 file(REMOVE_RECURSE "${_symlink_target}")
 
@@ -228,5 +333,17 @@ file(REMOVE_RECURSE "${_standalone_root}")
 file(RENAME "${_standalone_backup}" "${_standalone_root}")
 file(WRITE "${_marker}" "${_marker_original}")
 
+_synth_run_verifier_expect_success()
+
+# Two independent 3x3 executions must produce an identical aggregate and leave
+# no settings/preset isolation tree behind.
+_synth_run_runner_expect_success()
+file(READ "${_aggregate_path}" _fresh_aggregate_one)
+_synth_run_runner_expect_success()
+file(READ "${_aggregate_path}" _fresh_aggregate_two)
+if(NOT _fresh_aggregate_one STREQUAL _fresh_aggregate_two)
+    message(FATAL_ERROR
+        "Fresh standalone lifecycle runner aggregates are not byte-identical")
+endif()
 _synth_run_verifier_expect_success()
 message(STATUS "Standalone lifecycle positive and negative contracts passed")

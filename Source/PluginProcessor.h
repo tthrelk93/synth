@@ -94,9 +94,7 @@ public:
     
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts;
-    juce::File logFile;
-    std::unique_ptr<juce::FileLogger> fileLogger;
-    
+
     const float* getWaveformData() const;
     int getWaveformSize() const;
     CircularBuffer& getCircularBuffer();
