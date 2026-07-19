@@ -12,6 +12,12 @@ option(SYNTH_BUILD_TESTS "Build developer and CI tests" ON)
 option(SYNTH_BUILD_VALIDATORS "Build optional plug-in validators" OFF)
 set(SYNTH_VALIDATION_REPEAT_COUNT "3" CACHE STRING
     "Number of fresh instances exercised by project-owned validators")
+set(SYNTH_PLUGINVAL_EXECUTABLE "" CACHE FILEPATH
+    "Optional pluginval executable override (must report exactly version 1.0.4)")
+set(SYNTH_PLUGINVAL_ARCHIVE "" CACHE FILEPATH
+    "Optional local official pluginval v1.0.4 archive for reproducible/offline provisioning")
+set(SYNTH_VST3_VALIDATOR_EXECUTABLE "" CACHE FILEPATH
+    "Optional Steinberg VST3 SDK validator executable passed to pluginval")
 option(SYNTH_WARNINGS_AS_ERRORS "Treat project-source warnings as errors" OFF)
 option(SYNTH_ENABLE_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
 option(SYNTH_CI_INJECT_FAILING_SENTINEL
@@ -303,6 +309,7 @@ if(SYNTH_BUILD_VALIDATORS)
             ModelDStageDevelopmentArtifacts
         COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_SMOKE_EXECUTABLE=$<TARGET_FILE:ModelDActualWrapperSmoke>"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
             "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
             "-DSYNTH_SEED=0x4d6f64656c44"
@@ -313,6 +320,200 @@ if(SYNTH_BUILD_VALIDATORS)
             "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunActualWrapperSmoke.cmake"
         COMMENT "Scanning and exercising the staged Model D VST3 wrapper"
+        VERBATIM)
+
+    if(APPLE)
+        set(_model_d_pluginval_asset "pluginval_macOS.zip")
+        set(_model_d_pluginval_archive_sha256
+            "3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f")
+        set(_model_d_pluginval_executable_relative
+            "pluginval.app/Contents/MacOS/pluginval")
+    elseif(WIN32)
+        set(_model_d_pluginval_asset "pluginval_Windows.zip")
+        set(_model_d_pluginval_archive_sha256
+            "c08e61ce3b96db41636f8ec7e76f4c7e2c13ebdac7fa1b5a1f52b4f32ec715ab")
+        set(_model_d_pluginval_executable_relative "pluginval.exe")
+    elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(_model_d_pluginval_asset "pluginval_Linux.zip")
+        set(_model_d_pluginval_archive_sha256
+            "c01c49d8063965c4c2dea8324468336768f5c9139e0b1caebde14c2400b55352")
+        set(_model_d_pluginval_executable_relative "pluginval")
+    else()
+        message(FATAL_ERROR
+            "pluginval v1.0.4 provisioning is unsupported on ${CMAKE_SYSTEM_NAME}")
+    endif()
+    set(_model_d_pluginval_url
+        "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/${_model_d_pluginval_asset}")
+    set(_model_d_pluginval_output_directory
+        "${CMAKE_BINARY_DIR}/validation-tools/pluginval/v1.0.4")
+    set(_model_d_pluginval_metadata
+        "${CMAKE_BINARY_DIR}/validation/pluginval-provision.json")
+    set(_model_d_pluginval_stamp
+        "${_model_d_pluginval_output_directory}/provision.stamp")
+    if(SYNTH_PLUGINVAL_EXECUTABLE)
+        set(_model_d_pluginval_resolved_executable "${SYNTH_PLUGINVAL_EXECUTABLE}")
+    else()
+        set(_model_d_pluginval_resolved_executable
+            "${_model_d_pluginval_output_directory}/extracted/${_model_d_pluginval_executable_relative}")
+    endif()
+    set(_model_d_pluginval_provision_dependencies
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProvisionPluginval.cmake")
+    if(SYNTH_PLUGINVAL_EXECUTABLE)
+        list(APPEND _model_d_pluginval_provision_dependencies
+             "${SYNTH_PLUGINVAL_EXECUTABLE}")
+    elseif(SYNTH_PLUGINVAL_ARCHIVE)
+        list(APPEND _model_d_pluginval_provision_dependencies
+             "${SYNTH_PLUGINVAL_ARCHIVE}")
+    endif()
+    add_custom_command(
+        OUTPUT
+            "${_model_d_pluginval_stamp}"
+            "${_model_d_pluginval_metadata}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_PLUGINVAL_OUTPUT_DIRECTORY=${_model_d_pluginval_output_directory}"
+            "-DSYNTH_PLUGINVAL_METADATA_PATH=${_model_d_pluginval_metadata}"
+            "-DSYNTH_PLUGINVAL_STAMP_PATH=${_model_d_pluginval_stamp}"
+            "-DSYNTH_PLUGINVAL_PLATFORM_ASSET=${_model_d_pluginval_asset}"
+            "-DSYNTH_PLUGINVAL_EXPECTED_ARCHIVE_SHA256=${_model_d_pluginval_archive_sha256}"
+            "-DSYNTH_PLUGINVAL_DOWNLOAD_URL=${_model_d_pluginval_url}"
+            "-DSYNTH_PLUGINVAL_EXECUTABLE_RELATIVE_PATH=${_model_d_pluginval_executable_relative}"
+            "-DSYNTH_PLUGINVAL_EXECUTABLE_OVERRIDE=${SYNTH_PLUGINVAL_EXECUTABLE}"
+            "-DSYNTH_PLUGINVAL_ARCHIVE_OVERRIDE=${SYNTH_PLUGINVAL_ARCHIVE}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProvisionPluginval.cmake"
+        DEPENDS ${_model_d_pluginval_provision_dependencies}
+        COMMENT "Provisioning pinned pluginval v1.0.4"
+        VERBATIM)
+    add_custom_target(ModelDProvisionPluginval
+        DEPENDS "${_model_d_pluginval_stamp}" "${_model_d_pluginval_metadata}")
+
+    set(_model_d_pluginval_report
+        "${CMAKE_BINARY_DIR}/validation/pluginval-run-report.json")
+    add_custom_target(ModelDRunPluginval
+        DEPENDS
+            ModelDProvisionPluginval
+            ModelDStageDevelopmentArtifacts
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_PLUGINVAL_EXECUTABLE=${_model_d_pluginval_resolved_executable}"
+            "-DSYNTH_PLUGINVAL_METADATA_PATH=${_model_d_pluginval_metadata}"
+            "-DSYNTH_PLUGINVAL_REPORT_PATH=${_model_d_pluginval_report}"
+            "-DSYNTH_VALIDATION_DIRECTORY=${CMAKE_BINARY_DIR}/validation"
+            "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
+            "-DSYNTH_SEED=0x4d6f64656c44"
+            "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+            "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_VST3_VALIDATOR_EXECUTABLE=${SYNTH_VST3_VALIDATOR_EXECUTABLE}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunPluginval.cmake"
+        COMMENT "Running separate isolated pluginval strictness-10 processes"
+        VERBATIM)
+    add_dependencies(ModelDRunPluginval ModelDRunActualWrapperSmoke)
+
+    set(_model_d_auval_report
+        "${CMAKE_BINARY_DIR}/validation/auval-report.json")
+    set(_model_d_auval_log
+        "${CMAKE_BINARY_DIR}/validation/auval.log")
+    add_custom_target(ModelDRunAuval
+        DEPENDS ModelDRunPluginval
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_AUVAL_REPORT_PATH=${_model_d_auval_report}"
+            "-DSYNTH_AUVAL_LOG_PATH=${_model_d_auval_log}"
+            "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+            "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_PRODUCT_CODE=${SYNTH_PRODUCT_CODE}"
+            "-DSYNTH_MANUFACTURER_CODE=${SYNTH_MANUFACTURER_CODE}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunAuval.cmake"
+        COMMENT "Recording non-mutating auval evidence"
+        VERBATIM)
+
+    set(_model_d_host_matrix_source
+        "${CMAKE_CURRENT_SOURCE_DIR}/validation/required-host-matrix.json")
+    set(_model_d_host_matrix_build
+        "${CMAKE_BINARY_DIR}/validation/required-host-matrix.json")
+    configure_file(
+        "${_model_d_host_matrix_source}"
+        "${_model_d_host_matrix_build}"
+        COPYONLY)
+
+    set(_model_d_validation_reports
+        "${_model_d_wrapper_smoke_report}"
+        "${_model_d_wrapper_smoke_log}"
+        "${_model_d_pluginval_metadata}"
+        "${_model_d_pluginval_report}"
+        "${_model_d_auval_report}"
+        "${_model_d_auval_log}"
+        "${_model_d_host_matrix_build}")
+    foreach(_repeat RANGE 1 ${SYNTH_VALIDATION_REPEAT_COUNT})
+        list(APPEND _model_d_validation_reports
+            "${CMAKE_BINARY_DIR}/validation/pluginval/repeat-${_repeat}/pluginval-report.txt"
+            "${CMAKE_BINARY_DIR}/validation/pluginval/repeat-${_repeat}/process.log")
+    endforeach()
+    if(SYNTH_TEST_REPORTS)
+        list(APPEND _model_d_validation_reports ${SYNTH_TEST_REPORTS})
+    endif()
+    set(_model_d_expected_validation_evidence "")
+    foreach(_report IN LISTS _model_d_validation_reports)
+        file(RELATIVE_PATH _report_relative "${CMAKE_BINARY_DIR}" "${_report}")
+        string(REPLACE "\\" "/" _report_relative "${_report_relative}")
+        list(APPEND _model_d_expected_validation_evidence "${_report_relative}")
+    endforeach()
+    list(REMOVE_DUPLICATES _model_d_expected_validation_evidence)
+    list(SORT _model_d_expected_validation_evidence)
+    string(REPLACE ";" "\\;" _model_d_validation_reports_argument
+                   "${_model_d_validation_reports}")
+    string(REPLACE ";" "\\;" _model_d_expected_evidence_argument
+                   "${_model_d_expected_validation_evidence}")
+    set(_model_d_validation_manifest
+        "${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/validation-manifest.json")
+
+    add_custom_target(ModelDFinalizeValidationEvidence
+        DEPENDS ModelDRunAuval
+        COMMAND "${CMAKE_COMMAND}"
+            ${_model_d_stage_arguments}
+            "-DSYNTH_TEST_REPORTS=${_model_d_validation_reports_argument}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StageDevelopmentArtifacts.cmake"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_VALIDATION_MANIFEST_PATH=${_model_d_validation_manifest}"
+            "-DSYNTH_PLUGINVAL_METADATA_PATH=${_model_d_pluginval_metadata}"
+            "-DSYNTH_PLUGINVAL_REPORT_PATH=${_model_d_pluginval_report}"
+            "-DSYNTH_WRAPPER_REPORT_PATH=${_model_d_wrapper_smoke_report}"
+            "-DSYNTH_WRAPPER_LOG_PATH=${_model_d_wrapper_smoke_log}"
+            "-DSYNTH_AUVAL_REPORT_PATH=${_model_d_auval_report}"
+            "-DSYNTH_HOST_MATRIX_PATH=${_model_d_host_matrix_source}"
+            "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
+            "-DSYNTH_SEED=0x4d6f64656c44"
+            "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+            "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
+            "-DSYNTH_EXPECTED_EVIDENCE=${_model_d_expected_evidence_argument}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateValidationManifest.cmake"
+        COMMENT "Re-staging and finalizing linked validation evidence"
+        VERBATIM)
+
+    add_custom_target(ModelDVerifyValidationEvidence
+        DEPENDS ModelDFinalizeValidationEvidence
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_EXPECTED_FORMATS=${_model_d_expected_formats_command_argument}"
+            -DSYNTH_ALLOW_VALIDATION_MANIFEST=ON
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyStagedArtifacts.cmake"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_HOST_MATRIX_PATH=${_model_d_host_matrix_source}"
+            "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
+            "-DSYNTH_SEED=0x4d6f64656c44"
+            "-DSYNTH_PRODUCT_CODE=${SYNTH_PRODUCT_CODE}"
+            "-DSYNTH_MANUFACTURER_CODE=${SYNTH_MANUFACTURER_CODE}"
+            "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
+            "-DSYNTH_EXPECTED_EVIDENCE=${_model_d_expected_evidence_argument}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyValidationManifest.cmake"
+        COMMENT "Verifying build and validation manifests and all declared evidence"
         VERBATIM)
 endif()
 

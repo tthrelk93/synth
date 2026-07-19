@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.24)
 
+if(DEFINED SYNTH_TEST_REPORTS)
+    string(REPLACE "\\;" ";" SYNTH_TEST_REPORTS "${SYNTH_TEST_REPORTS}")
+endif()
+
 foreach(_required_variable IN ITEMS
         SYNTH_STAGE_ROOT
         SYNTH_STAGE_DIRECTORY

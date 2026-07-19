@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.24)
 
 foreach(_required_variable IN ITEMS
         SYNTH_SMOKE_EXECUTABLE
+        SYNTH_BUILD_ROOT
         SYNTH_STAGE_DIRECTORY
         SYNTH_REPEAT_COUNT
         SYNTH_SEED
@@ -56,25 +57,48 @@ if(NOT EXISTS "${_staged_vst3}")
     message(FATAL_ERROR "Staged VST3 product is missing: ${_staged_vst3}")
 endif()
 file(REAL_PATH "${SYNTH_STAGE_DIRECTORY}" _stage_root)
+file(REAL_PATH "${SYNTH_BUILD_ROOT}" _build_root)
+cmake_path(ABSOLUTE_PATH SYNTH_BUILD_ROOT NORMALIZE OUTPUT_VARIABLE _build_root_lexical)
+file(TO_NATIVE_PATH "${_build_root}" _build_root_native)
+file(TO_NATIVE_PATH "${_build_root_lexical}" _build_root_lexical_native)
 file(REAL_PATH "${_staged_vst3}" _staged_vst3_real)
 cmake_path(IS_PREFIX _stage_root "${_staged_vst3_real}" NORMALIZE _vst3_is_staged)
 if(NOT _vst3_is_staged OR _stage_root STREQUAL _staged_vst3_real)
     message(FATAL_ERROR
         "Resolved VST3 product escapes the staged artifact root: ${_staged_vst3_real}")
 endif()
+file(RELATIVE_PATH _staged_vst3_from_build "${_build_root_lexical}" "${_staged_vst3}")
+file(RELATIVE_PATH _report_from_build "${_build_root_lexical}" "${SYNTH_REPORT_PATH}")
+file(RELATIVE_PATH _log_from_build "${_build_root_lexical}" "${SYNTH_LOG_PATH}")
+foreach(_relative_output IN ITEMS "${_staged_vst3_from_build}" "${_report_from_build}" "${_log_from_build}")
+    string(REPLACE "\\" "/" _relative_output "${_relative_output}")
+    if(IS_ABSOLUTE "${_relative_output}" OR _relative_output MATCHES "(^|/)[.][.](/|$)")
+        message(FATAL_ERROR "Actual-wrapper path must remain beneath SYNTH_BUILD_ROOT: ${_relative_output}")
+    endif()
+endforeach()
+set(_smoke_prefix "")
+if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+    find_program(_xvfb_run NAMES xvfb-run)
+    if(NOT _xvfb_run)
+        message(FATAL_ERROR "Linux actual-wrapper GUI smoke requires xvfb-run")
+    endif()
+    set(_smoke_prefix "${_xvfb_run}" -a)
+endif()
 execute_process(
-    COMMAND "${SYNTH_SMOKE_EXECUTABLE}"
-        --plugin "${_staged_vst3}"
+    COMMAND ${_smoke_prefix} "${SYNTH_SMOKE_EXECUTABLE}"
+        --plugin "${_staged_vst3_from_build}"
         --repeat "${SYNTH_REPEAT_COUNT}"
         --seed "${SYNTH_SEED}"
-        --report "${SYNTH_REPORT_PATH}"
-        --log "${SYNTH_LOG_PATH}"
+        --report "${_report_from_build}"
+        --log "${_log_from_build}"
         --config "${SYNTH_CONFIGURATION}"
         --os "${SYNTH_SYSTEM_NAME}"
         --arch "${SYNTH_ARCHITECTURE}"
     RESULT_VARIABLE _smoke_status
     OUTPUT_VARIABLE _smoke_output
-    ERROR_VARIABLE _smoke_error)
+    ERROR_VARIABLE _smoke_error
+    WORKING_DIRECTORY "${_build_root_lexical}"
+    TIMEOUT 300)
 
 if(NOT _smoke_output STREQUAL "")
     message(STATUS "${_smoke_output}")
@@ -83,7 +107,20 @@ if(NOT _smoke_error STREQUAL "" AND EXISTS "${SYNTH_LOG_PATH}")
     file(APPEND "${SYNTH_LOG_PATH}"
         "captured_stderr_begin\n${_smoke_error}captured_stderr_end\n")
 endif()
-if(_smoke_status)
+if(NOT "${_smoke_status}" MATCHES "^[0-9]+$"
+   OR NOT "${_smoke_status}" STREQUAL "0")
     message(FATAL_ERROR
         "Actual-wrapper smoke failed with exit ${_smoke_status}:\n${_smoke_error}")
 endif()
+foreach(_evidence_file IN ITEMS "${SYNTH_REPORT_PATH}" "${SYNTH_LOG_PATH}")
+    if(EXISTS "${_evidence_file}")
+        file(READ "${_evidence_file}" _evidence_contents)
+        string(REPLACE "${_build_root_native}" "<BUILD_ROOT>" _evidence_contents "${_evidence_contents}")
+        string(REPLACE "${_build_root_lexical_native}" "<BUILD_ROOT>" _evidence_contents "${_evidence_contents}")
+        string(REPLACE "${_build_root}" "<BUILD_ROOT>" _evidence_contents "${_evidence_contents}")
+        string(REPLACE "${_build_root_lexical}" "<BUILD_ROOT>" _evidence_contents "${_evidence_contents}")
+        string(REGEX REPLACE "address=0x[0-9A-Fa-f]+"
+               "address=<INSTANCE_ADDRESS>" _evidence_contents "${_evidence_contents}")
+        file(WRITE "${_evidence_file}" "${_evidence_contents}")
+    endif()
+endforeach()
