@@ -8,6 +8,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <algorithm>
 #include <fstream>
 #include <cmath>
 #include "Oscillator.h"
@@ -44,12 +45,9 @@ Oscillator::Waveform mapOsc3Waveform(int selection) {
 MoogMiniAudioProcessor::MoogMiniAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
 : AudioProcessor (BusesProperties()
-#if ! JucePlugin_IsMidiEffect
-#if ! JucePlugin_IsSynth
-                  .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-#endif
-                  .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
-#endif
+                  .withInput  ("External Input", juce::AudioChannelSet::stereo(), false)
+                  .withOutput ("Main Output", juce::AudioChannelSet::stereo(), true)
+                  .withOutput ("Phones/Cue", juce::AudioChannelSet::stereo(), false)
                   ),
 apvts(*this, nullptr, "Parameters", createParameterLayout()),
 logFile(juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("my_plugin_log.txt")),
@@ -345,7 +343,9 @@ void MoogMiniAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlo
     osc2.setSampleRate(getSampleRate());
     osc3.setSampleRate(getSampleRate());
     a440Oscillator.setFrequency(440.0f);
-    a440Oscillator.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), static_cast<juce::uint32>(getTotalNumInputChannels()) });
+    a440Oscillator.prepare({ sampleRate,
+                             static_cast<juce::uint32>(samplesPerBlock),
+                             static_cast<juce::uint32>(getChannelCountOfBus(false, 0)) });
     
 }
 
@@ -358,22 +358,25 @@ void MoogMiniAudioProcessor::releaseResources()
 #ifndef JucePlugin_PreferredChannelConfigurations
 bool MoogMiniAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-#if JucePlugin_IsMidiEffect
-    juce::ignoreUnused (layouts);
-    return true;
-#else
-    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+    if (layouts.inputBuses.size() != 1 || layouts.outputBuses.size() != 2)
         return false;
-    
-    // This checks if the input layout matches the output layout
-#if ! JucePlugin_IsSynth
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
-        return false;
-#endif
-    
-    return true;
-#endif
+
+    const std::array mainLayouts {
+        juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo()
+    };
+    const std::array optionalLayouts {
+        juce::AudioChannelSet::disabled(),
+        juce::AudioChannelSet::mono(),
+        juce::AudioChannelSet::stereo()
+    };
+    const auto matches = [] (const juce::AudioChannelSet& layout, const auto& table)
+    {
+        return std::find (table.begin(), table.end(), layout) != table.end();
+    };
+
+    return matches (layouts.outputBuses[0], mainLayouts)
+        && matches (layouts.inputBuses[0], optionalLayouts)
+        && matches (layouts.outputBuses[1], optionalLayouts);
 }
 #endif
 
@@ -419,8 +422,9 @@ float MoogMiniAudioProcessor::normalizedToMilliseconds(float normalizedValue) {
 void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    auto externalInput = getBusBuffer (buffer, true, 0);
+    auto mainOutput = getBusBuffer (buffer, false, 0);
+    auto phonesOutput = getBusBuffer (buffer, false, 1);
     
     // Merge incoming MIDI messages at the beginning of the processing block
     {
@@ -625,8 +629,10 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     const float noiseScale = 1.0f / (noiseVolumeScalingFactor * 10.0f);
 
     int stageWriteIndex = stageBufferWriteIndex.load(std::memory_order_relaxed);
-    const float* inputLeft = totalNumInputChannels > 0 ? buffer.getReadPointer(0) : nullptr;
-    const float* inputRight = totalNumInputChannels > 1 ? buffer.getReadPointer(1) : inputLeft;
+    const float* inputLeft = externalInput.getNumChannels() > 0
+                           ? externalInput.getReadPointer(0) : nullptr;
+    const float* inputRight = externalInput.getNumChannels() > 1
+                            ? externalInput.getReadPointer(1) : inputLeft;
 
     for (int sampleIndex = 0; sampleIndex < buffer.getNumSamples(); ++sampleIndex)
     {
@@ -779,11 +785,12 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         sampleRight *= outputVolLevel;
         outputPeak = juce::jmax(outputPeak, std::abs(sampleLeft) * mixScale);
         
-        // Write the processed samples to each channel in the buffer
-        buffer.getWritePointer(0)[sampleIndex] = sampleLeft;
-        if (totalNumOutputChannels > 1) {
-            buffer.getWritePointer(1)[sampleIndex] = sampleRight;
-        }
+        // The engine is mono. Render it as mono or dual mono to the named output buses.
+        for (int channel = 0; channel < mainOutput.getNumChannels(); ++channel)
+            mainOutput.getWritePointer(channel)[sampleIndex] = sampleLeft;
+
+        for (int channel = 0; channel < phonesOutput.getNumChannels(); ++channel)
+            phonesOutput.getWritePointer(channel)[sampleIndex] = sampleLeft;
         
         // Write to circular buffer for oscilloscope display
         circularBuffer.write(sampleLeft, sampleRight); // Assuming circularBuffer.write() is modified for stereo

@@ -132,8 +132,8 @@ juce_add_plugin(ModelDPlugin
     PRODUCT_NAME "${SYNTH_PRODUCT_NAME}"
     VERSION "${PROJECT_VERSION}"
     FORMATS ${_model_d_formats}
-    IS_SYNTH FALSE
-    NEEDS_MIDI_INPUT FALSE
+    IS_SYNTH TRUE
+    NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
     IS_MIDI_EFFECT FALSE
     COPY_PLUGIN_AFTER_BUILD FALSE)
@@ -189,6 +189,14 @@ if(SYNTH_BUILD_TESTS)
     enable_testing()
     add_executable(ModelDTests Tests/ModelDTests.cpp)
     synth_enable_project_warnings(Tests/ModelDTests.cpp)
-    target_link_libraries(ModelDTests PRIVATE ModelDCore SynthProjectOptions)
-    add_test(NAME ModelDCoreFoundation COMMAND ModelDTests)
+    target_include_directories(ModelDTests
+        BEFORE PRIVATE
+            Source
+            cmake/plugin_compat
+            "${juce_SOURCE_DIR}/modules")
+    target_link_libraries(ModelDTests
+        PRIVATE
+            ModelDPlugin
+            SynthProjectOptions)
+    add_test(NAME ModelDProcessorContract COMMAND ModelDTests)
 endif()
