@@ -10,6 +10,8 @@ set(SYNTH_JUCE_SOURCE_DIR "" CACHE PATH
     "Optional path to a local JUCE checkout at the required revision")
 option(SYNTH_BUILD_TESTS "Build developer and CI tests" ON)
 option(SYNTH_BUILD_VALIDATORS "Build optional plug-in validators" OFF)
+set(SYNTH_VALIDATION_REPEAT_COUNT "3" CACHE STRING
+    "Number of fresh instances exercised by project-owned validators")
 option(SYNTH_WARNINGS_AS_ERRORS "Treat project-source warnings as errors" OFF)
 option(SYNTH_ENABLE_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
 option(SYNTH_CI_INJECT_FAILING_SENTINEL
@@ -263,6 +265,56 @@ add_custom_target(ModelDVerifyStagedArtifacts
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyStagedArtifacts.cmake"
     COMMENT "Verifying Model D development artifact staging manifest"
     VERBATIM)
+
+if(SYNTH_BUILD_VALIDATORS)
+    if(NOT SYNTH_VALIDATION_REPEAT_COUNT MATCHES "^[1-9][0-9]*$")
+        message(FATAL_ERROR
+            "SYNTH_VALIDATION_REPEAT_COUNT must be a positive integer")
+    endif()
+
+    add_executable(ModelDActualWrapperSmoke
+        Tools/ModelDActualWrapperSmoke.cpp)
+    synth_enable_project_warnings(Tools/ModelDActualWrapperSmoke.cpp)
+    target_compile_definitions(ModelDActualWrapperSmoke
+        PRIVATE
+            JUCE_PLUGINHOST_AU=0
+            JUCE_PLUGINHOST_VST3=1
+            JUCE_MODAL_LOOPS_PERMITTED=1
+            JUCE_VST3_CAN_REPLACE_VST2=0
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            SYNTH_EXPECTED_PLUGIN_NAME="${SYNTH_PRODUCT_NAME}"
+            SYNTH_VALIDATOR_TOOL_VERSION="${PROJECT_VERSION}")
+    target_link_libraries(ModelDActualWrapperSmoke
+        PRIVATE
+            SynthProjectOptions
+            juce::juce_audio_processors
+            juce::juce_audio_utils
+            juce::juce_cryptography
+            juce::juce_recommended_config_flags)
+
+    set(_model_d_wrapper_smoke_report
+        "${CMAKE_BINARY_DIR}/validation/actual-wrapper-smoke-report.json")
+    set(_model_d_wrapper_smoke_log
+        "${CMAKE_BINARY_DIR}/validation/actual-wrapper-smoke.log")
+    add_custom_target(ModelDRunActualWrapperSmoke
+        DEPENDS
+            ModelDActualWrapperSmoke
+            ModelDStageDevelopmentArtifacts
+        COMMAND "${CMAKE_COMMAND}"
+            "-DSYNTH_SMOKE_EXECUTABLE=$<TARGET_FILE:ModelDActualWrapperSmoke>"
+            "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
+            "-DSYNTH_REPEAT_COUNT=${SYNTH_VALIDATION_REPEAT_COUNT}"
+            "-DSYNTH_SEED=0x4d6f64656c44"
+            "-DSYNTH_REPORT_PATH=${_model_d_wrapper_smoke_report}"
+            "-DSYNTH_LOG_PATH=${_model_d_wrapper_smoke_log}"
+            "-DSYNTH_CONFIGURATION=$<CONFIG>"
+            "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
+            "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
+            -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/RunActualWrapperSmoke.cmake"
+        COMMENT "Scanning and exercising the staged Model D VST3 wrapper"
+        VERBATIM)
+endif()
 
 add_executable(ModelDOfflineRenderer Tools/ModelDOfflineRenderer.cpp)
 synth_enable_project_warnings(Tools/ModelDOfflineRenderer.cpp)
