@@ -15,6 +15,7 @@ foreach(_required_variable IN ITEMS
         SYNTH_SEED
         SYNTH_SYSTEM_NAME
         SYNTH_ARCHITECTURE
+        SYNTH_CONFIGURATION
         SYNTH_PROJECT_VERSION
         SYNTH_EXPECTED_EVIDENCE)
     if(NOT DEFINED ${_required_variable} OR "${${_required_variable}}" STREQUAL "")
@@ -78,6 +79,17 @@ _synth_read_json(_auval "${SYNTH_AUVAL_REPORT_PATH}" "auval report")
 _synth_read_json(_standalone "${SYNTH_STANDALONE_REPORT_PATH}" "standalone lifecycle report")
 _synth_read_json(_host_definition "${SYNTH_HOST_MATRIX_PATH}" "required host matrix")
 
+string(JSON _build_os GET "${_build_manifest}" build os)
+string(JSON _build_architecture GET "${_build_manifest}" build architecture)
+string(JSON _build_configuration GET "${_build_manifest}" build configuration)
+string(JSON _provision_os GET "${_provision}" os)
+if(NOT _build_os STREQUAL SYNTH_SYSTEM_NAME
+   OR NOT _build_architecture STREQUAL SYNTH_ARCHITECTURE
+   OR NOT _build_configuration STREQUAL SYNTH_CONFIGURATION
+   OR NOT _provision_os STREQUAL SYNTH_SYSTEM_NAME)
+    message(FATAL_ERROR "build/provision environment does not match the configured validation environment")
+endif()
+
 string(JSON _product_count LENGTH "${_build_manifest}" products)
 set(_vst3_count 0)
 set(_standalone_count 0)
@@ -135,8 +147,12 @@ string(JSON _pluginval_strictness GET "${_pluginval}" strictness_level)
 string(JSON _pluginval_timeout GET "${_pluginval}" timeout_ms)
 string(JSON _pluginval_isolated GET "${_pluginval}" isolated_process)
 string(JSON _pluginval_gui GET "${_pluginval}" gui_tests)
+string(JSON _pluginval_environment_sanitized GET "${_pluginval}" environment_sanitized)
 string(JSON _pluginval_plugin_path GET "${_pluginval}" plugin_relative_path)
 string(JSON _pluginval_plugin_sha256 GET "${_pluginval}" plugin_aggregate_sha256)
+string(JSON _pluginval_os GET "${_pluginval}" os)
+string(JSON _pluginval_architecture GET "${_pluginval}" architecture)
+string(JSON _pluginval_configuration GET "${_pluginval}" configuration)
 if(NOT _pluginval_status STREQUAL "pass"
    OR NOT _pluginval_version STREQUAL "1.0.4"
    OR NOT _pluginval_repeat_count STREQUAL SYNTH_REPEAT_COUNT
@@ -145,8 +161,12 @@ if(NOT _pluginval_status STREQUAL "pass"
    OR NOT _pluginval_timeout STREQUAL "60000"
    OR NOT _pluginval_isolated
    OR NOT _pluginval_gui
+   OR NOT _pluginval_environment_sanitized
    OR NOT _pluginval_plugin_path STREQUAL _final_vst3_relative_path
-   OR NOT _pluginval_plugin_sha256 STREQUAL _final_vst3_sha256)
+   OR NOT _pluginval_plugin_sha256 STREQUAL _final_vst3_sha256
+   OR NOT _pluginval_os STREQUAL _build_os
+   OR NOT _pluginval_architecture STREQUAL _build_architecture
+   OR NOT _pluginval_configuration STREQUAL _build_configuration)
     message(FATAL_ERROR "pluginval report does not satisfy the pinned validation contract")
 endif()
 string(JSON _wrapper_status GET "${_wrapper}" status)
@@ -154,6 +174,9 @@ string(JSON _wrapper_repeat_count GET "${_wrapper}" repeat_count)
 string(JSON _wrapper_seed GET "${_wrapper}" seed)
 string(JSON _wrapper_plugin_path GET "${_wrapper}" plugin relative_path)
 string(JSON _wrapper_plugin_sha256 GET "${_wrapper}" plugin aggregate_sha256)
+string(JSON _wrapper_os GET "${_wrapper}" build os)
+string(JSON _wrapper_architecture GET "${_wrapper}" build architecture)
+string(JSON _wrapper_configuration GET "${_wrapper}" build configuration)
 file(RELATIVE_PATH _stage_relative_from_build "${_build_root}" "${_stage_root}")
 string(REPLACE "\\" "/" _stage_relative_from_build "${_stage_relative_from_build}")
 set(_expected_wrapper_plugin_path
@@ -162,11 +185,22 @@ if(NOT _wrapper_status STREQUAL "pass"
    OR NOT _wrapper_repeat_count STREQUAL SYNTH_REPEAT_COUNT
    OR NOT _wrapper_seed STREQUAL SYNTH_SEED
    OR NOT _wrapper_plugin_path STREQUAL _expected_wrapper_plugin_path
-   OR NOT _wrapper_plugin_sha256 STREQUAL _final_vst3_sha256)
+   OR NOT _wrapper_plugin_sha256 STREQUAL _final_vst3_sha256
+   OR NOT _wrapper_os STREQUAL _build_os
+   OR NOT _wrapper_architecture STREQUAL _build_architecture
+   OR NOT _wrapper_configuration STREQUAL _build_configuration)
     message(FATAL_ERROR "actual-wrapper report does not satisfy the repeat/seed contract")
 endif()
 string(JSON _auval_status GET "${_auval}" status)
+string(JSON _auval_os GET "${_auval}" os)
+string(JSON _auval_architecture GET "${_auval}" architecture)
+string(JSON _auval_configuration GET "${_auval}" configuration)
 _synth_require_status("${_auval_status}" "auval report")
+if(NOT _auval_os STREQUAL _build_os
+   OR NOT _auval_architecture STREQUAL _build_architecture
+   OR NOT _auval_configuration STREQUAL _build_configuration)
+    message(FATAL_ERROR "auval report environment differs from the final build manifest")
+endif()
 string(JSON _vst3_validator_status GET "${_pluginval}" vst3_sdk_validator status)
 string(JSON _vst3_validator_json GET "${_pluginval}" vst3_sdk_validator)
 _synth_require_status("${_vst3_validator_status}" "VST3 SDK validator report")
@@ -277,6 +311,7 @@ _synth_json_set_string(_build_reference sha256 "${_build_manifest_sha256}")
 set(_environment "{}")
 _synth_json_set_string(_environment os "${SYNTH_SYSTEM_NAME}")
 _synth_json_set_string(_environment architecture "${SYNTH_ARCHITECTURE}")
+_synth_json_set_string(_environment configuration "${SYNTH_CONFIGURATION}")
 
 set(_validation_reasons "[]")
 set(_reason_index 0)

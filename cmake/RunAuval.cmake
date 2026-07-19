@@ -6,6 +6,7 @@ foreach(_required_variable IN ITEMS
         SYNTH_AUVAL_LOG_PATH
         SYNTH_SYSTEM_NAME
         SYNTH_ARCHITECTURE
+        SYNTH_CONFIGURATION
         SYNTH_PRODUCT_CODE
         SYNTH_MANUFACTURER_CODE)
     if(NOT DEFINED ${_required_variable} OR "${${_required_variable}}" STREQUAL "")
@@ -84,9 +85,8 @@ if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
             set(_status "pass")
             set(_reason "The registered AU passed the exact auval command")
         elseif("${_exit_code}" MATCHES "^[0-9]+$"
-               AND (_combined_output MATCHES "didn.t find (the )?component"
-               OR _combined_output MATCHES "Cannot find component"
-               OR _combined_output MATCHES "not found"))
+               AND _combined_output MATCHES
+                   "(^|\n)FATAL ERROR: didn't find the component(\r?\n|$)")
             set(_status "blocked")
             set(_reason "The AU is not registered in this account; the non-mutating helper did not install it")
         else()
@@ -105,7 +105,7 @@ if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
 endif()
 
 file(WRITE "${_log_path}"
-    "mutation=none\ncommand=${_command}\nos=${SYNTH_SYSTEM_NAME}\narchitecture=${SYNTH_ARCHITECTURE}\nversion=${_version}\nstdout_begin\n${_stdout}stdout_end\nstderr_begin\n${_stderr}stderr_end\nexit_code=${_exit_code}\nstatus=${_status}\nreason=${_reason}\n")
+    "mutation=none\ncommand=${_command}\nconfiguration=${SYNTH_CONFIGURATION}\nos=${SYNTH_SYSTEM_NAME}\narchitecture=${SYNTH_ARCHITECTURE}\nversion=${_version}\nstdout_begin\n${_stdout}stdout_end\nstderr_begin\n${_stderr}stderr_end\nexit_code=${_exit_code}\nstatus=${_status}\nreason=${_reason}\n")
 file(SHA256 "${_log_path}" _log_sha256)
 file(RELATIVE_PATH _log_relative_path "${_build_root_lexical}" "${_log_path}")
 string(REPLACE "\\" "/" _log_relative_path "${_log_relative_path}")
@@ -127,6 +127,7 @@ _synth_json_set_string(_report log_path "${_log_relative_path}")
 _synth_json_set_string(_report log_sha256 "${_log_sha256}")
 _synth_json_set_string(_report os "${SYNTH_SYSTEM_NAME}")
 _synth_json_set_string(_report architecture "${SYNTH_ARCHITECTURE}")
+_synth_json_set_string(_report configuration "${SYNTH_CONFIGURATION}")
 string(JSON _report SET "${_report}" mutated_user_state false)
 file(WRITE "${_report_path}" "${_report}\n")
 
