@@ -323,6 +323,16 @@ ExternalInputRender renderExternalInput (int externalChannels,
                                          std::string_view context)
 {
     MoogMiniAudioProcessor processor;
+    // Establish an explicit external-input-only patch before MIDI opens the
+    // existing filter/loudness envelopes.
+    for (const auto* parameterId : { "osc1OnOff", "osc2OnOff", "osc3OnOff",
+                                     "a440HzOnOff", "noiseOnOffSwitch",
+                                     "oscModSwitch", "filterModSwitch" })
+        setParameter (processor, parameterId, 0.0f, test);
+    for (const auto* parameterId : { "osc1Vol", "osc2Vol", "osc3Vol",
+                                     "noiseVolKnob", "filterEmphasis" })
+        setParameter (processor, parameterId, 0.0f, test);
+    setParameter (processor, "feedbackKnob", 0.0f, test);
     setParameter (processor, "extInputVolSwitch", 1.0f, test);
     setParameter (processor, "extInputVolKnob", 1.0f, test);
     setParameter (processor, "outputVolKnob", 1.0f, test);
@@ -377,8 +387,6 @@ ExternalInputRender renderExternalInput (int externalChannels,
     auto phones = processor.getBusBuffer (buffer, false, 1);
     test.expect (isFinite (main), std::string { context } + ": Main Output must be finite");
     test.expect (isFinite (phones), std::string { context } + ": Phones/Cue must be finite");
-    test.expect (absoluteSum (main) > 0.01,
-                 std::string { context } + ": External Input must reach the engine output");
 
     ExternalInputRender result;
     result.main.resize (static_cast<size_t> (numSamples));
@@ -416,6 +424,26 @@ bool expectSamplesEqual (const std::vector<float>& actual,
     return matches;
 }
 
+double absoluteSampleSum (const std::vector<float>& samples)
+{
+    double result = 0.0;
+    for (const auto sample : samples)
+        result += std::abs (sample);
+    return result;
+}
+
+double absoluteDifferenceSum (const std::vector<float>& first,
+                              const std::vector<float>& second)
+{
+    if (first.size() != second.size())
+        return 0.0;
+
+    double result = 0.0;
+    for (size_t index = 0; index < first.size(); ++index)
+        result += std::abs (first[index] - second[index]);
+    return result;
+}
+
 void testExternalInputRouting (TestContext& test)
 {
     constexpr int numSamples = 512;
@@ -423,6 +451,7 @@ void testExternalInputRouting (TestContext& test)
     std::vector<float> left (numSamples);
     std::vector<float> right (numSamples);
     std::vector<float> average (numSamples);
+    const std::vector<float> zero (numSamples, 0.0f);
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -433,9 +462,27 @@ void testExternalInputRouting (TestContext& test)
         average[index] = 0.5f * (left[index] + right[index]);
     }
 
+    const auto zeroMono = renderExternalInput (1, zero, {}, test,
+                                               "zero mono External Input control");
+    const auto zeroStereo = renderExternalInput (2, zero, zero, test,
+                                                 "zero stereo External Input control");
+    const auto zeroMonoSum = absoluteSampleSum (zeroMono.main);
+    const auto zeroStereoSum = absoluteSampleSum (zeroStereo.main);
+    const auto zeroControlsSilent = zeroMonoSum <= 1.0e-7 && zeroStereoSum <= 1.0e-7;
+    test.expect (zeroControlsSilent,
+                 "explicit external-input-only patch must be silent for zero input");
+    std::cout << "EXTERNAL_INPUT case=zero-control mono_abs_sum=" << zeroMonoSum
+              << " stereo_abs_sum=" << zeroStereoSum
+              << " result=" << (zeroControlsSilent ? "true" : "false") << '\n';
+
     const auto monoRender = renderExternalInput (1, mono, {}, test, "mono External Input");
     const auto duplicatedStereo = renderExternalInput (2, mono, mono, test,
                                                         "duplicated stereo External Input");
+    const auto monoDifferenceFromZero = absoluteDifferenceSum (monoRender.main,
+                                                               zeroMono.main);
+    const auto monoSensitive = monoDifferenceFromZero > 0.01;
+    test.expect (monoSensitive,
+                 "nonzero mono External Input must differ materially from zero-input control");
     const auto monoMainMatches = expectSamplesEqual (monoRender.main, duplicatedStereo.main,
                                                      test, "mono input duplication");
     const auto monoCueLeftMatches = expectSamplesEqual (monoRender.phones[0],
@@ -444,14 +491,23 @@ void testExternalInputRouting (TestContext& test)
     const auto monoCueRightMatches = expectSamplesEqual (monoRender.phones[1],
                                                          duplicatedStereo.phones[1], test,
                                                          "mono input duplication cue right");
-    const auto monoMatches = monoMainMatches && monoCueLeftMatches && monoCueRightMatches;
-    std::cout << "EXTERNAL_INPUT case=mono-duplication result="
+    const auto monoMatches = monoSensitive
+                          && monoMainMatches
+                          && monoCueLeftMatches
+                          && monoCueRightMatches;
+    std::cout << "EXTERNAL_INPUT case=mono-duplication difference_from_zero="
+              << monoDifferenceFromZero << " result="
               << (monoMatches ? "true" : "false") << '\n';
 
     const auto stereoRender = renderExternalInput (2, left, right, test,
                                                     "distinguishable stereo External Input");
     const auto averagedMono = renderExternalInput (1, average, {}, test,
                                                     "averaged mono External Input");
+    const auto stereoDifferenceFromZero = absoluteDifferenceSum (stereoRender.main,
+                                                                 zeroStereo.main);
+    const auto stereoSensitive = stereoDifferenceFromZero > 0.01;
+    test.expect (stereoSensitive,
+                 "nonzero stereo External Input must differ materially from zero-input control");
     const auto stereoMainMatches = expectSamplesEqual (stereoRender.main, averagedMono.main,
                                                        test, "stereo input downmix");
     const auto stereoCueLeftMatches = expectSamplesEqual (stereoRender.phones[0],
@@ -460,10 +516,12 @@ void testExternalInputRouting (TestContext& test)
     const auto stereoCueRightMatches = expectSamplesEqual (stereoRender.phones[1],
                                                            averagedMono.phones[1], test,
                                                            "stereo input downmix cue right");
-    const auto stereoMatches = stereoMainMatches
+    const auto stereoMatches = stereoSensitive
+                            && stereoMainMatches
                             && stereoCueLeftMatches
                             && stereoCueRightMatches;
-    std::cout << "EXTERNAL_INPUT case=stereo-downmix result="
+    std::cout << "EXTERNAL_INPUT case=stereo-downmix difference_from_zero="
+              << stereoDifferenceFromZero << " result="
               << (stereoMatches ? "true" : "false") << '\n';
 }
 
