@@ -520,10 +520,27 @@ if(SYNTH_BUILD_VALIDATORS)
     endforeach()
     list(REMOVE_DUPLICATES _model_d_expected_validation_evidence)
     list(SORT _model_d_expected_validation_evidence)
-    string(REPLACE ";" "\\;" _model_d_validation_reports_argument
-                   "${_model_d_validation_reports}")
-    string(REPLACE ";" "\\;" _model_d_expected_evidence_argument
-                   "${_model_d_expected_validation_evidence}")
+    list(LENGTH _model_d_validation_reports _model_d_validation_report_count)
+    set(_model_d_validation_report_arguments
+        "-DSYNTH_TEST_REPORT_COUNT=${_model_d_validation_report_count}")
+    set(_model_d_validation_report_index 0)
+    foreach(_report IN LISTS _model_d_validation_reports)
+        list(APPEND _model_d_validation_report_arguments
+            "-DSYNTH_TEST_REPORT_${_model_d_validation_report_index}=${_report}")
+        math(EXPR _model_d_validation_report_index
+             "${_model_d_validation_report_index} + 1")
+    endforeach()
+    list(LENGTH _model_d_expected_validation_evidence
+         _model_d_expected_evidence_count)
+    set(_model_d_expected_evidence_arguments
+        "-DSYNTH_EXPECTED_EVIDENCE_COUNT=${_model_d_expected_evidence_count}")
+    set(_model_d_expected_evidence_index 0)
+    foreach(_evidence IN LISTS _model_d_expected_validation_evidence)
+        list(APPEND _model_d_expected_evidence_arguments
+            "-DSYNTH_EXPECTED_EVIDENCE_${_model_d_expected_evidence_index}=${_evidence}")
+        math(EXPR _model_d_expected_evidence_index
+             "${_model_d_expected_evidence_index} + 1")
+    endforeach()
     set(_model_d_validation_manifest
         "${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/validation-manifest.json")
 
@@ -531,7 +548,7 @@ if(SYNTH_BUILD_VALIDATORS)
         DEPENDS ModelDRunAuval
         COMMAND "${CMAKE_COMMAND}"
             ${_model_d_stage_arguments}
-            "-DSYNTH_TEST_REPORTS=${_model_d_validation_reports_argument}"
+            ${_model_d_validation_report_arguments}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StageDevelopmentArtifacts.cmake"
         COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
@@ -550,7 +567,7 @@ if(SYNTH_BUILD_VALIDATORS)
             "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_CONFIGURATION=$<CONFIG>"
             "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
-            "-DSYNTH_EXPECTED_EVIDENCE=${_model_d_expected_evidence_argument}"
+            ${_model_d_expected_evidence_arguments}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateValidationManifest.cmake"
         COMMENT "Re-staging and finalizing linked validation evidence"
         VERBATIM)
@@ -575,7 +592,7 @@ if(SYNTH_BUILD_VALIDATORS)
             "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
             "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_CONFIGURATION=$<CONFIG>"
-            "-DSYNTH_EXPECTED_EVIDENCE=${_model_d_expected_evidence_argument}"
+            ${_model_d_expected_evidence_arguments}
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyValidationManifest.cmake"
         COMMENT "Verifying build and validation manifests and all declared evidence"
         VERBATIM)

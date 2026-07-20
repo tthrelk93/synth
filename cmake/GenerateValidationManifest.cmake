@@ -1,5 +1,30 @@
 cmake_minimum_required(VERSION 3.24)
 
+if(DEFINED SYNTH_EXPECTED_EVIDENCE_COUNT)
+    if(NOT SYNTH_EXPECTED_EVIDENCE_COUNT MATCHES "^[0-9]+$"
+       OR SYNTH_EXPECTED_EVIDENCE_COUNT EQUAL 0)
+        message(FATAL_ERROR
+            "SYNTH_EXPECTED_EVIDENCE_COUNT must be a positive integer")
+    endif()
+    set(SYNTH_EXPECTED_EVIDENCE "")
+    math(EXPR _synth_last_expected_evidence
+         "${SYNTH_EXPECTED_EVIDENCE_COUNT} - 1")
+    foreach(_synth_expected_evidence_index RANGE 0 ${_synth_last_expected_evidence})
+        set(_synth_expected_evidence_variable
+            "SYNTH_EXPECTED_EVIDENCE_${_synth_expected_evidence_index}")
+        if(NOT DEFINED ${_synth_expected_evidence_variable}
+           OR "${${_synth_expected_evidence_variable}}" STREQUAL "")
+            message(FATAL_ERROR
+                "${_synth_expected_evidence_variable} is required by SYNTH_EXPECTED_EVIDENCE_COUNT")
+        endif()
+        list(APPEND SYNTH_EXPECTED_EVIDENCE
+             "${${_synth_expected_evidence_variable}}")
+    endforeach()
+elseif(DEFINED SYNTH_EXPECTED_EVIDENCE)
+    string(REPLACE "\\;" ";" SYNTH_EXPECTED_EVIDENCE
+                   "${SYNTH_EXPECTED_EVIDENCE}")
+endif()
+
 foreach(_required_variable IN ITEMS
         SYNTH_BUILD_ROOT
         SYNTH_STAGE_DIRECTORY
@@ -22,7 +47,6 @@ foreach(_required_variable IN ITEMS
         message(FATAL_ERROR "${_required_variable} is required to generate validation metadata")
     endif()
 endforeach()
-string(REPLACE "\\;" ";" SYNTH_EXPECTED_EVIDENCE "${SYNTH_EXPECTED_EVIDENCE}")
 
 function(_synth_json_quote output_variable input_value)
     set(_escaped "${input_value}")

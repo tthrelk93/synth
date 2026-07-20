@@ -24,6 +24,61 @@ if(EXISTS "${_contract_root}")
 endif()
 file(MAKE_DIRECTORY "${_contract_root}")
 
+file(READ "${SYNTH_SOURCE_ROOT}/CMakeLists.txt" _top_level_cmake_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/StageDevelopmentArtifacts.cmake"
+     _stage_development_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake"
+     _generate_validation_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake"
+     _verify_validation_source)
+
+# Multi-value -D arguments are not portable through Visual Studio when they
+# are packed into one quoted semicolon list. Require indexed arguments for the
+# final report inventory and expected-evidence inventory instead.
+foreach(_indexed_transport_contract IN ITEMS
+        "SYNTH_TEST_REPORT_COUNT"
+        "SYNTH_TEST_REPORT_"
+        "SYNTH_EXPECTED_EVIDENCE_COUNT"
+        "SYNTH_EXPECTED_EVIDENCE_")
+    string(FIND "${_top_level_cmake_source}"
+           "${_indexed_transport_contract}" _top_level_contract_position)
+    if(_top_level_contract_position LESS 0)
+        message(FATAL_ERROR
+            "validation evidence does not use indexed cross-generator argument transport: ${_indexed_transport_contract}")
+    endif()
+endforeach()
+foreach(_indexed_report_contract IN ITEMS
+        "SYNTH_TEST_REPORT_COUNT"
+        "SYNTH_TEST_REPORT_")
+    string(FIND "${_stage_development_source}"
+           "${_indexed_report_contract}" _stage_contract_position)
+    if(_stage_contract_position LESS 0)
+        message(FATAL_ERROR
+            "development staging cannot reconstruct indexed report arguments: ${_indexed_report_contract}")
+    endif()
+endforeach()
+foreach(_validation_source IN ITEMS
+        _generate_validation_source
+        _verify_validation_source)
+    foreach(_indexed_evidence_contract IN ITEMS
+            "SYNTH_EXPECTED_EVIDENCE_COUNT"
+            "SYNTH_EXPECTED_EVIDENCE_")
+        string(FIND "${${_validation_source}}"
+               "${_indexed_evidence_contract}" _evidence_contract_position)
+        if(_evidence_contract_position LESS 0)
+            message(FATAL_ERROR
+                "validation manifest script cannot reconstruct indexed evidence arguments: ${_indexed_evidence_contract}")
+        endif()
+    endforeach()
+endforeach()
+string(FIND "${_top_level_cmake_source}"
+       "_model_d_validation_reports_argument"
+       _packed_report_argument_position)
+if(NOT _packed_report_argument_position LESS 0)
+    message(FATAL_ERROR
+        "final validation staging still transports reports as a packed semicolon argument")
+endif()
+
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/ProvisionPluginval.cmake"
      _pluginval_provision_source)
 foreach(_empty_tool_root_contract IN ITEMS

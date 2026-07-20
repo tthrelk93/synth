@@ -497,6 +497,54 @@ deep verification. The superseding local hashes are:
 | Debug | `49f268d8028c01b3bbc5b194c720f0e959cb0cfb2158af7e2b106fa33bfaf606` | `96ee230dbbf903beea1609510323818c7d3bb96aebf65dff4c4785db280f6c87` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
 | Release | `fa0a5dca8a294783a3d87a6eb4776827ebb40e5a87f68a8a54307992e5916f53` | `462128dafbe1bdb4cf465bb7595afaade465b412ae434c88dcd67f170ee90953` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
 
+## Seventh corrective run and Visual Studio list transport
+
+Commit `b8e18e3df3a020ecec45928a408049966958c79b` published the safe
+fresh-build pluginval ownership and host-owned wrapper-editor lifecycle. Push
+run [`29724250993`](https://github.com/tthrelk93/synth/actions/runs/29724250993)
+materialized all eight exact-head rows; duplicate pull-request run
+`29724252862` was cancelled. All four macOS and both Linux rows completed the
+strict build, 9/9 CTest, every required label, direct standalone lifecycle,
+actual-wrapper 3/3, pluginval 3/3, platform-appropriate auval, linked-manifest
+verification, and upload. This proves the Linux host/editor teardown fix and
+both fresh-build pluginval ownership paths across those generators.
+
+Both Windows configurations completed their strict builds, 9/9 CTest, every
+label, direct standalone lifecycle, pluginval provisioning, actual-wrapper
+3/3, pluginval 1.0.4 strictness-10 in 3/3 isolated processes, and non-macOS
+auval record. Visual Studio then preserved a trailing quote while transporting
+the complete report inventory as one quoted, semicolon-packed `-D` value.
+Final staging therefore looked for `standalone-lifecycle-report.json"` and
+failed before generating the two linked manifests. The matching Debug and
+Release failure, successful underlying reports, and exact error are retained;
+this is a generator command-line boundary rather than a validator failure.
+
+The complete run metadata, combined log, eight job logs, and all eight uploads
+are retained under `/private/tmp/model-d-agent03-corrective7.q0gobg`. Its
+checksum index covers 351 regular evidence files and has SHA-256
+`10f6a6b00bb82f42cf671cde05e130aa70db1d5a977703a66f7e50596716c37d`;
+independent `shasum -c` verification passes. The combined run log SHA-256 is
+`cba2ac61f43c6355685ca07ae8318e041db78cf4b2cb08b6c526bf7f8f98ace0`
+and the run-metadata SHA-256 is
+`69e0c9a630b38aab8939659c8092207bc58735aa17eb69a352a9de5af60f8c66`.
+This non-green diagnostic run does not promote a BLD status.
+
+Finalization now transports every report and expected-evidence entry as a
+separately quoted indexed argument with an explicit count. The staging,
+manifest-generation, and manifest-verification scripts reconstruct and
+validate those inventories while preserving the supported legacy aggregate
+input. The path-safety contract was observed failing before this correction and
+now forbids reintroducing packed finalization arguments. Fresh space-bearing
+local Debug and Release all-target builds and 9/9 CTest pass; each linked
+validation target also passes actual-wrapper 3/3, pluginval 3/3, standalone
+9/9, manifest generation, and deep verification. The local external gate
+statuses remain truthfully blocked.
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `3847804dd0463c3ecfc8631284e2951996770eefa86b77c36446897afe7b8f66` | `0a1f0df985bceb17e037a299945d7c060e5dfd97531962b17711de97cde46f32` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `b7a73270510db54af9ff29fcf4057e77a1dd06b4dd1fd3002cec2ccd02081372` | `5674dc593dbcb2aa0c1c74439b9f371f2c4a5bf720f521c482dbbac935b7bce0` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
