@@ -76,6 +76,8 @@ if(_contract_position LESS 0)
 endif()
 
 file(READ "${SYNTH_SOURCE_ROOT}/Source/StandaloneApp.cpp" _standalone_source)
+file(READ "${SYNTH_SOURCE_ROOT}/Source/PianoKey.h" _piano_key_header)
+file(READ "${SYNTH_SOURCE_ROOT}/Tools/ModelDActualWrapperSmoke.cpp" _wrapper_smoke_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/RunActualWrapperSmoke.cmake" _wrapper_runner_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/RunPluginval.cmake" _pluginval_runner_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake" _manifest_generator_source)
@@ -132,9 +134,25 @@ if(_standalone_source MATCHES "StandalonePluginHolder|StandaloneFilterWindow")
     message(FATAL_ERROR
         "Standalone lifecycle implementation still constructs JUCE's non-deferrable holder/window")
 endif()
+if(_wrapper_smoke_source MATCHES "windowIsTemporary")
+    message(FATAL_ERROR
+        "Actual-wrapper editor smoke still requests the unsafe bare-Xvfb borderless path")
+endif()
+string(FIND "${_wrapper_smoke_source}"
+       "juce::ComponentPeer::windowHasTitleBar" _wrapper_host_window_position)
+if(_wrapper_host_window_position LESS 0)
+    message(FATAL_ERROR
+        "Actual-wrapper editor smoke does not use a normal host-style desktop window")
+endif()
 if(_standalone_source MATCHES "ApplicationProperties|Time::getMillisecond")
     message(FATAL_ERROR
         "Standalone lifecycle still uses default-path settings or wall-clock ordering")
+endif()
+string(FIND "${_piano_key_header}"
+       "bool isKeyPressed = false;" _piano_key_initial_state_position)
+if(_piano_key_initial_state_position LESS 0)
+    message(FATAL_ERROR
+        "PianoKey does not define a deterministic initial released state")
 endif()
 foreach(_required_contract IN ITEMS
         "--settings"
@@ -155,6 +173,16 @@ foreach(_required_contract IN ITEMS
     if(_contract_position LESS 0)
         message(FATAL_ERROR
             "Standalone lifecycle source is missing reviewed contract: ${_required_contract}")
+    endif()
+endforeach()
+foreach(_screenshot_warmup_contract IN ITEMS
+        "renderingWarmup"
+        "screenshot_render_warmup_valid")
+    string(FIND "${_standalone_source}"
+           "${_screenshot_warmup_contract}" _warmup_contract_position)
+    if(_warmup_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone screenshot capture is missing renderer warm-up evidence: ${_screenshot_warmup_contract}")
     endif()
 endforeach()
 foreach(_display_provider_contract IN ITEMS

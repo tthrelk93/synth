@@ -330,6 +330,57 @@ reports truthfully record the native macOS display provider. Their hashes are:
 | Debug | `1306365dada2c876affd71015698950c1ff99b54286acb0221c4d7b58079c5cf` | `26c882620d7a6c425199b32aa79c15e6861f0a60765a11c5cc1a9b7e1214dc07` | `fb5151825a7c7e29e6708f62ed502059ecd1b7ec348707dd8f843039fe5de62b` |
 | Release | `833eef3e843d025b61e9f08c16e198229884a3e5de6e9e670d7865abaabec26d` | `246932c0493e208eb7f6be79518d4fdbf8b755fd37bbdbade5ebf267e502bdd2` | `84bb0644582390fbd759d5c91b8735b106b37e73deeaf846e31295796b8db4e6` |
 
+## Fourth corrective run and final lifecycle findings
+
+Commit `f2fbc9210db7201c167e45c8c7522e1c5f0d97a5` published the verified
+job-scoped display implementation and remaining Windows conversions. Push run
+[`29720578388`](https://github.com/tthrelk93/synth/actions/runs/29720578388)
+materialized all eight exact-head matrix rows; duplicate pull-request run
+`29720580019` was cancelled. All four macOS rows completed the entire strict
+build, test, validator, ephemeral-AU, and linked-manifest chain. Both Linux
+rows completed their strict builds, 9/9 CTest, every separately required
+label, and the direct standalone lifecycle gate on the verified inherited X11
+display. Both Windows rows completed strict warnings-as-errors builds and the
+first six CTest contracts.
+
+The retained artifacts isolated three final lifecycle boundaries:
+
+- Linux actual-wrapper validation entered JUCE's borderless temporary-window
+  path on bare Xvfb. JUCE 8.0.10 then issued `X_ChangeProperty` through an
+  absent `_NET_WM_WINDOW_TYPE` atom and X11 terminated the process with
+  `BadAtom`. The wrapper smoke now uses a normal titled, resizable host-style
+  peer; pluginval continues to exercise its independent hosted-editor path.
+- Windows Debug's first normal screenshot differed from repeats two and three
+  by only 25 decoded text-antialias pixels while all application reports and
+  assertions were byte-identical. A discarded full offscreen render now warms
+  JUCE/OS font state before each fresh process records its evidence screenshot,
+  and that warm-up is asserted and deep-verified.
+- Windows Release additionally exposed 79,261 changed decoded pixels bounded
+  entirely to the keyboard. `PianoKey::isKeyPressed` had no initializer, so a
+  release build could paint arbitrary keys as pressed. It now begins explicitly
+  released; the lifecycle report asserts that initial state before performing
+  the note-on/off round trip, and the source contract prevents regression.
+
+The completed diagnostic run log has SHA-256
+`afd0f6980e40f10c84e77ae1eaecb2776cb93cd150ea8de46dd821027d583676`.
+All eight uploads and the complete run metadata/log were retained under
+`/private/tmp/model-d-agent03-corrective4.lqw1Lx`. Its checksum index covers
+296 regular evidence files and has SHA-256
+`77c98e54921ca3f2e6204a13a56103f1bd39e39a26d60d017364dd9300985108`.
+No BLD status is promoted from this non-green diagnostic run.
+
+After the three fixes, the space-bearing local Debug and Release trees again
+passed strict all-target builds, 9/9 CTest, standalone lifecycle 9/9 with
+identical per-mode evidence across fresh processes, actual-wrapper 3/3,
+pluginval 1.0.4 strictness-10 in 3/3 isolated processes, and linked-manifest
+deep verification. Local auval and the aggregate release status remain
+truthfully blocked on the declared external gates.
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `64992941832f29f1c0ccf466a8cbb0696695911eb48299b1148a4f2c0add0c10` | `c9e039cb627c4959ad2ea15a185a019611debe29cd68709e945c19d0bb402d8e` | `bca92415798a3c3d4a2c788509258321e9633482dfa363dfb9a81f434f7ddd05` |
+| Release | `692782ba79eaeaf3731d2a644733b144eb7fc43e77995b0ec0ed5ef5802f556f` | `8dbd45284a2455020b231789df5bff980ab87ba3fc4c631a6b7b739d6d2e62b1` | `e797967f899065cfc854253a8f386b185c8831b5b57ce882f36c535aea9f3d6c` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -354,8 +405,7 @@ registration, the SDK validator, and the designated commercial hosts.
 
 BLD statuses remain unchanged through these diagnostic attempts. BLD-004
 remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The final compatibility sweep is locally green in fresh Debug
-and Release all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and
-linked-validation execution. Publish that sweep and require one exact-head
-hosted run with all eight matrix rows green before promoting any
-hosted-dependent BLD row.
+`in-progress`. The fourth correction is locally green in Debug and Release
+all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
+execution. Publish that correction and require one exact-head hosted run with
+all eight matrix rows green before promoting any hosted-dependent BLD row.

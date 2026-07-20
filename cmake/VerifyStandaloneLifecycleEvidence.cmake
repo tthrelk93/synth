@@ -340,6 +340,7 @@ foreach(_mode IN LISTS _expected_modes)
                 editor_resize_round_trip
                 status_label_showing
                 status_label_bounds_nonempty
+                piano_key_initially_released
                 piano_note_round_trip
                 piano_key_released
                 status_nonempty
@@ -350,6 +351,7 @@ foreach(_mode IN LISTS _expected_modes)
                 no_device_discovery_skipped
                 settings_path_matches_request
                 preset_directory_matches_request
+                screenshot_render_warmup_valid
                 png_valid_nonempty
                 png_dimensions_match)
             _synth_require_true("${_app_report}" "${_assertion}" "Standalone run ${_run_index}")

@@ -873,16 +873,20 @@ private:
         if (visiblePianoKeys.isEmpty())
             failures.add ("No visible PianoKey components were found");
 
+        bool keyInitiallyReleased = false;
         bool noteRoundTrip = false;
         bool keyReleased = false;
         if (auto* key = visiblePianoKeys.getFirst())
         {
+            keyInitiallyReleased = ! key->isCurrentlyPressed();
             key->triggerNoteOn();
             const auto pressed = key->isCurrentlyPressed();
             key->triggerNoteOff();
             keyReleased = ! key->isCurrentlyPressed();
             noteRoundTrip = pressed && keyReleased;
         }
+        assertThat ("piano_key_initially_released", keyInitiallyReleased,
+                    "Visible piano key did not begin in its released state");
         assertThat ("piano_note_round_trip", noteRoundTrip, "Visible piano key note round trip failed");
         assertThat ("piano_key_released", keyReleased, "Visible piano key did not return to released state");
 
@@ -915,27 +919,41 @@ private:
         assertThat ("preset_directory_matches_request", presetDirectoryMatches,
                     "Standalone editor did not use the explicit lifecycle preset directory");
 
+        bool screenshotRenderWarmupValid = false;
         bool pngValid = false;
         bool pngDimensionsMatch = false;
         const auto windowBounds = hasWindow ? mainWindow->getBounds() : Rectangle<int>{};
         if (hasWindow && ! windowBounds.isEmpty())
         {
-            const auto image = mainWindow->createComponentSnapshot (mainWindow->getLocalBounds(), true);
-            lifecycle.screenshot.getParentDirectory().createDirectory();
-            if (auto stream = lifecycle.screenshot.createOutputStream())
+            // JUCE's first offscreen text render may populate an OS font cache.
+            // On a cold Windows runner that one-time cache fill can change a
+            // handful of antialias pixels. Discard one complete render so every
+            // recorded fresh-process screenshot begins from the same state.
+            const auto renderingWarmup =
+                mainWindow->createComponentSnapshot (mainWindow->getLocalBounds(), true);
+            screenshotRenderWarmupValid = renderingWarmup.isValid();
+            if (screenshotRenderWarmupValid)
             {
-                PNGImageFormat png;
-                if (png.writeImageToStream (image, *stream))
+                const auto image =
+                    mainWindow->createComponentSnapshot (mainWindow->getLocalBounds(), true);
+                lifecycle.screenshot.getParentDirectory().createDirectory();
+                if (auto stream = lifecycle.screenshot.createOutputStream())
                 {
-                    stream->flush();
-                    const auto decoded = ImageFileFormat::loadFrom (lifecycle.screenshot);
-                    pngValid = decoded.isValid() && lifecycle.screenshot.getSize() > 0;
-                    pngDimensionsMatch = pngValid
-                        && decoded.getWidth() == windowBounds.getWidth()
-                        && decoded.getHeight() == windowBounds.getHeight();
+                    PNGImageFormat png;
+                    if (png.writeImageToStream (image, *stream))
+                    {
+                        stream->flush();
+                        const auto decoded = ImageFileFormat::loadFrom (lifecycle.screenshot);
+                        pngValid = decoded.isValid() && lifecycle.screenshot.getSize() > 0;
+                        pngDimensionsMatch = pngValid
+                            && decoded.getWidth() == windowBounds.getWidth()
+                            && decoded.getHeight() == windowBounds.getHeight();
+                    }
                 }
             }
         }
+        assertThat ("screenshot_render_warmup_valid", screenshotRenderWarmupValid,
+                    "Standalone screenshot renderer warm-up failed");
         assertThat ("png_valid_nonempty", pngValid, "PNG screenshot is missing or invalid");
         assertThat ("png_dimensions_match", pngDimensionsMatch, "PNG dimensions do not match the window");
 

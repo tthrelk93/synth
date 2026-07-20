@@ -434,7 +434,12 @@ void verifyEditor (juce::AudioPluginInstance& instance)
     require (instance.hasEditor(), "hosted wrapper must expose an editor");
     std::unique_ptr<juce::AudioProcessorEditor> editor { instance.createEditorIfNeeded() };
     require (editor != nullptr, "hosted wrapper editor creation failed");
-    editor->addToDesktop (juce::ComponentPeer::windowIsTemporary);
+    // Bare Xvfb intentionally has no window manager. A temporary, borderless
+    // peer enters JUCE's X11 decoration-removal path, which can publish through
+    // an absent _NET_WM_WINDOW_TYPE atom and abort with BadAtom. Model an
+    // ordinary host window; pluginval separately covers its own window path.
+    editor->addToDesktop (juce::ComponentPeer::windowHasTitleBar
+                          | juce::ComponentPeer::windowIsResizable);
     editor->setVisible (true);
     require (editor->isVisible(), "hosted wrapper editor did not become visible");
     juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
