@@ -187,12 +187,22 @@ if(EXISTS "${_output_directory}" OR IS_SYMLINK "${_output_directory}")
         message(FATAL_ERROR "pluginval tool-root ownership marker is symlinked")
     endif()
     if(NOT EXISTS "${_tool_root_marker}")
-        message(FATAL_ERROR
-            "refusing to clean an unmarked pluginval tool root: ${_output_directory}")
-    endif()
-    file(READ "${_tool_root_marker}" _tool_root_marker_contents)
-    if(NOT _tool_root_marker_contents STREQUAL "model-d-pluginval-tool-root-v1\n")
-        message(FATAL_ERROR "pluginval tool-root ownership marker is invalid")
+        # Visual Studio may create the parent of a declared custom-command
+        # OUTPUT before launching this script. Adopt that fixed, build-owned
+        # directory only while it is empty; never clean unmarked contents.
+        file(GLOB _unmarked_tool_entries LIST_DIRECTORIES true
+             "${_output_directory}/*"
+             "${_output_directory}/.[!.]*"
+             "${_output_directory}/..?*")
+        if(_unmarked_tool_entries)
+            message(FATAL_ERROR
+                "unmarked pluginval tool root is not empty: ${_output_directory}")
+        endif()
+    else()
+        file(READ "${_tool_root_marker}" _tool_root_marker_contents)
+        if(NOT _tool_root_marker_contents STREQUAL "model-d-pluginval-tool-root-v1\n")
+            message(FATAL_ERROR "pluginval tool-root ownership marker is invalid")
+        endif()
     endif()
     file(REMOVE_RECURSE "${_output_directory}")
 endif()

@@ -429,23 +429,49 @@ void verifyState (juce::AudioPluginInstance& instance)
              "host parameter value did not return after state restoration");
 }
 
+class EditorHostWindow final : public juce::DocumentWindow
+{
+public:
+    EditorHostWindow()
+        : DocumentWindow ("Model D wrapper host",
+                          juce::Colours::black,
+                          DocumentWindow::allButtons,
+                          true)
+    {
+        setResizable (true, true);
+    }
+
+    void closeButtonPressed() override {}
+};
+
+void drainHostWindowEvents()
+{
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
+}
+
 void verifyEditor (juce::AudioPluginInstance& instance)
 {
     require (instance.hasEditor(), "hosted wrapper must expose an editor");
     std::unique_ptr<juce::AudioProcessorEditor> editor { instance.createEditorIfNeeded() };
     require (editor != nullptr, "hosted wrapper editor creation failed");
-    // Bare Xvfb intentionally has no window manager. A temporary, borderless
-    // peer enters JUCE's X11 decoration-removal path, which can publish through
-    // an absent _NET_WM_WINDOW_TYPE atom and abort with BadAtom. Model an
-    // ordinary host window; pluginval separately covers its own window path.
-    editor->addToDesktop (juce::ComponentPeer::windowHasTitleBar
-                          | juce::ComponentPeer::windowIsResizable);
-    editor->setVisible (true);
-    require (editor->isVisible(), "hosted wrapper editor did not become visible");
-    juce::MessageManager::getInstance()->runDispatchLoopUntil (100);
-    editor->setVisible (false);
-    editor->removeFromDesktop();
+
+    // Plug-in editors are embedded in a host-owned top-level window. Exercise
+    // that topology and drain hide/destroy events before releasing the editor,
+    // so X11 cannot repaint a peer after its drawable has been destroyed.
+    {
+        EditorHostWindow hostWindow;
+        hostWindow.setContentNonOwned (editor.get(), true);
+        hostWindow.centreWithSize (hostWindow.getWidth(), hostWindow.getHeight());
+        hostWindow.setVisible (true);
+        require (editor->isShowing(), "hosted wrapper editor did not become showing");
+        drainHostWindowEvents();
+        hostWindow.setVisible (false);
+        drainHostWindowEvents();
+        hostWindow.clearContentComponent();
+    }
+    drainHostWindowEvents();
     editor.reset();
+    drainHostWindowEvents();
     require (instance.getActiveEditor() == nullptr,
              "hosted wrapper retained the closed editor");
 }

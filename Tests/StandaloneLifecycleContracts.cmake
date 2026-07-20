@@ -141,12 +141,18 @@ if(_wrapper_smoke_source MATCHES "windowIsTemporary")
     message(FATAL_ERROR
         "Actual-wrapper editor smoke still requests the unsafe bare-Xvfb borderless path")
 endif()
-string(FIND "${_wrapper_smoke_source}"
-       "juce::ComponentPeer::windowHasTitleBar" _wrapper_host_window_position)
-if(_wrapper_host_window_position LESS 0)
-    message(FATAL_ERROR
-        "Actual-wrapper editor smoke does not use a normal host-style desktop window")
-endif()
+foreach(_wrapper_host_window_contract IN ITEMS
+        "class EditorHostWindow final : public juce::DocumentWindow"
+        "setContentNonOwned (editor.get(), true)"
+        "clearContentComponent()"
+        "drainHostWindowEvents")
+    string(FIND "${_wrapper_smoke_source}"
+           "${_wrapper_host_window_contract}" _wrapper_host_window_position)
+    if(_wrapper_host_window_position LESS 0)
+        message(FATAL_ERROR
+            "Actual-wrapper editor smoke does not use a drained host-container lifecycle: ${_wrapper_host_window_contract}")
+    endif()
+endforeach()
 if(_standalone_source MATCHES "ApplicationProperties|Time::getMillisecond")
     message(FATAL_ERROR
         "Standalone lifecycle still uses default-path settings or wall-clock ordering")

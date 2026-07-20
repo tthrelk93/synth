@@ -445,6 +445,58 @@ local hashes are:
 | Debug | `4dac4421dac0faf0f81bcede3f6f03c6e984770cc75115882633722e94f3d92f` | `099bb067df209fcf3946274cedad1cc0e4b52fab77c485aa7b0bbad820fba11d` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
 | Release | `c281e8db48ae2d261e555f903b536a508d833680c6e3daeabaa68d5dcaa2c87f` | `6e158581e00364c4fcc3021465900e1355357694530c6330025b3f4b76075997` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
 
+## Sixth corrective run and fresh-build validator ownership
+
+Commit `e6cffdd2ddcbcd687388fa79d5a960b0908cb2b5` published the verified
+window-manager, fresh-process renderer warm-up, and Windows path normalization.
+Push run
+[`29723101273`](https://github.com/tthrelk93/synth/actions/runs/29723101273)
+materialized all eight exact-head rows; duplicate pull-request run `29723102866`
+was cancelled. All four macOS rows completed the complete chain. Both Windows
+and both Linux rows completed strict builds, 9/9 CTest, every required label,
+and the separate staged standalone lifecycle gate. This proves the prior
+Windows first-process/path failures are fixed in both configurations and the
+verified Openbox startup supports the complete standalone gate on Linux.
+
+The final combined-validator step exposed two later, independent boundaries:
+
+- Visual Studio pre-created the parent directory for the custom command's
+  declared pluginval stamp. Provisioning correctly refused to clean the
+  resulting unmarked directory even though it was empty. The provisioner now
+  adopts only the fixed, build-owned directory while empty; any unmarked
+  content is still rejected and preserved. The path-safety contract executes
+  both the empty-adoption and nonempty-rejection cases.
+- Both Linux rows provisioned pluginval successfully and the original
+  `BadAtom` is absent. The wrapper smoke then destroyed a plug-in editor that it
+  had made directly top-level while X11/WM events remained queued. Debug
+  terminated with `BadDrawable` during `X_CreateGC`; Release terminated with
+  `BadWindow` during `X_ChangeWindowAttributes`. The smoke now embeds the
+  editor in a `DocumentWindow` owned by the simulated host, hides and detaches
+  it, and drains the message loop across host destruction and editor release.
+  This models the normal host/editor ownership boundary instead of assigning a
+  top-level peer directly to the plug-in editor.
+
+The complete run metadata, combined log, and all eight uploads are retained
+under `/private/tmp/model-d-agent03-corrective6.GQ9Q4I`. Its checksum index
+covers 300 regular files and has SHA-256
+`bfd358057f37e0d8c8b4c74744ba584aa6275cfc827b419ad7326fa5140b6aad`;
+independent `shasum -c` verification passes. The combined run log SHA-256 is
+`505b1252a2f9714369f5f099817f97893fd71cccb255884d9757b9db79a4322e`
+and the run-summary SHA-256 is
+`6ec9f88104d1791fc92823ad66dfe580c0bb4444a50ba554f8b45682a4326e16`.
+This non-green diagnostic run does not promote a BLD status.
+
+Both new regressions were observed failing before their corrections. Fresh
+local Debug and Release strict all-target builds then passed 9/9 CTest,
+standalone lifecycle 9/9, actual-wrapper 3/3 with the host container,
+pluginval 1.0.4 strictness-10 in 3/3 isolated processes, and linked-manifest
+deep verification. The superseding local hashes are:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `49f268d8028c01b3bbc5b194c720f0e959cb0cfb2158af7e2b106fa33bfaf606` | `96ee230dbbf903beea1609510323818c7d3bb96aebf65dff4c4785db280f6c87` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `fa0a5dca8a294783a3d87a6eb4776827ebb40e5a87f68a8a54307992e5916f53` | `462128dafbe1bdb4cf465bb7595afaade465b412ae434c88dcd67f170ee90953` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -469,7 +521,7 @@ registration, the SDK validator, and the designated commercial hosts.
 
 BLD statuses remain unchanged through these diagnostic attempts. BLD-004
 remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The fifth correction is locally green in Debug and Release
+`in-progress`. The sixth correction is locally green in Debug and Release
 all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
 execution. Publish that correction and require one exact-head hosted run with
 all eight matrix rows green before promoting any hosted-dependent BLD row.

@@ -24,6 +24,20 @@ if(EXISTS "${_contract_root}")
 endif()
 file(MAKE_DIRECTORY "${_contract_root}")
 
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/ProvisionPluginval.cmake"
+     _pluginval_provision_source)
+foreach(_empty_tool_root_contract IN ITEMS
+        "file(GLOB _unmarked_tool_entries"
+        "if(_unmarked_tool_entries)"
+        "unmarked pluginval tool root is not empty")
+    string(FIND "${_pluginval_provision_source}"
+           "${_empty_tool_root_contract}" _empty_tool_root_position)
+    if(_empty_tool_root_position LESS 0)
+        message(FATAL_ERROR
+            "pluginval provisioning cannot safely adopt a generator-created empty tool root: ${_empty_tool_root_contract}")
+    endif()
+endforeach()
+
 if(SYNTH_SYSTEM_NAME STREQUAL "Darwin")
     set(_asset "pluginval_macOS.zip")
     set(_archive_sha256 "3c4c533bda0c5059eea3ddaea752d757ee2025041f0f47e6bcb0e87f6082b29f")
@@ -41,6 +55,74 @@ else()
 endif()
 set(_download_url
     "https://github.com/Tracktion/pluginval/releases/download/v1.0.4/${_asset}")
+
+# Visual Studio may create the parent directory of a custom-command OUTPUT
+# before the command runs. Provisioning may adopt that exact empty directory,
+# but it must still reject and preserve any unmarked contents.
+set(_empty_tool_build "${_contract_root}/empty-tool-root/build")
+set(_empty_tool_output
+    "${_empty_tool_build}/validation-tools/pluginval/v1.0.4")
+file(MAKE_DIRECTORY "${_empty_tool_output}" "${_empty_tool_build}/validation")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_BUILD_ROOT=${_empty_tool_build}"
+        "-DSYNTH_PLUGINVAL_OUTPUT_DIRECTORY=${_empty_tool_output}"
+        "-DSYNTH_PLUGINVAL_METADATA_PATH=${_empty_tool_build}/validation/pluginval-provision.json"
+        "-DSYNTH_PLUGINVAL_STAMP_PATH=${_empty_tool_output}/provision.stamp"
+        "-DSYNTH_PLUGINVAL_PLATFORM_ASSET=${_asset}"
+        "-DSYNTH_PLUGINVAL_EXPECTED_ARCHIVE_SHA256=${_archive_sha256}"
+        "-DSYNTH_PLUGINVAL_DOWNLOAD_URL=${_download_url}"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE_RELATIVE_PATH=${_executable_relative}"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE_OVERRIDE=${_empty_tool_build}/missing-pluginval"
+        "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+        -P "${SYNTH_SOURCE_ROOT}/cmake/ProvisionPluginval.cmake"
+    RESULT_VARIABLE _empty_tool_status
+    OUTPUT_VARIABLE _empty_tool_stdout
+    ERROR_VARIABLE _empty_tool_stderr
+    ENCODING UTF-8)
+set(_empty_tool_output_text "${_empty_tool_stdout}${_empty_tool_stderr}")
+set(_empty_tool_marker "${_empty_tool_output}/.synth-pluginval-tool-root")
+if(_empty_tool_status STREQUAL "0"
+   OR NOT _empty_tool_output_text MATCHES "SYNTH_PLUGINVAL_EXECUTABLE does not exist"
+   OR NOT EXISTS "${_empty_tool_marker}")
+    message(FATAL_ERROR
+        "pluginval did not safely adopt a generator-created empty tool root:\n${_empty_tool_output_text}")
+endif()
+file(READ "${_empty_tool_marker}" _empty_tool_marker_contents)
+if(NOT _empty_tool_marker_contents STREQUAL "model-d-pluginval-tool-root-v1\n")
+    message(FATAL_ERROR "adopted pluginval tool root has an invalid marker")
+endif()
+
+set(_nonempty_tool_build "${_contract_root}/nonempty-tool-root/build")
+set(_nonempty_tool_output
+    "${_nonempty_tool_build}/validation-tools/pluginval/v1.0.4")
+set(_unowned_tool_file "${_nonempty_tool_output}/.unowned")
+file(MAKE_DIRECTORY "${_nonempty_tool_output}" "${_nonempty_tool_build}/validation")
+file(WRITE "${_unowned_tool_file}" "must-not-be-removed\n")
+execute_process(
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_BUILD_ROOT=${_nonempty_tool_build}"
+        "-DSYNTH_PLUGINVAL_OUTPUT_DIRECTORY=${_nonempty_tool_output}"
+        "-DSYNTH_PLUGINVAL_METADATA_PATH=${_nonempty_tool_build}/validation/pluginval-provision.json"
+        "-DSYNTH_PLUGINVAL_STAMP_PATH=${_nonempty_tool_output}/provision.stamp"
+        "-DSYNTH_PLUGINVAL_PLATFORM_ASSET=${_asset}"
+        "-DSYNTH_PLUGINVAL_EXPECTED_ARCHIVE_SHA256=${_archive_sha256}"
+        "-DSYNTH_PLUGINVAL_DOWNLOAD_URL=${_download_url}"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE_RELATIVE_PATH=${_executable_relative}"
+        "-DSYNTH_PLUGINVAL_EXECUTABLE_OVERRIDE=${_nonempty_tool_build}/missing-pluginval"
+        "-DSYNTH_SYSTEM_NAME=${SYNTH_SYSTEM_NAME}"
+        -P "${SYNTH_SOURCE_ROOT}/cmake/ProvisionPluginval.cmake"
+    RESULT_VARIABLE _nonempty_tool_status
+    OUTPUT_VARIABLE _nonempty_tool_stdout
+    ERROR_VARIABLE _nonempty_tool_stderr
+    ENCODING UTF-8)
+if(_nonempty_tool_status STREQUAL "0"
+   OR NOT "${_nonempty_tool_stdout}${_nonempty_tool_stderr}" MATCHES
+          "unmarked pluginval tool root is not empty"
+   OR NOT EXISTS "${_unowned_tool_file}")
+    message(FATAL_ERROR
+        "pluginval did not preserve a nonempty unmarked tool root:\n${_nonempty_tool_stdout}${_nonempty_tool_stderr}")
+endif()
 
 function(_synth_require_rejected_without_external_mutation
          description status output external_directory)
