@@ -220,7 +220,19 @@ synth_get_plugin_artifact(_model_d_vst3_artifact ModelDPlugin_VST3)
 synth_get_plugin_artifact(_model_d_standalone_artifact ModelDPlugin_Standalone)
 set(_model_d_stage_dependencies ModelDPlugin_VST3 ModelDPlugin_Standalone)
 string(REPLACE ";" "\\;" _model_d_test_reports_command_argument "${SYNTH_TEST_REPORTS}")
-string(REPLACE ";" "\\;" _model_d_expected_formats_command_argument "${_model_d_formats}")
+set(_model_d_build_inventory_directory
+    "${CMAKE_BINARY_DIR}/model-d-build-inventory")
+file(MAKE_DIRECTORY "${_model_d_build_inventory_directory}")
+set(_model_d_expected_formats_file
+    "${_model_d_build_inventory_directory}/expected-formats.txt")
+file(WRITE "${_model_d_expected_formats_file}" "")
+foreach(_format IN LISTS _model_d_formats)
+    if(_format MATCHES "[\r\n]")
+        message(FATAL_ERROR
+            "Expected artifact formats must not contain line breaks: ${_format}")
+    endif()
+    file(APPEND "${_model_d_expected_formats_file}" "${_format}\n")
+endforeach()
 if(APPLE)
     set(_model_d_sdk_identifier "macosx")
     execute_process(
@@ -279,7 +291,7 @@ add_custom_target(ModelDVerifyStagedArtifacts
     COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
-            "-DSYNTH_EXPECTED_FORMATS=${_model_d_expected_formats_command_argument}"
+            "-DSYNTH_EXPECTED_FORMATS_FILE=${_model_d_expected_formats_file}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyStagedArtifacts.cmake"
     COMMENT "Verifying Model D development artifact staging manifest"
     VERBATIM)
@@ -579,7 +591,7 @@ if(SYNTH_BUILD_VALIDATORS)
         COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_STAGE_DIRECTORY=${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
-            "-DSYNTH_EXPECTED_FORMATS=${_model_d_expected_formats_command_argument}"
+            "-DSYNTH_EXPECTED_FORMATS_FILE=${_model_d_expected_formats_file}"
             -DSYNTH_ALLOW_VALIDATION_MANIFEST=ON
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyStagedArtifacts.cmake"
         COMMAND "${CMAKE_COMMAND}"

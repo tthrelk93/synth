@@ -596,6 +596,52 @@ verification. The superseding local hashes are:
 | Debug | `94d40724a730271a5424a5a7306ad735e2da1043e86a70cb7fd9915eb7d09a82` | `db84070d44e83becc627ed3fd490ca558bd2fe5bf6503dc3f5a6cc3ae3d16d8b` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
 | Release | `d5c75915cba5c032d78b63cfe954d212435215db9b47b499ba68834f72f88955` | `eea4e2fd5d79af91e512182913b7342130ea01d2b42a9b61668a10706af6f9dc` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
 
+## Ninth corrective run and the remaining format-list boundary
+
+Commit `6638602dfe8ea9e34d0a368e3f61ae065c0275a4` published the bounded
+report and expected-evidence inventories. Push run
+[`29726180792`](https://github.com/tthrelk93/synth/actions/runs/29726180792)
+materialized all eight exact-head rows; duplicate pull-request run
+`29726182699` was cancelled. All four macOS and both Linux rows completed the
+entire chain. Both Windows rows completed strict builds, 9/9 CTest, every
+required label, direct standalone lifecycle, actual-wrapper 3/3, pluginval
+3/3, non-macOS auval evidence, final staging, and both manifest-generation
+commands. This proves the report and expected-evidence inventory files cross
+Visual Studio intact and remain portable on every other supported generator.
+
+The first command in the final verification target still transported the two
+expected artifact formats as one escaped semicolon list. Visual Studio
+preserved the value's trailing quote and dropped the following `-P` argument,
+so both Windows rows produced the same no-script CMake diagnostic before the
+deep verifiers ran. The underlying artifacts, validator reports, build
+manifest, and validation manifest were present and uploaded. The format set
+now uses a short build-owned `expected-formats.txt` inventory as well; direct
+script callers retain the legacy aggregate input. The path-safety regression
+was observed failing before this correction and now forbids the last packed
+multi-value custom-command argument.
+
+The complete run metadata, combined log, eight job logs, and all eight uploads
+are retained under `/private/tmp/model-d-agent03-corrective9.HpTIbr`. Its
+checksum index covers 354 evidence files and has SHA-256
+`564df9c9653d1dd3d2dd7711a3f03403623ca08208a9bf0914029b75746eec15`;
+independent `shasum -c` verification passes and is recorded separately. The
+combined run log SHA-256 is
+`4596c862a2df5c361211f7c141e900889127adbbfd75c80f81c1a613bdbf8b3c`
+and the run-metadata SHA-256 is
+`8c95c314b945e77af420c48a8c144a2ac86e466007059ef23bc554d31284ad3a`.
+This non-green diagnostic run does not promote a BLD status.
+
+Fresh space-bearing local Debug and Release strict all-target builds, 9/9
+CTest, every required label, and the complete linked-validation target pass
+with the format inventory. Both configurations again prove standalone 9/9,
+actual-wrapper 3/3, pluginval 1.0.4 strictness-10 in 3/3 isolated processes,
+manifest generation, and deep verification. The local hashes are:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `ed11e9c236c3ee3c8abe704b5726fecf955c8c6aebe18f69870c6df09f5cbad3` | `4c0071e2d9504aeba3179760eb3a09430b8617e87113ac27703221b4287ffdfb` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `eda0167d898968238ad3c8e0e0080a8713aa651f7e2432c2a5777f990cf1ec7c` | `8677303d8e8eb26aaad8cdf0b684f21a5e02c719997ebb21889585b90cd5697e` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -620,7 +666,7 @@ registration, the SDK validator, and the designated commercial hosts.
 
 BLD statuses remain unchanged through these diagnostic attempts. BLD-004
 remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The bounded-inventory correction is locally green in Debug and Release
+`in-progress`. The final format-inventory correction is locally green in Debug and Release
 all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
 execution. Publish that correction and require one exact-head hosted run with
 all eight matrix rows green before promoting any hosted-dependent BLD row.

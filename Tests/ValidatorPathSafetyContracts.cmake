@@ -27,6 +27,8 @@ file(MAKE_DIRECTORY "${_contract_root}")
 file(READ "${SYNTH_SOURCE_ROOT}/CMakeLists.txt" _top_level_cmake_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/StageDevelopmentArtifacts.cmake"
      _stage_development_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyStagedArtifacts.cmake"
+     _verify_staged_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake"
      _generate_validation_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake"
@@ -38,13 +40,25 @@ file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake"
 # arguments for both finalization commands instead.
 foreach(_inventory_transport_contract IN ITEMS
         "SYNTH_TEST_REPORTS_FILE"
+        "SYNTH_EXPECTED_FORMATS_FILE"
         "SYNTH_EXPECTED_EVIDENCE_FILE"
+        "model-d-build-inventory"
         "model-d-validation-inventory")
     string(FIND "${_top_level_cmake_source}"
            "${_inventory_transport_contract}" _top_level_contract_position)
     if(_top_level_contract_position LESS 0)
         message(FATAL_ERROR
             "validation evidence does not use bounded inventory-file transport: ${_inventory_transport_contract}")
+    endif()
+endforeach()
+foreach(_format_inventory_contract IN ITEMS
+        "SYNTH_EXPECTED_FORMATS_FILE"
+        "file(STRINGS")
+    string(FIND "${_verify_staged_source}"
+           "${_format_inventory_contract}" _format_contract_position)
+    if(_format_contract_position LESS 0)
+        message(FATAL_ERROR
+            "staged-artifact verification cannot read the format inventory: ${_format_inventory_contract}")
     endif()
 endforeach()
 foreach(_report_inventory_contract IN ITEMS
@@ -72,6 +86,7 @@ foreach(_validation_source IN ITEMS
     endforeach()
 endforeach()
 foreach(_forbidden_long_transport IN ITEMS
+        "_model_d_expected_formats_command_argument"
         "_model_d_validation_reports_argument"
         "_model_d_validation_report_arguments"
         "_model_d_expected_evidence_argument"

@@ -1,11 +1,27 @@
 cmake_minimum_required(VERSION 3.24)
 
+if(DEFINED SYNTH_EXPECTED_FORMATS_FILE)
+    if("${SYNTH_EXPECTED_FORMATS_FILE}" STREQUAL ""
+       OR NOT EXISTS "${SYNTH_EXPECTED_FORMATS_FILE}")
+        message(FATAL_ERROR
+            "SYNTH_EXPECTED_FORMATS_FILE must name an existing inventory")
+    endif()
+    file(STRINGS "${SYNTH_EXPECTED_FORMATS_FILE}" SYNTH_EXPECTED_FORMATS
+         ENCODING UTF-8)
+    if(NOT SYNTH_EXPECTED_FORMATS)
+        message(FATAL_ERROR
+            "SYNTH_EXPECTED_FORMATS_FILE inventory is empty")
+    endif()
+elseif(DEFINED SYNTH_EXPECTED_FORMATS)
+    string(REPLACE "\\;" ";" SYNTH_EXPECTED_FORMATS
+                   "${SYNTH_EXPECTED_FORMATS}")
+endif()
+
 foreach(_required_variable IN ITEMS SYNTH_STAGE_DIRECTORY SYNTH_BUILD_ROOT SYNTH_EXPECTED_FORMATS)
     if(NOT DEFINED ${_required_variable} OR "${${_required_variable}}" STREQUAL "")
         message(FATAL_ERROR "${_required_variable} is required for staged artifact verification")
     endif()
 endforeach()
-string(REPLACE "\\;" ";" SYNTH_EXPECTED_FORMATS "${SYNTH_EXPECTED_FORMATS}")
 
 function(_synth_normalize_relative_path output_variable input_path)
     string(REPLACE "\\" "/" _separator_normalized_path "${input_path}")
