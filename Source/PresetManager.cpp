@@ -14,7 +14,8 @@ PresetDirectoryState& getPresetDirectoryState() {
 }
 
 bool PresetManager::setStandaloneLifecycleTestDirectory(const juce::File& directory) {
-    if (!juce::File::isAbsolutePath(directory.getFullPathName())) {
+    if (directory != juce::File()
+        && !juce::File::isAbsolutePath(directory.getFullPathName())) {
         return false;
     }
 

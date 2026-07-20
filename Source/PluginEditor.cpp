@@ -464,7 +464,10 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     }
     
     addAndMakeVisible(lowerPanel);
-    lowerPanel.setBounds((getWidth()/2.5 )+ 18, getHeight()/6.3, 300, 320);
+    lowerPanel.setBounds(static_cast<int>((static_cast<double>(getWidth()) / 2.5) + 18.0),
+                         static_cast<int>(static_cast<double>(getHeight()) / 6.3),
+                         300,
+                         320);
     
     addAndMakeVisible(osc1WaveformDisplayRaw);
     addAndMakeVisible(osc2WaveformDisplayRaw);
@@ -512,17 +515,17 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     
     createSliderKnob(ctrlGlideKnob, "ctrlGlideKnob", 11, 0, 10, 1.0, "ctrlGlideKnob", true, ctrlGlideKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(filterAttackTimeKnob, "filterAttackTimeKnob", 1, 10, 10000, 0.01, "filterAttackTimeKnob", true, filterAttackTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(filterAttackTimeKnob, "filterAttackTimeKnob", 1, 10, 10000, 0.01f, "filterAttackTimeKnob", true, filterAttackTimeKnobPos, cellWidth, cellHeight, true);
     
-    createSliderKnob(filterDecayTimeKnob, "filterDecayTimeKnob", 1, 10, 10000, 0.01, "filterDecayTimeKnob", true, filterDecayTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(filterDecayTimeKnob, "filterDecayTimeKnob", 1, 10, 10000, 0.01f, "filterDecayTimeKnob", true, filterDecayTimeKnobPos, cellWidth, cellHeight, true);
     
     createSliderKnob(filterSustainKnob, "filterSustainKnob", 11, 0, 10, 1.0, "filterSustainKnob", true, filterSustainKnobPos, cellWidth, cellHeight, false);
     
     createSliderKnob(noiseVolKnob, "noiseVolKnob", 11, 0, 10, 1.0, "noiseVolKnob", true, noiseVolKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(loudnessAttackTimeKnob, "loudnessAttackTimeKnob", 1, 10, 10000, 0.01, "loudnessAttackTimeKnob", true, loudnessAttackTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(loudnessAttackTimeKnob, "loudnessAttackTimeKnob", 1, 10, 10000, 0.01f, "loudnessAttackTimeKnob", true, loudnessAttackTimeKnobPos, cellWidth, cellHeight, true);
     
-    createSliderKnob(loudnessDecayTimeKnob, "loudnessDecayTimeKnob", 1, 10, 10000, 0.01, "loudnessDecayTimeKnob", true, loudnessDecayTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(loudnessDecayTimeKnob, "loudnessDecayTimeKnob", 1, 10, 10000, 0.01f, "loudnessDecayTimeKnob", true, loudnessDecayTimeKnobPos, cellWidth, cellHeight, true);
     
     createSliderKnob(loudnessSustainLevelKnob, "loudnessSustainLevelKnob", 11, 0, 10, 1.0, "loudnessSustainLevelKnob", true, loudnessSustainLevelKnobPos, cellWidth, cellHeight, false);
     
@@ -806,7 +809,10 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
             // Create a white key
             PianoKey* whiteKey = new PianoKey(false, midiNoteNumber, this);
             pianoKeys.add(whiteKey);
-            whiteKey->setBounds(startX + (whiteKeyIndex * whiteKeyWidth), 700 + 5, whiteKeyWidth, 300-15);
+            whiteKey->setBounds(static_cast<int>(static_cast<float>(startX) + (static_cast<float>(whiteKeyIndex) * whiteKeyWidth)),
+                                700 + 5,
+                                static_cast<int>(whiteKeyWidth),
+                                300 - 15);
             xPosOfLastWhiteKey = whiteKey->getX();
             customPanel.addAndMakeVisible(whiteKey);
             whiteKeyIndex++;
@@ -829,11 +835,20 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
             PianoKey* blackKey = new PianoKey(true, midiNoteNumber, this);
             pianoKeys.add(blackKey);
             if(blackKeyIndex == 0 || blackKeyIndex == 3 || blackKeyIndex == 5 || blackKeyIndex == 8 || blackKeyIndex == 10 || blackKeyIndex == 13 || blackKeyIndex == 15) {
-                blackKey->setBounds(blackKeyPosArr[blackKeyIndex] + (whiteKeyWidth - blackKeyWidth/4) - blackKeyWidth/2, 700 + 5, blackKeyWidth, blackKeyHeight);
+                blackKey->setBounds(static_cast<int>(static_cast<float>(blackKeyPosArr[blackKeyIndex]) + (whiteKeyWidth - blackKeyWidth / 4.0f) - blackKeyWidth / 2.0f),
+                                    700 + 5,
+                                    static_cast<int>(blackKeyWidth),
+                                    blackKeyHeight);
             } else if(blackKeyIndex == 2 || blackKeyIndex == 4 || blackKeyIndex == 7 || blackKeyIndex == 9 || blackKeyIndex == 12 || blackKeyIndex == 14 || blackKeyIndex == 17) {
-                blackKey->setBounds(blackKeyPosArr[blackKeyIndex] + (whiteKeyWidth + blackKeyWidth/4) - blackKeyWidth/2,  700 +5, blackKeyWidth, blackKeyHeight);
+                blackKey->setBounds(static_cast<int>(static_cast<float>(blackKeyPosArr[blackKeyIndex]) + (whiteKeyWidth + blackKeyWidth / 4.0f) - blackKeyWidth / 2.0f),
+                                    700 + 5,
+                                    static_cast<int>(blackKeyWidth),
+                                    blackKeyHeight);
             } else {
-                blackKey->setBounds(blackKeyPosArr[blackKeyIndex] + whiteKeyWidth  - blackKeyWidth/2, 700 + 5, blackKeyWidth, blackKeyHeight);
+                blackKey->setBounds(static_cast<int>(static_cast<float>(blackKeyPosArr[blackKeyIndex]) + whiteKeyWidth - blackKeyWidth / 2.0f),
+                                    700 + 5,
+                                    static_cast<int>(blackKeyWidth),
+                                    blackKeyHeight);
             }
             
             customPanel.addAndMakeVisible(blackKey);
@@ -888,7 +903,8 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
 }
 
 void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, std::string paramName, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob){
-    auto adjustedWidth = cellWidth*0.94;
+    const double adjustedWidth = static_cast<double>(cellWidth) * 0.94;
+    const auto toPixel = [](double coordinate) { return static_cast<int>(coordinate); };
     const int oscColumnSpacing = 72;
     bool isOscWaveform = (sliderKey == "osc1WaveFormKnob") || (sliderKey == "osc2WaveFormKnob") || (sliderKey == "osc3WaveFormKnob");
    
@@ -917,25 +933,25 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
         sliderKnob->setBounds(osc1RangeKnob->getX() + osc1RangeKnob->getWidth() + volumeGap, (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
     } else if( sliderKey == "osc1FreqKnob" || sliderKey == "osc2FreqKnob" || sliderKey == "osc3FreqKnob" || sliderKey == "ctrlTuneKnob" ){
         const int oscOffset = posArray[1] * oscColumnSpacing;
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 10 + oscOffset, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel(((posArray[1] * (adjustedWidth + 15.0)) - adjustedWidth) - 10.0 + oscOffset), posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "osc1WaveFormKnob" || sliderKey == "osc2WaveFormKnob" || sliderKey == "osc3WaveFormKnob"){
         const int oscOffset = posArray[1] * oscColumnSpacing;
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 12 + oscOffset, (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel(((posArray[1] * (adjustedWidth + 15.0)) - adjustedWidth) - 12.0 + oscOffset), (posArray[0] * cellHeight), 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "osc1RangeKnob" || sliderKey == "osc2RangeKnob"  || sliderKey == "osc3RangeKnob"){
         const int oscOffset = posArray[1] * oscColumnSpacing;
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth) - 13 + oscOffset, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel(((posArray[1] * (adjustedWidth + 15.0)) - adjustedWidth) - 13.0 + oscOffset), posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "extInputVolKnob" || sliderKey == "feedbackKnob" ){
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 30)) + 30) - adjustedWidth, (posArray[0] * cellHeight) + 15 , 40, 40); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) + 30.0) - adjustedWidth), (posArray[0] * cellHeight) + 15 , 40, 40); // Set the bounds of the slider
     } else if(sliderKey == "ctrlModMixKnob"){
-        sliderKnob->setBounds(osc3WaveFormKnob->getX(), (osc3WaveFormKnob->getY() + (osc3WaveFormKnob->getHeight() * 4.5) + 110) , 60, 60); // Set the bounds of the slider
+        sliderKnob->setBounds(osc3WaveFormKnob->getX(), toPixel(osc3WaveFormKnob->getY() + (osc3WaveFormKnob->getHeight() * 4.5) + 110.0), 60, 60); // Set the bounds of the slider
     } else if(sliderKey == "ctrlGlideKnob"){
-        sliderKnob->setBounds(ctrlModMixKnob->getX() + ctrlModMixKnob->getWidth() + 15, (osc3WaveFormKnob->getY() + (osc3WaveFormKnob->getHeight() * 4.5) + 110), 60, 60); // Set the bounds of the slider
+        sliderKnob->setBounds(ctrlModMixKnob->getX() + ctrlModMixKnob->getWidth() + 15, toPixel(osc3WaveFormKnob->getY() + (osc3WaveFormKnob->getHeight() * 4.5) + 110.0), 60, 60); // Set the bounds of the slider
     } else if(sliderKey == "filterCutoffFreqKnob" || sliderKey == "filterEmphasisKnob" || sliderKey == "filterAmtContourKnob" || sliderKey == "filterAttackTimeKnob" || sliderKey == "filterDecayTimeKnob" || sliderKey == "filterSustainKnob" || sliderKey == "loudnessAttackTimeKnob" || sliderKey == "loudnessDecayTimeKnob" || sliderKey == "loudnessSustainLevelKnob"){
-        sliderKnob->setBounds(((posArray[1] * (adjustedWidth + 15)) - adjustedWidth)-190, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel(((posArray[1] * (adjustedWidth + 15.0)) - adjustedWidth) - 190.0), posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
     } else if(sliderKey == "outputVolKnob"){
-        sliderKnob->setBounds((posArray[1] * (adjustedWidth + 15)) - adjustedWidth + 100, posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel((posArray[1] * (adjustedWidth + 15.0)) - adjustedWidth + 100.0), posArray[0] * cellHeight, 70, 70); // Set the bounds of the slider
     } else {
-        sliderKnob->setBounds((posArray[1] * (adjustedWidth + 15)) - adjustedWidth, posArray[0] * cellHeight, 60, 60); // Set the bounds of the slider
+        sliderKnob->setBounds(toPixel((posArray[1] * (adjustedWidth + 15.0)) - adjustedWidth), posArray[0] * cellHeight, 60, 60); // Set the bounds of the slider
     }
     if(sliderKey == "noiseVolKnob"){
         
@@ -973,7 +989,8 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
 }
 
 void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggleSwitch, std::string toggleKey, std::string paramName, int posArray[], bool isHorizontal, int cellWidth, int cellHeight){
-    auto adjustedWidth = cellWidth*0.94;
+    const double adjustedWidth = static_cast<double>(cellWidth) * 0.94;
+    const auto toPixel = [](double coordinate) { return static_cast<int>(coordinate); };
     auto* label = labelMap[toggleKey];
     VintageLookAndFeel* vintageLook = new VintageLookAndFeel(isHorizontal);
     if (toggleKey == "whitePinkSwitch") {
@@ -991,7 +1008,7 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
             toggleSwitch.setBounds(knobBounds.getRight() + 12, knobBounds.getCentreY() - 15, 60, 30);
         } else
         if(toggleKey == "osc1OnOffSwitch" || toggleKey == "osc2OnOffSwitch" || toggleKey == "osc3OnOffSwitch" || toggleKey == "noiseOnOffSwitch" || toggleKey == "extInputVolSwitch"){
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - 60) - adjustedWidth, (posArray[0] * cellHeight) + 15, 60, 30);
+            toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) - 60.0) - adjustedWidth), (posArray[0] * cellHeight) + 15, 60, 30);
         } else if(toggleKey == "oscModSwitch"){
             if (ctrlModMixKnob != nullptr) {
                 auto knobBounds = ctrlModMixKnob->getBounds();
@@ -1001,7 +1018,7 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
                 const int toggleY = knobBounds.getBottom() + 22;
                 toggleSwitch.setBounds(toggleX, toggleY, toggleWidth, toggleHeight);
             } else {
-                toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 20,
+                toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth) - 20.0),
                                        (ctrlGlideKnob->getY() + ctrlGlideKnob->getHeight()) + 30,
                                        60,
                                        30);
@@ -1015,21 +1032,21 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
                 const int toggleY = knobBounds.getBottom() + 22;
                 toggleSwitch.setBounds(toggleX, toggleY, toggleWidth, toggleHeight);
             } else {
-                toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 20)) - adjustedWidth) - 20,
+                toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 20.0)) - adjustedWidth) - 20.0),
                                        (ctrlGlideKnob->getY() + ctrlGlideKnob->getHeight()) + 30,
                                        60,
                                        30);
             }
         } else if(toggleKey == "filterModSwitch" || toggleKey == "keyboardCtrlSwitch1" || toggleKey == "keyboardCtrlSwitch2"){
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 400, (posArray[0] * cellHeight) , 60, 30);
+            toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth) - 400.0), (posArray[0] * cellHeight) , 60, 30);
         } else if(toggleKey == "decaySwitch" || toggleKey == "a440hzSwitch"){
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 435, (posArray[0] * cellHeight) - 10, 60, 30);
+            toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth) - 435.0), (posArray[0] * cellHeight) - 10, 60, 30);
         } else {
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) + 10, (posArray[0] * cellHeight) + 30, 60, 30);
+            toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth) + 10.0), (posArray[0] * cellHeight) + 30, 60, 30);
         }
     } else {
          if (toggleKey == "osc3CtrlSwitch"){
-            toggleSwitch.setBounds((posArray[1] * (adjustedWidth + 30)) - adjustedWidth - 5, (posArray[0] * cellHeight) - 15, 30, 60);
+            toggleSwitch.setBounds(toPixel((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth - 5.0), (posArray[0] * cellHeight) - 15, 30, 60);
         } else if (toggleKey == "whitePinkSwitch" && noiseVolKnob != nullptr){
             auto knobBounds = noiseVolKnob->getBounds();
             toggleSwitch.setBounds(knobBounds.getX() - 40,
@@ -1037,9 +1054,9 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
                                    30,
                                    60);
         } else if (toggleKey == "whitePinkSwitch"){
-            toggleSwitch.setBounds(((posArray[1] * (adjustedWidth + 30)) - adjustedWidth) - 45, (posArray[0] * cellHeight) - 15, 30, 60);
+            toggleSwitch.setBounds(toPixel(((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth) - 45.0), (posArray[0] * cellHeight) - 15, 30, 60);
         } else {
-            toggleSwitch.setBounds((posArray[1] * (adjustedWidth + 30)) - adjustedWidth, (posArray[0] * cellHeight) + 10, 30, 60);
+            toggleSwitch.setBounds(toPixel((posArray[1] * (adjustedWidth + 30.0)) - adjustedWidth), (posArray[0] * cellHeight) + 10, 30, 60);
         }
     }
     
@@ -1127,7 +1144,7 @@ bool MoogMiniAudioProcessorEditor::sliderHasChanged(juce::Slider* slider) {
 }
 
 float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, float) {
-    float index = slider->getValue();
+    const float index = static_cast<float>(slider->getValue());
     //juce::Logger::writeToLog("Slider Raw Value: " + juce::String(index));
     if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob ) {
         return index / 5.0f;
@@ -1140,7 +1157,7 @@ float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, flo
     }
     else if (slider == ctrlTuneKnob) {
         // Assuming the range is -2.5 to +2.5
-        return (index + 2.5) / 5.0f; // Maps -2.5 to 0.0 and +2.5 to 1.0
+        return (index + 2.5f) / 5.0f; // Maps -2.5 to 0.0 and +2.5 to 1.0
     }
     else if(slider == filterCutoffFreqKnob || slider == &pitchWheelSlider){
         
@@ -1151,7 +1168,7 @@ float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, flo
     }
     else if(slider == filterAttackTimeKnob || slider == filterDecayTimeKnob || slider == loudnessAttackTimeKnob || slider == loudnessDecayTimeKnob){
        
-        float normalizedValue = index / 10000;
+        const float normalizedValue = index / 10000.0f;
         
        
         return normalizedValue;
@@ -1695,7 +1712,7 @@ void MoogMiniAudioProcessorEditor::updateSignalFlowOverlayLayout() {
         if (!panelBounds.isEmpty()) {
             const float scopeHalfWidth = SignalFlowOverlay::filterScopeWidth * 0.5f;
             const float scopeGap = SignalFlowOverlay::filterScopeGap;
-            const float centeredScopeX = designBounds.getCentreX();
+            const float centeredScopeX = static_cast<float>(designBounds.getCentreX());
             filterInPoint = juce::Point<float>(centeredScopeX,
                                                panelBounds.getCentreY());
             hasFilterPanel = true;

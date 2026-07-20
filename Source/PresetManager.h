@@ -6,8 +6,9 @@ class PresetManager {
 public:
     explicit PresetManager(juce::AudioProcessorValueTreeState& state);
 
-    // The standalone lifecycle harness sets this before constructing the plug-in
-    // editor so validation never touches the user's real preset directory.
+    // Validation sets an absolute directory before constructing the plug-in
+    // editor so tests never touch the user's real preset directory. Passing an
+    // empty File clears the override after a scoped test.
     static bool setStandaloneLifecycleTestDirectory(const juce::File& directory);
     static juce::File getStandaloneLifecycleTestDirectory();
     static juce::File getLastConstructedPresetDirectory();

@@ -14,16 +14,22 @@ void PitchWheelLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, in
     // Draw the track
     g.setColour(slider.findColour(juce::Slider::trackColourId));
     if (slider.isHorizontal()) {
-        g.fillRect(juce::Rectangle<float>(x, y + height * 0.5f - 2, width, 4));
+        g.fillRect(juce::Rectangle<float>(static_cast<float>(x),
+                                          static_cast<float>(y) + static_cast<float>(height) * 0.5f - 2.0f,
+                                          static_cast<float>(width),
+                                          4.0f));
     } else {
-        g.fillRect(juce::Rectangle<float>(x + width * 0.5f - 2, y, 4, height));
+        g.fillRect(juce::Rectangle<float>(static_cast<float>(x) + static_cast<float>(width) * 0.5f - 2.0f,
+                                          static_cast<float>(y),
+                                          4.0f,
+                                          static_cast<float>(height)));
     }
 
     // Calculate the diameter for the thumb
-    float thumbDiameter = 15;
+    const float thumbDiameter = 15.0f;
 
     // Create a rectangle for the thumb
-    juce::Rectangle<float> thumbRect(0, 0, thumbDiameter, thumbDiameter);
+    juce::Rectangle<float> thumbRect(0.0f, 0.0f, thumbDiameter, thumbDiameter);
 
     // Position the rectangle's centre
     thumbRect.setCentre(slider.isHorizontal() ? sliderPos : (x + width * 0.5f),

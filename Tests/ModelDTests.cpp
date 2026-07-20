@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "PresetManager.h"
 
 #include <algorithm>
 #include <array>
@@ -8,6 +9,9 @@
 #include <string>
 #include <string_view>
 #include <vector>
+
+#define SYNTH_STRINGIFY_IMPL(value) #value
+#define SYNTH_STRINGIFY(value) SYNTH_STRINGIFY_IMPL(value)
 
 namespace
 {
@@ -108,8 +112,7 @@ void testGeneratedWrapperContract (TestContext& test)
                  "generated JucePlugin_IsMidiEffect must be 0");
     test.expect (std::string_view { JucePlugin_Vst3Category } == "Instrument|Synth",
                  "generated VST3 category must be exactly Instrument|Synth");
-    test.expect (static_cast<unsigned int> (JucePlugin_AUMainType)
-                     == static_cast<unsigned int> ('aumu'),
+    test.expect (std::string_view { SYNTH_STRINGIFY (JucePlugin_AUMainType) } == "'aumu'",
                  "generated AU main type must be aumu/Music Device");
 
     MoogMiniAudioProcessor processor;
@@ -550,35 +553,52 @@ void testProcessingContract (TestContext& test)
 
 void testEditorConstructionPreservesParameters (TestContext& test)
 {
-    MoogMiniAudioProcessor processor;
-    setParameter (processor, "osc1Range", 0.6f, test);
-    setParameter (processor, "osc2Freq", 0.25f, test);
-    test.expect (static_cast<float> (processor.apvts.getParameterAsValue ("osc1Range").getValue())
-                     != processor.apvts.getRawParameterValue ("osc1Range")->load(),
-                 "editor regression fixture must begin with a stale mirrored value");
-    const auto parameters = processor.getParameters();
-    std::vector<float> valuesBeforeEditor;
-    valuesBeforeEditor.reserve (parameters.size());
-    for (const auto* parameter : parameters)
-        valuesBeforeEditor.push_back (parameter->getValue());
+    const auto previousPresetDirectory = PresetManager::getStandaloneLifecycleTestDirectory();
+    const auto presetDirectory = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                     .getNonexistentChildFile ("model-d-unit-editor-presets", {}, false);
+    const auto overrideSet = PresetManager::setStandaloneLifecycleTestDirectory (presetDirectory);
+    test.expect (overrideSet, "editor regression must isolate its preset directory");
+    if (! overrideSet)
+        return;
 
-    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
-    test.expect (editor != nullptr, "processor must create its custom editor");
-    juce::Timer::callAfterDelay (100, []
     {
-        juce::MessageManager::getInstance()->stopDispatchLoop();
-    });
-    juce::MessageManager::getInstance()->runDispatchLoop();
+        MoogMiniAudioProcessor processor;
+        setParameter (processor, "osc1Range", 0.6f, test);
+        setParameter (processor, "osc2Freq", 0.25f, test);
+        test.expect (static_cast<float> (processor.apvts.getParameterAsValue ("osc1Range").getValue())
+                         != processor.apvts.getRawParameterValue ("osc1Range")->load(),
+                     "editor regression fixture must begin with a stale mirrored value");
+        const auto parameters = processor.getParameters();
+        std::vector<float> valuesBeforeEditor;
+        valuesBeforeEditor.reserve (parameters.size());
+        for (const auto* parameter : parameters)
+            valuesBeforeEditor.push_back (parameter->getValue());
 
-    const auto parameterCount = static_cast<size_t> (parameters.size());
-    test.expect (parameterCount == valuesBeforeEditor.size(),
-                 "editor construction must not change the parameter inventory");
-    for (size_t index = 0; index < valuesBeforeEditor.size() && index < parameterCount; ++index)
-    {
-        test.expect (std::abs (parameters[index]->getValue() - valuesBeforeEditor[index]) < 1.0e-6f,
-                     "editor construction must not change parameter "
-                         + std::to_string (index));
+        std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+        test.expect (editor != nullptr, "processor must create its custom editor");
+        test.expect (PresetManager::getLastConstructedPresetDirectory() == presetDirectory,
+                     "editor regression must construct presets only in its temporary directory");
+        juce::Timer::callAfterDelay (100, []
+        {
+            juce::MessageManager::getInstance()->stopDispatchLoop();
+        });
+        juce::MessageManager::getInstance()->runDispatchLoop();
+
+        const auto parameterCount = static_cast<size_t> (parameters.size());
+        test.expect (parameterCount == valuesBeforeEditor.size(),
+                     "editor construction must not change the parameter inventory");
+        for (size_t index = 0; index < valuesBeforeEditor.size() && index < parameterCount; ++index)
+        {
+            test.expect (std::abs (parameters[index]->getValue() - valuesBeforeEditor[index]) < 1.0e-6f,
+                         "editor construction must not change parameter "
+                             + std::to_string (index));
+        }
     }
+
+    const auto overrideReset = PresetManager::setStandaloneLifecycleTestDirectory (previousPresetDirectory);
+    test.expect (overrideReset, "editor regression must restore its preset-directory override");
+    test.expect (presetDirectory.deleteRecursively(),
+                 "editor regression must remove its temporary preset directory");
 }
 
 void testUnitContract (TestContext& test)

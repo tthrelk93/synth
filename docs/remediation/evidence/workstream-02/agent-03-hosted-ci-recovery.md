@@ -231,6 +231,57 @@ validation evidence was regenerated after the second pass:
 These local results authorize publication of the second correction; they do not
 substitute for the required all-green supported matrix.
 
+## Second corrective run and final compatibility sweep
+
+Commit `4314fd15716920907064cbd8b892e8c85be5059c` published the second pass.
+Push run
+[`29717915136`](https://github.com/tthrelk93/synth/actions/runs/29717915136)
+materialized all eight exact-head rows; duplicate pull-request run `29717916604`
+was cancelled. Windows Debug and Release then reached later translation units
+that the previous warning failures had prevented MSVC from compiling, exposing
+the remaining project-owned UI numeric-boundary and local-hiding warnings in
+`CustomSliderLookAndFeel`, `PitchWheelLookAndFeel`, and `PluginEditor`. Linux
+Debug completed the full bounded compile through 98% and then rejected the
+test-only multi-character AU literal under GCC `-Werror=multichar`. This proves
+that `--parallel 2` resolved the earlier hosted Linux memory exhaustion.
+
+Agent 03 retained the terminal run before changing source. The combined log
+SHA-256 is
+`c8f8c6fa6d1b547df1e50dc1c8b989cf6e07150f559da42c0f7a35e3607fdaaf`.
+All nine job logs and 87 files from all eight partial uploads are under
+`/private/tmp/model-d-agent03-corrective2.RAKp7d`; its `SHA256SUMS.txt` covers
+98 evidence files. As with the prior diagnostic attempt, no BLD status is
+promoted from a cancelled non-green run.
+
+The final compatibility sweep:
+
+- makes all remaining UI layout, opacity, geometry, and slider-value
+  conversions explicit at their existing truncation boundaries;
+- stringizes the generated AU type token in the unit contract, preserving the
+  exact `aumu` assertion without compiling a non-portable multi-character
+  integer literal;
+- updates the three documented build commands to the same `--parallel 2`
+  policy exercised by CI; and
+- isolates the editor-startup regression in a unique temporary preset
+  directory, verifies the editor actually used it, restores the prior override,
+  and removes the temporary directory so the test neither reads nor writes the
+  real user preset area.
+
+An independent read-only review found no Critical issue in the production
+fixes and confirmed that authoritative APVTS initialization, public JUCE
+definitions, explicit conversions, bounded workflow builds, and strict gates
+are technically sound. Its three Important findings were the README mismatch,
+test preset isolation, and stale final handoff state; the first two are fixed in
+this sweep and the handoff is reconciled only after the final hosted result is
+known.
+
+The final local regeneration produced these superseding hashes:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `c69e0204d246d203a61e635331eb1b406ded3347ec722b425e87ba73b78e38b2` | `02e04dedaa3cfb5ec6426b611d0b39ba1ea57784174b77ea8fdaabd8b60fd0d7` | `caf698e34ceb9dfe383fcfeea937f97124918cae13dd6e408815c834f21fa058` |
+| Release | `dece4a18a6b0897544b233c098f57efb039d65e2d6efd0edf2b9962a9c1c2b49` | `be8395e398800c01c227097d955ce971e6aa88201f48a8eb28121290228622f0` | `e6cfa6e2f53b6cb271cb04d4a5e9332781e6a001d498ca43616809ac527259cd` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -253,8 +304,10 @@ registration, the SDK validator, and the designated commercial hosts.
 
 ## Current status and next action
 
-BLD statuses are unchanged at this milestone. BLD-004 remains `pass`;
-BLD-007 and BLD-011 remain `blocked`; all other rows remain `in-progress`.
-Finish fresh local Debug/Release verification, publish the corrective commit,
-then require one exact-head hosted run with all eight matrix rows green before
-promoting any hosted-dependent BLD row.
+BLD statuses remain unchanged through these diagnostic attempts. BLD-004
+remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
+`in-progress`. The final compatibility sweep is locally green in fresh Debug
+and Release all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and
+linked-validation execution. Publish that sweep and require one exact-head
+hosted run with all eight matrix rows green before promoting any
+hosted-dependent BLD row.

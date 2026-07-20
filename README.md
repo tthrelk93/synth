@@ -28,10 +28,10 @@ validation commands exercised by the Release rows in CI:
 
 ```sh
 cmake -S . -B "build with spaces/Release" -DCMAKE_BUILD_TYPE=Release -DSYNTH_WARNINGS_AS_ERRORS=ON -DSYNTH_BUILD_TESTS=ON -DSYNTH_BUILD_VALIDATORS=ON
-cmake --build "build with spaces/Release" --config Release --parallel
+cmake --build "build with spaces/Release" --config Release --parallel 2
 ctest --test-dir "build with spaces/Release" -C Release --output-on-failure
-cmake --build "build with spaces/Release" --config Release --target ModelDRunStandaloneLifecycle --parallel
-cmake --build "build with spaces/Release" --config Release --target ModelDVerifyValidationEvidence --parallel
+cmake --build "build with spaces/Release" --config Release --target ModelDRunStandaloneLifecycle --parallel 2
+cmake --build "build with spaces/Release" --config Release --target ModelDVerifyValidationEvidence --parallel 2
 ```
 
 Use `Debug` in both the directory and configuration arguments for the CI Debug
