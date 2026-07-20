@@ -219,12 +219,21 @@ endfunction()
 synth_get_plugin_artifact(_model_d_vst3_artifact ModelDPlugin_VST3)
 synth_get_plugin_artifact(_model_d_standalone_artifact ModelDPlugin_Standalone)
 set(_model_d_stage_dependencies ModelDPlugin_VST3 ModelDPlugin_Standalone)
-string(REPLACE ";" "\\;" _model_d_test_reports_command_argument "${SYNTH_TEST_REPORTS}")
 set(_model_d_build_inventory_directory
     "${CMAKE_BINARY_DIR}/model-d-build-inventory")
 file(MAKE_DIRECTORY "${_model_d_build_inventory_directory}")
+set(_model_d_test_reports_file
+    "${_model_d_build_inventory_directory}/declared-reports.txt")
 set(_model_d_expected_formats_file
     "${_model_d_build_inventory_directory}/expected-formats.txt")
+file(WRITE "${_model_d_test_reports_file}" "")
+foreach(_report IN LISTS SYNTH_TEST_REPORTS)
+    if(_report MATCHES "[\r\n]")
+        message(FATAL_ERROR
+            "Test report paths must not contain line breaks: ${_report}")
+    endif()
+    file(APPEND "${_model_d_test_reports_file}" "${_report}\n")
+endforeach()
 file(WRITE "${_model_d_expected_formats_file}" "")
 foreach(_format IN LISTS _model_d_formats)
     if(_format MATCHES "[\r\n]")
@@ -272,7 +281,7 @@ set(_model_d_stage_arguments
     "-DSYNTH_MANUFACTURER_CODE=${SYNTH_MANUFACTURER_CODE}"
     "-DSYNTH_PRODUCT_CODE=${SYNTH_PRODUCT_CODE}"
     "-DSYNTH_IDENTITY_APPROVED=${SYNTH_IDENTITY_APPROVED}"
-    "-DSYNTH_TEST_REPORTS=${_model_d_test_reports_command_argument}")
+    "-DSYNTH_TEST_REPORTS_FILE=${_model_d_test_reports_file}")
 if(APPLE)
     synth_get_plugin_artifact(_model_d_au_artifact ModelDPlugin_AU)
     list(APPEND _model_d_stage_dependencies ModelDPlugin_AU)

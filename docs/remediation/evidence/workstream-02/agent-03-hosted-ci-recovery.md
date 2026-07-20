@@ -642,6 +642,57 @@ manifest generation, and deep verification. The local hashes are:
 | Debug | `ed11e9c236c3ee3c8abe704b5726fecf955c8c6aebe18f69870c6df09f5cbad3` | `4c0071e2d9504aeba3179760eb3a09430b8617e87113ac27703221b4287ffdfb` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
 | Release | `eda0167d898968238ad3c8e0e0080a8713aa651f7e2432c2a5777f990cf1ec7c` | `8677303d8e8eb26aaad8cdf0b684f21a5e02c719997ebb21889585b90cd5697e` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
 
+## Tenth corrective run: complete supported-matrix pass
+
+Commit `17ab4dcddc2127bd9858be54b2d41cd25a21ac0c` published the final
+default-path Visual Studio format transport. Push run
+[`29727144083`](https://github.com/tthrelk93/synth/actions/runs/29727144083)
+completed with all eight required exact-head rows green; duplicate
+pull-request run `29727147253` was cancelled. Each Debug and Release row on
+Windows x86_64, Linux x86_64, macOS arm64, and macOS x86_64 passed:
+
+- fresh configure at the exact JUCE revision and a strict all-target build;
+- the full 9/9 CTest suite and each of the seven fail-on-zero label gates;
+- the separate staged standalone lifecycle gate;
+- actual-wrapper 3/3 and pluginval 1.0.4 strictness-10 in 3/3 isolated
+  processes;
+- platform-appropriate auval evidence, including ephemeral AU registration,
+  validation, and removal on macOS;
+- deterministic final staging, linked build/validation manifest generation,
+  deep verification, and artifact upload.
+
+The raw failing sentinel remained skipped as designed. The row durations from
+job start through completion were 8:00/7:20 for macOS arm64 Debug/Release,
+8:56/8:24 for Linux Debug/Release, 7:56/11:05 for Windows Debug/Release, and
+15:24/15:46 for macOS x86_64 Debug/Release. No required job or required step
+was skipped.
+
+The complete run metadata, combined log, eight job logs, and all eight uploads
+are retained under `/private/tmp/model-d-agent03-corrective10.7j7VOf`. Its
+checksum index covers 354 evidence files and has SHA-256
+`e87f88271f8521e7902d11c3549e316e8f1dbebdcddd4dd1a3c1a2551c1b0d25`;
+independent `shasum -c` verification passes and is recorded separately. The
+combined run log SHA-256 is
+`53cb97342a8cbd83bd338f94402e6badce159615967816b122f4d16f1370a885`
+and the run-metadata SHA-256 is
+`634028fb142b50db849240e8c13430705b42c25be4bbf5ada6c3c7ea06b17587`.
+
+This is the first all-green supported matrix. A post-run static audit found
+that the optional cache-provided `SYNTH_TEST_REPORTS` set, which is empty in
+the hosted workflow, still used the same packed transport in the ordinary
+staging target. That known non-default portability path now writes a
+build-owned report inventory too, and the contract forbids reintroducing any
+of the former packed command arguments. Its regression was observed failing
+before the correction. Fresh local space-bearing Debug and Release ordinary
+staging, deep linked verification, strict all-target builds, 9/9 CTest, and all
+required labels pass. Status reconciliation remains held until that final
+follow-up commit has its own exact-head supported-matrix pass.
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `3fb1e2d0d370d127b1f868f9fb9f61706ea30ee78a7db2ce9ed4dee555952f61` | `8e732517ed6aa428ede26dcd3108021111c14df417a3523e1908d0f188769ece` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `09f2445ba2593be837ac04fb43012123c713524f739cda679ecdf5b33c033e1b` | `9637c43ba51eea435d0fe11241a26f0eb92a0fd5385c355446e19d5b0fca03f4` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -666,7 +717,7 @@ registration, the SDK validator, and the designated commercial hosts.
 
 BLD statuses remain unchanged through these diagnostic attempts. BLD-004
 remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The final format-inventory correction is locally green in Debug and Release
+`in-progress`. The optional-report inventory correction is locally green in Debug and Release
 all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
 execution. Publish that correction and require one exact-head hosted run with
 all eight matrix rows green before promoting any hosted-dependent BLD row.

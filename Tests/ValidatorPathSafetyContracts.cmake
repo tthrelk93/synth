@@ -87,6 +87,7 @@ foreach(_validation_source IN ITEMS
 endforeach()
 foreach(_forbidden_long_transport IN ITEMS
         "_model_d_expected_formats_command_argument"
+        "_model_d_test_reports_command_argument"
         "_model_d_validation_reports_argument"
         "_model_d_validation_report_arguments"
         "_model_d_expected_evidence_argument"
