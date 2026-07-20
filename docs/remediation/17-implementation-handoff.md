@@ -14,12 +14,12 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 | Current owner | Agent 02 |
 | Roadmap phase | F0 — reproducible baseline |
 | Workstream | 02 — Build, Packaging, and Host Validation |
-| Overall status | in-progress; branch and draft PR are published, initial hosted triggers failed before job startup during a critical GitHub Actions outage, and BLD-007/BLD-011 are externally blocked |
+| Overall status | in-progress; branch and draft PR are published, four hosted triggers failed before job startup during a critical GitHub Actions outage, and BLD-007/BLD-011 are externally blocked |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
 | Source prompt | Agent 02 continuation package; durable results are in the [continuation preflight](evidence/workstream-02/continuation-preflight.md) and [hosted CI execution report](evidence/workstream-02/hosted-ci-execution.md). |
 | Successor package | Planned untracked artifact `Agent-03-Workstream-02-Continuation-Context.zip`; build it from the final Agent 02 ledger commit and report its outer SHA-256 after construction. |
-| First action | Push the hosted-execution evidence commit to retrigger CI, wait for GitHub Actions recovery, then retain all eight jobs' results and `model-d-validation-*` uploads. |
+| First action | Confirm GitHub Actions recovery, create a fresh push or pull-request trigger, then retain all eight jobs' results and `model-d-validation-*` uploads. |
 | First unmet gate | BLD-001 — supported-CI fresh-clone configure/build evidence |
 | Next owner if incomplete | Workstream 02 / F0 continuation at the first dependency-ordered non-passing BLD requirement |
 | Next owner if complete | Agent 03, Workstream 03 / F0; verify Workstream 02 seams, then begin the parameter/state contract. |
@@ -30,7 +30,7 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 
 | Requirement | Status | Durable evidence | Blocker or next action |
 |---|---|---|---|
-| BLD-001 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release and static CI audit are green; the branch/commit is not remote, so supported-CI fresh-clone evidence remains. |
+| BLD-001 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) | Fresh local Debug/Release and static CI audit are green; the branch/PR are published, but a critical GitHub Actions outage rejected four push/PR triggers before job startup. |
 | BLD-002 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Supported CMake is independent of Projucer/generated paths; hosted cross-platform audit remains. |
 | BLD-003 | in-progress | [Dependency/license review](evidence/workstream-02/dependency-license-review.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Exact revision and local licence inventory are green; hosted evidence and owner licensing decision remain. |
 | BLD-004 | pass | [README clean-clone evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | All five committed commands pass verbatim from a fresh clone; hosted CI remains a separate aggregate gate. |
@@ -39,8 +39,8 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 | BLD-007 | blocked | [Preflight](evidence/workstream-02/preflight.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Product owner must confirm distribution history and approve legal manufacturer name, manufacturer code, product code, and reverse-DNS domain. |
 | BLD-008 | in-progress | [Warning baseline](evidence/workstream-02/warning-baseline.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release evidence is clean; collect supported-CI warning reports before pass. |
 | BLD-009 | in-progress | [Standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local macOS arm64 Debug/Release passes 9/9 per configuration; hosted macOS Intel/Windows/Linux rows remain. |
-| BLD-010 | in-progress | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release 9/9, all labels, sentinel proof, and static CI audit are green; run the unpublished eight-job hosted matrix. |
-| BLD-011 | blocked | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local actual-wrapper/pluginval pass; AU registration, VST3 SDK validator, commercial hosts, and hosted runs are unavailable. |
+| BLD-010 | in-progress | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) | Fresh local Debug/Release 9/9, all labels, sentinel proof, and static CI audit are green; retrigger the published eight-job matrix after GitHub Actions recovery. |
+| BLD-011 | blocked | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) | Fresh local actual-wrapper/pluginval pass; AU registration, VST3 SDK validator, commercial hosts, and a completed hosted run are unavailable. |
 | BLD-012 | in-progress | [Artifact staging/build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh Debug/Release linked manifests deep-verify locally; release stays blocked by BLD-007/011 and hosted evidence. |
 
 ## Current change inventory
@@ -48,11 +48,11 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 | Category | Details |
 |---|---|
 | Starting branch/commit | Overall baseline `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; Agent 02 resumed `codex/workstream-02-build` at `6b85c5369d41b3323e4e71eb6316a0b65734848d`. |
-| Ending commit/working tree | Implementation tip remains `a42ec798b9c50fc8c1ce92e01731646428668a26`; the final Agent 02 documentation/evidence ledger is the commit containing this entry. Only preserved and successor ZIP/extracted context should remain untracked. |
+| Ending commit/working tree | Implementation tip remains `a42ec798b9c50fc8c1ce92e01731646428668a26`; the final Agent 02 documentation/evidence ledger is the commit containing the 18:49 handoff entry. Only preserved and successor ZIP/extracted context should remain untracked. |
 | Pre-existing changes | Agent 02 preserved `Agent-01-Workstream-02-Context.zip`, `Agent-01-Workstream-02-Context/`, `Agent-02-Workstream-02-Continuation-Context.zip`, and its extracted copy without staging or modification. |
 | Implementation files changed | `42d42c2`–`20dedb1`: CMake/JUCE foundation, warnings, instrument buses, CTest/CI, staging/build manifest. `8e8dd3a`: actual VST3 wrapper smoke. `fdd941c`/`e1fdc86`: pinned pluginval, auval/host evidence, linked manifest, validator hardening. `bddc704`/`b2ce79f`/`1864309`: project-owned standalone lifecycle and evidence isolation. `2164ff0`/`a42ec79`: symlink-ancestor/path ownership contracts and cross-platform-safe compatibility. |
 | Planning files changed | README plus roadmap, BLD matrix rows, Workstream 02 status/current evidence, this handoff, and the Workstream 02 evidence suite; Agent 02 added only continuation evidence and synchronized ownership/blocker text. |
-| Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md); [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md). |
+| Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md); [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md); [hosted CI execution](evidence/workstream-02/hosted-ci-execution.md). |
 | Temporary scaffolding | Extracted context copies are orientation inputs, not implementation sources. Agent 02 build/evidence and checksum-verified `actionlint` trees are bounded under `/private/tmp`; they are reproducible, not repository inputs. |
 
 ## Verification ledger
@@ -72,6 +72,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-19; macOS arm64; Debug/Release plus simulated Windows/Linux script branches | `ctest -R ModelDValidatorPathSafety --output-on-failure`; external symlink-ancestor and alias-root cases | Both configurations pass; rejected paths create no external evidence. Final independent review found no Critical, Important, or Minor issues. | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) | BLD-010–012 |
 | 2026-07-19; fresh local clone at `5bb1702`; macOS arm64 Release | Run all five commands copied verbatim from committed README: configure, build, CTest, standalone lifecycle, and validation evidence | Configure resolves exact JUCE; all targets build; CTest passes 9/9; lifecycle target passes; actual wrapper/pluginval pass 3/3; validation evidence verifies with the release aggregate truthfully blocked. | [CTest/CI evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | BLD-004 |
 | 2026-07-19 17:22 PDT; Agent 02; macOS arm64 Debug/Release | Verify continuation ZIP; refresh origin; inspect remote branch/commit/workflows/runs; checksum/install `actionlint` 1.7.12 under `/private/tmp`; fresh space-path configure/build; 9/9 CTest; `ModelDVerifyValidationEvidence`; direct auval/tool/host/identity audit | ZIP/internal manifest pass; remote contains neither branch nor commit and has no workflow run; static CI audit passes all eight declared rows; fresh Debug/Release build and 9/9 CTest pass; actual-wrapper/pluginval pass 3/3; linked evidence verifies; auval and aggregate release remain blocked. | [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md) | BLD-001–003, BLD-005–012 |
+| 2026-07-19 18:49 PDT; GitHub-hosted attempt | `git push --set-upstream origin codex/workstream-02-build`; open draft PR #1; inspect Actions policy/runs/status; push evidence commit and poll for recovery | Remote branch and PR publication pass. Four push/PR runs end `startup_failure` with empty job lists during a critical GitHub Actions incident. No requirement is promoted. | [Hosted CI execution](evidence/workstream-02/hosted-ci-execution.md) | BLD-001–003, BLD-005–006, BLD-008–012 |
 
 ## Decisions, assumptions, and blockers
 
@@ -82,7 +83,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 - The fixed product, compatibility, phase, and evidence policies remain those in the roadmap and Workstream 02.
 - A missing reviewed legal identity blocks BLD-007 and any distribution artifact that depends on it; it is not permission to invent values.
 - Early lifecycle diagnostics exposed two pre-existing unconditional user writes. The newly created real settings file and Desktop log were moved recoverably to `/tmp/model-d-task7-settings-recovery.q2FbjJ/MiniMoog.settings` and `/tmp/model-d-task7-desktop-log-recovery.mRiFyV/my_plugin_log.txt`; the original user locations are absent. No pre-existing file was overwritten or deleted.
-- The checked-in CI branch and continuation commit are not present on `origin`. Although the authenticated account can administer workflows, no explicit push authority was supplied, so Agent 02 did not mutate the remote. Hosted evidence requires an authorized branch publication.
+- The product owner later supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. Hosted evidence remains unavailable because a critical GitHub Actions incident rejected four push/PR triggers before creating jobs.
 
 ## Successor handoff package protocol
 
@@ -115,12 +116,13 @@ assistant response reports the outer ZIP SHA-256. The successor's
 
 ## Exact resumption point
 
-All independent local implementation through BLD-012 is complete. Resume with
-the first dependency-ordered gate, BLD-001: after obtaining explicit push
-authority, run `git push --set-upstream origin codex/workstream-02-build`. The
-push trigger must execute `.github/workflows/ci.yml`; retain all eight jobs'
-logs/uploads and reconcile BLD-001–006/008–010/012 from those results. Do not
-push or install anything into a real user account without that authorization.
+All independent local implementation through BLD-012 is complete and the
+branch plus draft PR are published. Resume with the first dependency-ordered
+gate, BLD-001: confirm GitHub Actions has recovered, create a fresh authorized
+push or pull-request trigger for `.github/workflows/ci.yml`, retain all eight
+jobs' logs/uploads, and reconcile BLD-001–006/008–010/012 from those results.
+Do not install anything into a real user account without separate appropriate
+authority.
 
 In parallel, obtain the product owner's distribution-history and legal identity
 decision for `cmake/ProductIdentity.cmake`, plus the JUCE licensing decision.
@@ -179,6 +181,25 @@ If Agent 02 stops before all BLD requirements pass, the next agent stays in Work
 - **Successor package:** `Agent-03-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct and fully verify it from the ending ledger commit, then report the outer SHA-256 after construction.
 - **First unmet gate:** BLD-001 supported-CI fresh-clone configure/build evidence.
 - **Exact resumption point:** obtain explicit push authority, run `git push --set-upstream origin codex/workstream-02-build`, wait for all eight push-triggered jobs, download every `model-d-validation-*` artifact, and reconcile hosted-dependent rows from durable results.
+- **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
+
+### 2026-07-19 18:49 PDT — Agent 02 authorized publication handoff
+
+- **From / to:** Agent 02 / Agent 03 Workstream 02 continuation plus product owner.
+- **Branch and commits:** resumed the prior ledger at `0bb28fe7ca1824f9d812c9e37fe7d05ec2bb901b`; published `codex/workstream-02-build`; recorded the first attempt in `0e1a69505ba0fe3df9aadb42dc6bfad458274299`; the ending ledger is the commit containing this entry and must match `origin` before packaging.
+- **Pre-existing changes preserved:** predecessor archives and extracted copies remain untracked and unmodified. The older `Agent-03-Workstream-02-Continuation-Context.zip` is replaced only after the ending commit by the newly verified successor archive.
+- **Phase/workstream/status:** F0 / Workstream 02 / incomplete. The branch-publication blocker is resolved; a critical GitHub Actions outage prevented any matrix job from starting; BLD-007 and BLD-011 remain externally blocked.
+- **Requirements:** statuses remain truthful and synchronized: BLD-004 is `pass`; BLD-001–003/005–006/008–010/012 are `in-progress`; BLD-007 and BLD-011 are `blocked`. New durable evidence is the [hosted CI execution report](evidence/workstream-02/hosted-ci-execution.md).
+- **Implementation changes:** none; no synthesizer, build, validator, or workflow code changed. Frozen target, wrapper/bus, validation, and evidence contracts remain intact.
+- **Planning changes:** reconciled the roadmap, BLD traceability rows, Workstream 02 progress, canonical snapshot, verification ledger, blockers, and exact resumption point from unpublished to published/outage state.
+- **Commands and results:** authenticated push succeeds; remote branch resolves to the exact local commit; draft PR [#1](https://github.com/tthrelk93/synth/pull/1) is open. Push/PR runs [29709977979](https://github.com/tthrelk93/synth/actions/runs/29709977979), [29710001882](https://github.com/tthrelk93/synth/actions/runs/29710001882), [29711364250](https://github.com/tthrelk93/synth/actions/runs/29711364250), and [29711378051](https://github.com/tthrelk93/synth/actions/runs/29711378051) all end `startup_failure` with empty job lists. GitHub Status still reports a critical Actions incident and `partial_outage` at 01:50 UTC.
+- **Artifacts:** no hosted `model-d-validation-*` upload exists because no matrix job started. Local verification artifacts and hashes remain those in the 17:22 entry. Publication/outage evidence is preserved in the repository report and GitHub run URLs.
+- **Decisions and assumptions:** the user's authority covers branch publication, draft PR creation, and safe retriggers. It does not supply legal identity, distribution history, JUCE licence choice, commercial-host credentials, or permission to invent those facts.
+- **Blockers and known defects:** GitHub must restore Actions runners for BLD-001 and hosted-dependent evidence. BLD-007 still needs reviewed identity/distribution inputs. BLD-011 still needs ephemeral AU registration, the Steinberg VST3 SDK validator, and required commercial hosts. No synthesizer defect was exposed by the startup failures.
+- **Temporary work/cleanup:** no build, cache, downloaded validator, credential, settings, or recovery file is staged. Only predecessor context inputs and the newly constructed successor ZIP should remain untracked.
+- **Successor package:** `Agent-03-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct from the exact ending ledger commit and verify integrity, safe paths, no symlinks, internal hashes, fresh extraction, and source equality before reporting its outer SHA-256.
+- **First unmet gate:** BLD-001 supported-CI fresh-clone configure/build evidence.
+- **Exact resumption point:** confirm the official Actions component is operational, trigger `.github/workflows/ci.yml` again from the published branch or PR, wait for all eight jobs, and download every `model-d-validation-*` artifact before status reconciliation.
 - **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
 
 ## Required template for every later handoff entry
