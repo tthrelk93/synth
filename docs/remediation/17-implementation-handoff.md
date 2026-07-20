@@ -10,19 +10,19 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 
 | Field | Current value |
 |---|---|
-| Prepared | 2026-07-19 |
+| Prepared | 2026-07-20 |
 | Current owner | Agent 03 |
 | Roadmap phase | F0 — reproducible baseline |
 | Workstream | 02 — Build, Packaging, and Host Validation |
-| Overall status | in-progress; exact-commit recovery run `29714998121` completed all eight rows, its project failures are root-caused and fixed locally, the corrective hosted run remains, and BLD-007/BLD-011 are externally blocked |
+| Overall status | in-progress; exact implementation run `29728203657` passes all eight supported rows; BLD-001/002/004/005/008/009/010 pass, BLD-003/006/012 remain in progress, and BLD-007/011 are externally blocked |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
 | Source prompt | Agent 03 continuation package; durable current results are in the [Agent 03 recovery report](evidence/workstream-02/agent-03-hosted-ci-recovery.md). |
 | Successor package | Planned untracked artifact `Agent-04-Workstream-02-Continuation-Context.zip`; build it from the final Agent 03 ledger commit and report its outer SHA-256 after construction. |
-| First action | Publish the corrective portability/startup-state commit, require all eight exact-head hosted rows green, retain every full log and `model-d-validation-*` upload, then reconcile hosted-dependent BLD rows. |
-| First unmet gate | BLD-001 — supported-CI fresh-clone configure/build evidence |
+| First action | Obtain and record the product owner's BLD-003 JUCE distribution-licensing decision and required notices; do not alter legal identity or claim distribution approval without the separately reviewed BLD-007 inputs. |
+| First unmet gate | BLD-003 — documented product-owner JUCE distribution-licensing decision |
 | Next owner if incomplete | Workstream 02 / F0 continuation at the first dependency-ordered non-passing BLD requirement |
-| Next owner if complete | Agent 03, Workstream 03 / F0; verify Workstream 02 seams, then begin the parameter/state contract. |
+| Next owner if complete | Workstream 03 / F0 successor; verify Workstream 02 seams, then begin the parameter/state contract. |
 
 ## Workstream 02 requirement ledger
 
@@ -30,30 +30,30 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 
 | Requirement | Status | Durable evidence | Blocker or next action |
 |---|---|---|---|
-| BLD-001 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Recovery run `29714998121` completed all eight rows and retained evidence; root-cause fixes are local-green, pending the all-green corrective matrix. |
-| BLD-002 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Supported CMake remains independent of Projucer/generated paths and now propagates JUCE module configuration to consumers; corrective cross-platform proof remains. |
-| BLD-003 | in-progress | [Dependency/license review](evidence/workstream-02/dependency-license-review.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | All hosted configure steps resolved the exact pinned revision; the corrective run and owner licensing decision remain. |
-| BLD-004 | pass | [README clean-clone evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | All five committed commands pass verbatim from a fresh clone; hosted CI remains a separate aggregate gate. |
-| BLD-005 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Fresh local actual-wrapper/pluginval and both hosted Intel rows pass; corrective full-matrix proof remains. |
-| BLD-006 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Local generated metadata, exhaustive processor tests, actual-wrapper scan, pluginval, and Intel hosted categories pass; AU/commercial categories and corrective matrix remain. |
+| BLD-001 | pass | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact run `29728203657` passes fresh configure and strict all-target builds on all eight supported rows; full logs/uploads are checksum-retained. |
+| BLD-002 | pass | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | The all-green matrix proves supported CMake is independent of Projucer, generated paths, `JUCE_DIR`, and machine-specific dependencies. |
+| BLD-003 | in-progress | [Dependency/license review](evidence/workstream-02/dependency-license-review.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact JUCE resolution passes everywhere; the product owner's distribution-licensing decision and required notices remain. |
+| BLD-004 | pass | [README clean-clone evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | All five committed commands pass verbatim from a fresh clone and the matching supported hosted workflow is green. |
+| BLD-005 | pass | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Every exact-head row proves the one-instrument/no-effect artifact and passing actual-wrapper/pluginval contract. |
+| BLD-006 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Generated categories, buses, actual-wrapper, pluginval, and ephemeral hosted auval pass; required commercial-host category/menu confirmation remains. |
 | BLD-007 | blocked | [Preflight](evidence/workstream-02/preflight.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Product owner must confirm distribution history and approve legal manufacturer name, manufacturer code, product code, and reverse-DNS domain. |
-| BLD-008 | in-progress | [Warning baseline](evidence/workstream-02/warning-baseline.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Recovery-run MSVC/GCC diagnostics are fixed at source and fresh local strict builds are green; collect corrective supported-CI reports before pass. |
-| BLD-009 | in-progress | [Standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Intel hosted rows pass; the arm64 startup parameter/UI race is fixed with a regression and stable local repeats; corrective hosted proof remains. |
-| BLD-010 | in-progress | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Run `29714998121` proved all eight rows execute and the sentinel skips; fixes are locally 9/9 with all labels, pending the corrective all-green run. |
-| BLD-011 | blocked | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Local and Intel hosted validator paths pass; AU registration outside ephemeral CI, VST3 SDK validator, commercial hosts, and corrective matrix remain unavailable. |
-| BLD-012 | in-progress | [Artifact staging/build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Fresh local manifests deep-verify and both Intel hosted rows uploaded verified evidence; release stays blocked by BLD-007/011 and the corrective matrix. |
+| BLD-008 | pass | [Warning baseline](evidence/workstream-02/warning-baseline.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact run `29728203657` passes strict Debug/Release builds on every supported compiler/platform row. |
+| BLD-009 | pass | [Standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | All eight rows pass repeated fresh-process normal/invalid/no-device lifecycle and screenshot verification. |
+| BLD-010 | pass | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | All eight rows pass 9/9 CTest and every required fail-on-zero label; the raw sentinel skips by default. |
+| BLD-011 | blocked | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Every automated hosted validator passes, including ephemeral macOS auval; AU registration outside those jobs, the VST3 SDK validator, and commercial hosts remain unavailable. |
+| BLD-012 | in-progress | [Artifact staging/build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | All eight exact-head linked manifests deep-verify and upload; distribution aggregation remains blocked by BLD-007/011. |
 
 ## Current change inventory
 
 | Category | Details |
 |---|---|
 | Starting branch/commit | Overall baseline `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; Agent 03 resumed `codex/workstream-02-build` at `68748da89e4cfe4cf78d3bec66d513c5da8015f0`. |
-| Ending commit/working tree | Implementation tip remains `a42ec798b9c50fc8c1ce92e01731646428668a26`; Agent 03's tracked documentation/evidence changes are in progress. Only preserved context inputs and the eventual successor ZIP/extracted context remain untracked. |
+| Ending commit/working tree | Final hosted-verified implementation tip is `ff7b3693c2b92e139d3f6d544f35f254e787fcf9`; the ending ledger is the commit containing this entry. Only preserved predecessor context inputs and the verified Agent 04 successor ZIP remain untracked after cleanup. |
 | Pre-existing changes | Agent 03 preserves the Agent 01, Agent 02, and supplied Agent 03 continuation ZIPs plus their extracted orientation copies without staging or modification. |
-| Implementation files changed | `42d42c2`–`20dedb1`: CMake/JUCE foundation, warnings, instrument buses, CTest/CI, staging/build manifest. `8e8dd3a`: actual VST3 wrapper smoke. `fdd941c`/`e1fdc86`: pinned pluginval, auval/host evidence, linked manifest, validator hardening. `bddc704`/`b2ce79f`/`1864309`: project-owned standalone lifecycle and evidence isolation. `2164ff0`/`a42ec79`: symlink-ancestor/path ownership contracts and cross-platform-safe compatibility. |
+| Implementation files changed | Earlier implementation remains `42d42c2`–`a42ec79`. Agent 03 commits `ddbb50e`–`ff7b369` fix MSVC/GCC warning portability, arm64 parameter initialization, Windows/Linux/macOS lifecycle determinism, verified Linux display/WM ownership, safe validator provisioning/editor teardown, and bounded cross-generator format/report/evidence inventories. |
 | Planning files changed | README plus roadmap, BLD matrix rows, Workstream 02 status/current evidence, this handoff, and the Workstream 02 evidence suite; Agent 02 added only continuation evidence and synchronized ownership/blocker text. |
 | Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md); [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md); [hosted CI execution](evidence/workstream-02/hosted-ci-execution.md); [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md). |
-| Temporary scaffolding | Extracted context copies are orientation inputs, not implementation sources. Agent 02 build/evidence and checksum-verified `actionlint` trees are bounded under `/private/tmp`; they are reproducible, not repository inputs. |
+| Temporary scaffolding | Extracted context copies are orientation inputs, not implementation sources. Agent 03 retained eleven complete hosted diagnostic/proof trees under `/private/tmp/model-d-agent03-corrective*`; the final exact-head proof is `corrective11.GXbA4e`. Local space-bearing builds are moved recoverably outside the repository after packaging. |
 
 ## Verification ledger
 
@@ -75,6 +75,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-19 18:49 PDT; GitHub-hosted attempt | `git push --set-upstream origin codex/workstream-02-build`; open draft PR #1; inspect Actions policy/runs/status; push evidence commit and poll for recovery | Remote branch and PR publication pass. Four push/PR runs end `startup_failure` with empty job lists during a critical GitHub Actions incident. No requirement is promoted. | [Hosted CI execution](evidence/workstream-02/hosted-ci-execution.md) | BLD-001–003, BLD-005–006, BLD-008–012 |
 | 2026-07-19 19:06 PDT; Agent 03; macOS arm64 Debug/Release | Verify successor ZIP; live branch/remote/PR/auth preflight; official Statuspage polling; fresh space-path configure/build; 9/9 CTest; `ModelDVerifyValidationEvidence` | Package and repository preflight pass; Actions remains `partial_outage`; no recovery trigger issued; fresh Debug/Release strict builds, 9/9 CTest, actual-wrapper/pluginval, standalone, and linked-manifest verification pass while aggregate release remains blocked. | [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | BLD-001–003, BLD-005–012 |
 | 2026-07-19 20:35 PDT; GitHub-hosted recovery plus Agent 03 macOS arm64 | Reopen draft PR after official Actions recovery; retain run `29714998121` logs/uploads; diagnose MSVC/GCC/curl/lifecycle failures; add editor parameter-preservation regression; fresh strict build/CTest/labels/lifecycle/linked validation | All eight hosted rows execute: Intel macOS passes; Windows/Linux portability and arm64 startup-state failures are root-caused. Standard π/narrowing, warning hygiene, propagated JUCE definitions, and authoritative pre-listener slider initialization are locally green; corrective hosted matrix remains. | [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | BLD-001–003, BLD-005–006, BLD-008–012 |
+| 2026-07-20 01:44 PDT; exact implementation `ff7b369`; hosted eight-row matrix plus macOS arm64 Debug/Release | Run strict all-target builds; 9/9 CTest; every fail-on-zero label; standalone gate; actual-wrapper/pluginval/auval; linked-manifest verification; retain all logs/uploads; `shasum -c`; locally exercise two cache-provided report paths and restore empty cache | Run `29728203657` passes every platform-applicable required step in all eight rows; the raw sentinel alone skips. Eight uploads, eight job logs, combined log, metadata, and 354-file checksum index verify. Local ordinary and linked staging pass with explicit report paths and after restoration. | [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | BLD-001–003, BLD-005–006, BLD-008–012 |
 
 ## Decisions, assumptions, and blockers
 
@@ -85,7 +86,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 - The fixed product, compatibility, phase, and evidence policies remain those in the roadmap and Workstream 02.
 - A missing reviewed legal identity blocks BLD-007 and any distribution artifact that depends on it; it is not permission to invent values.
 - Early lifecycle diagnostics exposed two pre-existing unconditional user writes. The newly created real settings file and Desktop log were moved recoverably to `/tmp/model-d-task7-settings-recovery.q2FbjJ/MiniMoog.settings` and `/tmp/model-d-task7-desktop-log-recovery.mRiFyV/my_plugin_log.txt`; the original user locations are absent. No pre-existing file was overwritten or deleted.
-- The product owner later supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. The Actions incident recovered; exact-commit run `29714998121` completed all eight rows, exposed project-owned Windows/Linux portability and arm64 startup-state defects, and its logs/uploads are retained. Root-cause fixes are locally green and await the corrective full matrix.
+- The product owner supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. The Actions incident recovered; the complete diagnostic chain is retained, and exact implementation run `29728203657` passes all eight supported rows. This does not supply legal identity, distribution history, a JUCE licensing choice, SDK-validator access, or commercial-host access.
 
 ## Successor handoff package protocol
 
@@ -118,12 +119,12 @@ assistant response reports the outer ZIP SHA-256. The successor's
 
 ## Exact resumption point
 
-All independent local implementation through BLD-012 is complete and the
-branch plus draft PR are published. Recovery run `29714998121` is terminal and
-its evidence is retained. Resume with the first dependency-ordered gate,
-BLD-001: publish the corrective commit, retain the all-green exact-head run's
-eight full logs and `model-d-validation-*` uploads, and reconcile
-BLD-001–006/008–010/012 only from those results.
+All independent implementation and supported hosted verification through
+BLD-012 is complete. The branch and draft PR are published, exact implementation
+run `29728203657` passes all eight rows, and its complete evidence is retained.
+Resume with the first dependency-ordered non-passing requirement, BLD-003:
+obtain and record the product owner's JUCE distribution-licensing decision and
+required notices.
 Do not install anything into a real user account without separate appropriate
 authority.
 
@@ -135,7 +136,12 @@ fixed `validation/required-host-matrix.json` checks and regenerate
 `ModelDVerifyValidationEvidence`. Preserve all frozen target, bus, status-token,
 and evidence-ownership seams.
 
-If Agent 02 stops before all BLD requirements pass, the next agent stays in Workstream 02 and resumes at the first dependency-ordered non-passing requirement listed above. If every BLD requirement passes with linked evidence and the Workstream 02 Definition of Done is complete, the next agent advances to Workstream 03 in F0 and starts by verifying the frozen build targets, wrapper/bus contract, and CTest seams.
+If the current agent or successor stops before all BLD requirements pass, the
+next agent stays in Workstream 02 and resumes at the first dependency-ordered
+non-passing requirement listed above. Only after every BLD requirement passes
+with linked evidence and the Workstream 02 Definition of Done is complete may
+the next agent advance to Workstream 03 in F0 and verify the frozen build
+targets, wrapper/bus contract, and CTest seams.
 
 ## Handoff history
 
@@ -203,6 +209,25 @@ If Agent 02 stops before all BLD requirements pass, the next agent stays in Work
 - **Successor package:** `Agent-03-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct from the exact ending ledger commit and verify integrity, safe paths, no symlinks, internal hashes, fresh extraction, and source equality before reporting its outer SHA-256.
 - **First unmet gate:** BLD-001 supported-CI fresh-clone configure/build evidence.
 - **Exact resumption point:** confirm the official Actions component is operational, trigger `.github/workflows/ci.yml` again from the published branch or PR, wait for all eight jobs, and download every `model-d-validation-*` artifact before status reconciliation.
+- **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
+
+### 2026-07-20 01:44 PDT — Agent 03 hosted-recovery handoff
+
+- **From / to:** Agent 03 / Agent 04 Workstream 02 continuation plus product owner.
+- **Branch and commits:** resumed `codex/workstream-02-build` at `68748da89e4cfe4cf78d3bec66d513c5da8015f0`; Agent 03 implementation commits are `ddbb50e` through hosted-verified `ff7b3693c2b92e139d3f6d544f35f254e787fcf9`; the ending ledger is the commit containing this entry.
+- **Pre-existing changes preserved:** the supplied Agent 01, Agent 02, and Agent 03 context ZIPs and their extracted orientation copies remain untracked, unstaged, and unmodified.
+- **Phase/workstream/status:** F0 / Workstream 02 / incomplete only on external decisions/access. BLD-001/002/004/005/008/009/010 pass; BLD-003/006/012 remain in progress; BLD-007/011 remain blocked.
+- **Requirements:** BLD-001/002 pass exact fresh-clone build/dependency criteria; BLD-005 passes the one-instrument/no-effect wrapper criterion; BLD-008 passes strict warning criteria; BLD-009 passes lifecycle/screenshot criteria; BLD-010 passes all CTest/label criteria. BLD-003 awaits the owner licensing choice, BLD-006 awaits commercial-host category confirmation, BLD-007 awaits distribution history/legal identity, BLD-011 awaits non-ephemeral AU/SDK-validator/commercial hosts, and BLD-012 awaits the BLD-007/011 distribution gates.
+- **Implementation changes:** fixed MSVC/GCC warning portability, propagated required JUCE configuration, preserved authoritative startup parameters, removed release-state nondeterminism, hardened cross-platform paths/downloads, verified Linux X11/window-manager lifecycle, adopted only safe empty generator-created pluginval roots, modeled host-owned editor teardown, and replaced every packed/expanded custom-command inventory with bounded build-owned files.
+- **Planning changes:** added the complete Agent 03 recovery report; synchronized the roadmap, traceability rows, Workstream 02 status/evidence, Definition-of-Done progress, current snapshot, verification ledger, blockers, resumption point, and this history entry.
+- **Commands and results:** local space-bearing Debug/Release strict builds, 9/9 CTest, every required label, ordinary staging, standalone 9/9, actual-wrapper 3/3, pluginval 3/3, and deep linked verification pass. Eleven hosted diagnostic/proof runs were retained; final exact implementation run [29728203657](https://github.com/tthrelk93/synth/actions/runs/29728203657) passes every platform-applicable required step on all eight rows. A non-default two-report staging/linked-verification test also passes and restores the empty cache successfully.
+- **Artifacts:** final hosted evidence is `/private/tmp/model-d-agent03-corrective11.GXbA4e`; its 354-file checksum index SHA-256 is `731d98c7c5af820e03042414fd46b035cdc7827f767bf3338c22250d03a068ab`, combined-log SHA-256 is `e9190c6ca16be15cca9fe8d73971cea26d9a3579acace071c4cf69cd629db9d9`, and metadata SHA-256 is `d8498b8439d1a0fd24ad001a64ce0a0e0076417a375040d46318c06d70687420`. All eight uploads are present and `shasum -c` passes.
+- **Decisions and assumptions:** no legal identity, distribution history, JUCE licensing choice, commercial-host result, or unavailable validator result was invented. Supported CI is sufficient only for the requirements promoted above; mixed blocked/not-run release status remains truthful.
+- **Blockers and known defects:** no known supported-build or hosted-CI defect remains. The first gate is BLD-003's owner JUCE licensing decision. BLD-007 still requires reviewed distribution history/identity. BLD-006/011 require designated host/tool access. BLD-012 cannot become a distribution pass while BLD-007/011 remain non-passing.
+- **Temporary work/cleanup:** all hosted evidence trees are bounded under `/private/tmp`; the final tree is checksum-verified. The agent-owned repository `build with spaces/` tree is moved recoverably under `/private/tmp` after package construction. No build/cache/validator/recovery content is tracked.
+- **Successor package:** `Agent-04-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct from the exact ending ledger commit and verify its manifest, paths, symlink absence, fresh extraction, and source equality before reporting the outer SHA-256.
+- **First unmet gate:** BLD-003 — obtain and document the product owner's applicable AGPLv3 or commercial JUCE distribution path and required notices.
+- **Exact resumption point:** update `docs/remediation/evidence/workstream-02/dependency-license-review.md`, the BLD-003 rows, and `cmake/ProductIdentity.cmake` only as authorized by reviewed owner input; then proceed dependency-order through BLD-006/007/011/012 without weakening the green matrix.
 - **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
 
 ## Required template for every later handoff entry

@@ -664,8 +664,8 @@ Windows x86_64, Linux x86_64, macOS arm64, and macOS x86_64 passed:
 The raw failing sentinel remained skipped as designed. The row durations from
 job start through completion were 8:00/7:20 for macOS arm64 Debug/Release,
 8:56/8:24 for Linux Debug/Release, 7:56/11:05 for Windows Debug/Release, and
-15:24/15:46 for macOS x86_64 Debug/Release. No required job or required step
-was skipped.
+15:24/15:46 for macOS x86_64 Debug/Release. No required job or
+platform-applicable required step was skipped.
 
 The complete run metadata, combined log, eight job logs, and all eight uploads
 are retained under `/private/tmp/model-d-agent03-corrective10.7j7VOf`. Its
@@ -693,6 +693,38 @@ follow-up commit has its own exact-head supported-matrix pass.
 | Debug | `3fb1e2d0d370d127b1f868f9fb9f61706ea30ee78a7db2ce9ed4dee555952f61` | `8e732517ed6aa428ede26dcd3108021111c14df417a3523e1908d0f188769ece` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
 | Release | `09f2445ba2593be837ac04fb43012123c713524f739cda679ecdf5b33c033e1b` | `9637c43ba51eea435d0fe11241a26f0eb92a0fd5385c355446e19d5b0fca03f4` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
 
+## Eleventh corrective run: exact final implementation pass
+
+Commit `ff7b3693c2b92e139d3f6d544f35f254e787fcf9` published the complete
+inventory transport, including the optional cache-provided report set. Push
+run [`29728203657`](https://github.com/tthrelk93/synth/actions/runs/29728203657)
+completed with all eight exact-head required rows green; duplicate
+pull-request run `29728204340` was cancelled. Every row passed the same full
+chain enumerated for the tenth run. Windows Debug/Release completed in
+6:11/11:06, Linux Debug/Release in 8:59/9:51, macOS arm64 Debug/Release in
+8:41/8:22, and macOS x86_64 Debug/Release in 11:14/11:59. The raw sentinel was
+the only skipped job; every platform-applicable required step ran.
+
+The complete run metadata, combined log, eight job logs, and all eight uploads
+are retained under `/private/tmp/model-d-agent03-corrective11.GXbA4e`. Its
+checksum index covers 354 evidence files and has SHA-256
+`731d98c7c5af820e03042414fd46b035cdc7827f767bf3338c22250d03a068ab`;
+independent `shasum -c` verification passes and is recorded separately. The
+combined run log SHA-256 is
+`e9190c6ca16be15cca9fe8d73971cea26d9a3579acace071c4cf69cd629db9d9`
+and the run-metadata SHA-256 is
+`d8498b8439d1a0fd24ad001a64ce0a0e0076417a375040d46318c06d70687420`.
+
+The optional non-default path was also exercised locally with two explicit
+report paths in the space-bearing Debug tree. Ordinary staging and the full
+linked verifier passed with both reports; the cache was then restored to empty
+and deep verification passed again. Final clean-cache local hashes are:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `631c4b424aba234696c94ab68a32149f6ade4d88285d5857ea26e2d0bccd84b1` | `04819376a4cbb9a11ce5bd82c1104ba8ddbfab809a4d89426ccaa1f7e8af8d25` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `09f2445ba2593be837ac04fb43012123c713524f739cda679ecdf5b33c033e1b` | `9637c43ba51eea435d0fe11241a26f0eb92a0fd5385c355446e19d5b0fca03f4` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -710,14 +742,17 @@ owner/access gates:
 
 Absence of tags, releases, or local artifacts is not proof that a historical
 binary never shipped. BLD-007 still requires the product owner's factual
-confirmation and reviewed identity. BLD-011 still requires ephemeral AU
-registration, the SDK validator, and the designated commercial hosts.
+confirmation and reviewed identity. BLD-011 still requires AU registration and
+validation in the designated non-ephemeral account, the SDK validator, and the
+designated commercial hosts.
 
 ## Current status and next action
 
-BLD statuses remain unchanged through these diagnostic attempts. BLD-004
-remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The optional-report inventory correction is locally green in Debug and Release
-all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
-execution. Publish that correction and require one exact-head hosted run with
-all eight matrix rows green before promoting any hosted-dependent BLD row.
+Exact-head run `29728203657` closes every supported hosted gate. BLD-001,
+BLD-002, BLD-005, BLD-008, BLD-009, and BLD-010 can therefore be promoted to
+`pass`. BLD-004 remains `pass`; BLD-003, BLD-006, and BLD-012 remain
+`in-progress`; BLD-007 and BLD-011 remain `blocked`. The first
+dependency-ordered unmet requirement is BLD-003: record the product owner's
+JUCE distribution-licensing decision. Workstream 02 remains active; do not
+begin Workstream 03 while any BLD requirement or Definition-of-Done item is
+non-passing.
