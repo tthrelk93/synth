@@ -51,20 +51,20 @@ void WaveformDisplay::paint(juce::Graphics& g) {
     }
 }
 
-void WaveformDisplay::drawWaveform(juce::Graphics& g, const float* buffer, juce::Colour colour, int section, int bufferSize) {
+void WaveformDisplay::drawWaveform(juce::Graphics& g, const float* buffer, juce::Colour colour, int section, int sampleCount) {
     g.setColour(colour);
 
     float sectionHeight = getHeight() / 4.0f; // Adjusted section height
     float yOffset = sectionHeight * section;
     float sectionMiddle = yOffset + sectionHeight / 2.0f; // Middle of the section
 
-    for (int i = 1; i < bufferSize; ++i) {
+    for (int i = 1; i < sampleCount; ++i) {
         // Directly map buffer values to display coordinates
         float previousSample = sectionMiddle + buffer[i - 1] * sectionHeight / 2.0f;
         float currentSample = sectionMiddle + buffer[i] * sectionHeight / 2.0f;
 
-        float x1 = juce::jmap(static_cast<float>(i - 1), 0.0f, static_cast<float>(bufferSize), 0.0f, static_cast<float>(getWidth()));
-        float x2 = juce::jmap(static_cast<float>(i), 0.0f, static_cast<float>(bufferSize), 0.0f, static_cast<float>(getWidth()));
+        float x1 = juce::jmap(static_cast<float>(i - 1), 0.0f, static_cast<float>(sampleCount), 0.0f, static_cast<float>(getWidth()));
+        float x2 = juce::jmap(static_cast<float>(i), 0.0f, static_cast<float>(sampleCount), 0.0f, static_cast<float>(getWidth()));
 
         g.drawLine(x1, previousSample, x2, currentSample);
     }

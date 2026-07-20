@@ -177,8 +177,59 @@ and aggregate release states remain `blocked`.
 | Debug | `b2fbdacab34c043ec8771fad0cb2a12786c0c68267c6b439741fea1d7bb5a9d7` | `0124f255df63def39c4778758abeff200638cff27c6c9e3ff58523c16edc588c` | `ee0467b16989d20d3ee5b12ec5a4526512925c451a4fa8d11ba7cba3b2cf692a` |
 | Release | `8770981a299f9a3f407c0ae681b2ff08c194d705d9587a2b735b6f75eb1624e3` | `2eabd99f6d3b01c05430ff5f77372060759fe3092a03e7bd817a30fc1e990019` | `6a624782e3a6ac994e2800b225fff2deffdcb3afce08a7d5e8bf4e8fb361d42f` |
 
-The corrective hosted-run result is appended after its eight rows become
-terminal; these local results do not substitute for that supported matrix.
+## First corrective run and second portability pass
+
+Commit `ddbb50ea2a5774a3fc1f95b7a915f23b3df0a8d5` published the first
+root-cause corrections. Push run
+[`29717442208`](https://github.com/tthrelk93/synth/actions/runs/29717442208)
+materialized all eight rows at that exact commit. The duplicate
+pull-request-synchronize run `29717443835` was cancelled before jobs started.
+
+The first three deterministic failures in the retained push run were sufficient
+to identify two additional portability boundaries, so Agent 03 cancelled the
+remaining rows rather than consume hosted capacity after the result could no
+longer become green:
+
+- Windows Debug and Release reached the project build and MSVC `/WX` exposed
+  additional double-to-float, atomic-float-to-choice-index, height-to-float,
+  and parameter-hiding diagnostics in `PluginProcessor`, `SmokeComponent`, and
+  `WaveformDisplay`.
+- Linux Debug compiled beyond the former curl-configuration defect, then
+  `cc1plus` was killed and the runner shut down while the unconstrained
+  all-target parallel build was active. The prior Linux Release row had already
+  shown that the source compiles on the same image; the new failure is bounded
+  build-memory pressure, not a missing source dependency.
+- The other five rows were cancelled after the deterministic failures. Their
+  partial logs and six available validator uploads were retained rather than
+  represented as test results.
+
+The combined run log SHA-256 is
+`50dc9fd0b17b1327dcb05ae8983aa306b4dbf7bc1b6962eaa7b6159d7d6b1d44`.
+All nine job-log files and 76 files from the six available uploads were retained
+under `/private/tmp/model-d-agent03-corrective.DfIpdC`; a generated
+`SHA256SUMS.txt` covers 89 regular evidence files. This cancelled diagnostic run
+is not used to promote any BLD status.
+
+The second portability pass makes every intentional numeric conversion explicit,
+renames the remaining waveform count argument that hid a member under MSVC, and
+bounds each workflow build invocation to `--parallel 2`. It does not weaken the
+warnings-as-errors policy, CTest matrix, validation targets, or release gates.
+
+After those changes, the independent space-bearing
+`/private/tmp/model-d-agent03-final.NECHVL` Debug and Release trees again passed
+complete all-target strict builds, 9/9 CTest, every required label,
+actual-wrapper 3/3, pluginval 1.0.4 strictness-10 in 3/3 isolated processes,
+standalone lifecycle 9/9, and linked-manifest deep verification. The following
+hashes supersede the earlier values from those same trees because the build and
+validation evidence was regenerated after the second pass:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `1bbd79bd8fe8a220b010dada26fa106dba3d9a1c9237c9b5fe999c999dda8d69` | `f3d00b9e89c6d9598a6a571229b1f1acebb21474929e3092ab6647e26e1d2ed5` | `1afe4b3197fdd454b10ea11bc339a48ba07df4a14d6edadd2e329cd326c627b2` |
+| Release | `44b7830973d3e12695cdaf0659e4192f4d263b2123cf888979550414dbbc5f5f` | `27ff012ef9b81a383ce36544e99a672838a75d9f83d179e34ba92f2b244686a9` | `0bacedc9c6757f74244a01789cc3af7b74d4dee34e43738292b099e5d4e75ced` |
+
+These local results authorize publication of the second correction; they do not
+substitute for the required all-green supported matrix.
 
 ## Factual external-gate refresh
 

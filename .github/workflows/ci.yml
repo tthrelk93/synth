@@ -72,7 +72,7 @@ jobs:
 
       - name: Build all targets
         shell: pwsh
-        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --parallel
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --parallel 2
 
       - name: Run full CTest suite
         shell: pwsh
@@ -93,12 +93,12 @@ jobs:
 
       - name: Run actual staged standalone lifecycle gate
         shell: pwsh
-        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDRunStandaloneLifecycle --parallel
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDRunStandaloneLifecycle --parallel 2
 
       - name: Stage development artifacts before ephemeral AU registration
         if: runner.os == 'macOS'
         shell: pwsh
-        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDStageDevelopmentArtifacts --parallel
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDStageDevelopmentArtifacts --parallel 2
 
       - name: Install AU only in the ephemeral macOS runner account
         if: runner.os == 'macOS'
@@ -125,7 +125,7 @@ jobs:
 
       - name: Run actual-wrapper, pinned pluginval, and linked-manifest verification
         shell: pwsh
-        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDVerifyValidationEvidence --parallel
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDVerifyValidationEvidence --parallel 2
 
       - name: Remove only the AU installed by this ephemeral job
         if: ${{ always() && runner.os == 'macOS' }}
@@ -185,7 +185,7 @@ jobs:
 
       - name: Build sentinel proof targets
         shell: pwsh
-        run: cmake --build "$env:BUILD_DIR" --config Debug --parallel
+        run: cmake --build "$env:BUILD_DIR" --config Debug --parallel 2
 
       - name: Raw CTest sentinel failure (expected to make this workflow red)
         shell: pwsh
