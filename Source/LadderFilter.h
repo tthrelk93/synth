@@ -57,7 +57,7 @@ public:
     LadderFilter();
 
     void setCutoffFrequency(float frequency);
-        void setResonance(float resonance);
+        void setResonance(float newResonance);
         void setEnvelopeAmount(float amount);
         void process(float* input, float* output, int numSamples);
         void noteOn();

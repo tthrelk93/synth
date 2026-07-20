@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include "Oscillator.h"
 #include <cmath>
+#include <numbers>
 
 void Oscillator::setWaveform(Waveform newWaveform) {
     waveform = newWaveform;
@@ -85,7 +86,8 @@ float Oscillator::generateWaveform() {
     switch (waveform) {
         case Sin:
             // Sine wave calculation
-            sample = std::sin(2.0 * M_PI * phase);
+            sample = static_cast<float>(
+                std::sin(2.0 * std::numbers::pi_v<double> * static_cast<double>(phase)));
             break;
         case Triangle:
             // Triangle wave calculation
@@ -150,7 +152,8 @@ float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
     float sample = 0.0f;
     switch (waveform) {
         case Sin:
-            sample = std::sin(2.0 * M_PI * phase);
+            sample = static_cast<float>(
+                std::sin(2.0 * std::numbers::pi_v<double> * static_cast<double>(phase)));
            
                 break;
             break;
@@ -184,7 +187,8 @@ float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
               // Calculate the sawtooth portion of the wave
               sawtoothSample = 2.0f * (phase - 0.5f);
               // Blend the triangular and sawtooth portions
-              sample = (1.0f - 0.35) * triangularSample +  0.35 * sawtoothSample;
+              sample = static_cast<float>((1.0 - 0.35) * triangularSample
+                                          + 0.35 * sawtoothSample);
               // Map the sample to the correct amplitude range
               sample = 2.0f * (sample - 0.5f);
 

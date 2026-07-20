@@ -20,11 +20,11 @@ void LadderFilter::setCutoffFrequency(float frequency) {
     cutoffFrequency = frequency;
 }
 
-void LadderFilter::setResonance(float resonance) {
-    this->resonance = resonance;
+void LadderFilter::setResonance(float newResonance) {
+    resonance = newResonance;
    // juce::Logger::writeToLog(juce::String(feedback));
     // Adjust feedback amount based on resonance
-    feedbackAmount = resonance * (1.0f - feedback * resonance);
+    feedbackAmount = newResonance * (1.0f - feedback * newResonance);
 }
 
 

@@ -103,11 +103,12 @@ target_include_directories(ModelDCore
     PUBLIC
         Source
         cmake/core_compat)
+# JUCE module sources propagate to ModelDCore consumers, so module-wide
+# configuration switches must propagate with them.
 target_compile_definitions(ModelDCore
     PUBLIC
         JUCE_STRICT_REFCOUNTEDPOINTER=1
         JUCE_VST3_CAN_REPLACE_VST2=0
-    PRIVATE
         JUCE_WEB_BROWSER=0
         JUCE_USE_CURL=0)
 target_link_libraries(ModelDCore

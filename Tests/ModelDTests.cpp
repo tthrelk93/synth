@@ -548,6 +548,39 @@ void testProcessingContract (TestContext& test)
     }
 }
 
+void testEditorConstructionPreservesParameters (TestContext& test)
+{
+    MoogMiniAudioProcessor processor;
+    setParameter (processor, "osc1Range", 0.6f, test);
+    setParameter (processor, "osc2Freq", 0.25f, test);
+    test.expect (static_cast<float> (processor.apvts.getParameterAsValue ("osc1Range").getValue())
+                     != processor.apvts.getRawParameterValue ("osc1Range")->load(),
+                 "editor regression fixture must begin with a stale mirrored value");
+    const auto parameters = processor.getParameters();
+    std::vector<float> valuesBeforeEditor;
+    valuesBeforeEditor.reserve (parameters.size());
+    for (const auto* parameter : parameters)
+        valuesBeforeEditor.push_back (parameter->getValue());
+
+    std::unique_ptr<juce::AudioProcessorEditor> editor (processor.createEditor());
+    test.expect (editor != nullptr, "processor must create its custom editor");
+    juce::Timer::callAfterDelay (100, []
+    {
+        juce::MessageManager::getInstance()->stopDispatchLoop();
+    });
+    juce::MessageManager::getInstance()->runDispatchLoop();
+
+    const auto parameterCount = static_cast<size_t> (parameters.size());
+    test.expect (parameterCount == valuesBeforeEditor.size(),
+                 "editor construction must not change the parameter inventory");
+    for (size_t index = 0; index < valuesBeforeEditor.size() && index < parameterCount; ++index)
+    {
+        test.expect (std::abs (parameters[index]->getValue() - valuesBeforeEditor[index]) < 1.0e-6f,
+                     "editor construction must not change parameter "
+                         + std::to_string (index));
+    }
+}
+
 void testUnitContract (TestContext& test)
 {
     Oscillator oscillator;
@@ -566,6 +599,7 @@ void testUnitContract (TestContext& test)
 
     test.expect (renderedMagnitude > 0.0,
                  "foundational oscillator render must be non-silent");
+    testEditorConstructionPreservesParameters (test);
 }
 
 void testStateSmoke (TestContext& test)

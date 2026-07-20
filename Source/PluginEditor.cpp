@@ -282,14 +282,12 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     int loudnessSustainLevelKnobPos[2];
     int decaySwitchPos[2];
     int glideSwitchPos[2];
-    int feedbackKnobPos[2];
-    int ouputMainOutputSwitchPos[2];
     int extInputVolSwitchPos[2];
     int keyboardCtrlSwitch1Pos[2];
     int keyboardCtrlSwitch2Pos[2];
     int noiseOnOffSwitchPos[2];
     int whitePinkSwitchPos[2];
-    int overloadButtonPos[2];
+    int overloadButtonPos[2] = {};
     int filterModSwitchPos[2];
     
     
@@ -381,9 +379,6 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
                     } else if(sliderKey == "loudnessSustainLevelKnob") {
                         loudnessSustainLevelKnobPos[0] = row;
                         loudnessSustainLevelKnobPos[1] = col;
-                    } else if(sliderKey == "feedbackKnob") {
-                        feedbackKnobPos[0] = row;
-                        feedbackKnobPos[1] = col;
                     }
                     
                     
@@ -410,9 +405,6 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
                     } else if(toggleKey == "oscModSwitch"){
                         oscModSwitchPos[0] = row;
                         oscModSwitchPos[1] = col;
-                    } else if(toggleKey == "ouputMainOutputSwitch") {
-                        ouputMainOutputSwitchPos[0] = row;
-                        ouputMainOutputSwitchPos[1] = col;
                     } else if(toggleKey == "keyboardCtrlSwitch1") {
                         keyboardCtrlSwitch1Pos[0] = row;
                         keyboardCtrlSwitch1Pos[1] = col;
@@ -906,9 +898,14 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
         sliderKnob = new WaveformSlider(numPositions, useCustomRange, isOscWaveform, sliderKey);
     }
     waveformSliders.add(sliderKnob); // Take ownership
-    sliderKnob->addListener(this);
     sliderKnob->setRange(minPosVal, maxPosVal, increment);
-    sliderKnob->setValue(audioProcessor.apvts.getParameterAsValue(paramName).getValue());
+    if (auto* parameter = audioProcessor.apvts.getParameter(paramName)) {
+        sliderKnob->setValue(getSliderValueFromNormalized(sliderKnob, parameter->getValue()),
+                             juce::dontSendNotification);
+    } else {
+        jassertfalse;
+    }
+    sliderKnob->addListener(this);
     sliderKnob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
 
     sliderKnob->setTextBoxStyle(juce::Slider::NoTextBox, false, 100, 20);
