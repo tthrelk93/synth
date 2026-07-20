@@ -122,6 +122,14 @@ string(JSON _aggregate_repeat_count GET "${_aggregate}" repeat_count)
 string(JSON _aggregate_os GET "${_aggregate}" environment os)
 string(JSON _aggregate_arch GET "${_aggregate}" environment architecture)
 string(JSON _aggregate_configuration GET "${_aggregate}" environment configuration)
+string(JSON _virtual_display_provider GET "${_aggregate}" environment virtual_display_provider)
+if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+    if(NOT _virtual_display_provider MATCHES "^(inherited-x11|xvfb-run)$")
+        message(FATAL_ERROR "standalone lifecycle has an invalid Linux virtual-display provider")
+    endif()
+elseif(NOT _virtual_display_provider STREQUAL "native")
+    message(FATAL_ERROR "standalone lifecycle has an invalid native display provider")
+endif()
 if(NOT _schema STREQUAL "1"
    OR NOT _tool_version STREQUAL SYNTH_PROJECT_VERSION
    OR NOT _aggregate_status STREQUAL "pass"
@@ -271,7 +279,9 @@ foreach(_mode IN LISTS _expected_modes)
             "TMPDIR=${_isolation_root}/tmp"
             "TEMP=${_isolation_root}/tmp"
             "TMP=${_isolation_root}/tmp")
-        if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
+        if(_virtual_display_provider STREQUAL "inherited-x11")
+            list(APPEND _expected_command "DISPLAY=<INHERITED_X11_DISPLAY>")
+        elseif(_virtual_display_provider STREQUAL "xvfb-run")
             list(APPEND _expected_command xvfb-run -a)
         endif()
         list(APPEND _expected_command

@@ -76,6 +76,58 @@ if(_contract_position LESS 0)
 endif()
 
 file(READ "${SYNTH_SOURCE_ROOT}/Source/StandaloneApp.cpp" _standalone_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/RunActualWrapperSmoke.cmake" _wrapper_runner_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/RunPluginval.cmake" _pluginval_runner_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake" _manifest_generator_source)
+file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake" _manifest_verifier_source)
+file(READ "${SYNTH_SOURCE_ROOT}/.github/workflows/ci.yml" _ci_workflow_source)
+foreach(_virtual_display_contract IN ITEMS
+        "Start verified Linux virtual display"
+        "x11-utils"
+        "Xvfb \"$display\""
+        "DISPLAY=\"$display\" xdpyinfo"
+        "DISPLAY=$display"
+        "SYNTH_REUSE_VERIFIED_DISPLAY=1")
+    string(FIND "${_ci_workflow_source}"
+           "${_virtual_display_contract}" _contract_position)
+    if(_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Hosted CI is missing its verified Linux display contract: ${_virtual_display_contract}")
+    endif()
+endforeach()
+foreach(_display_safety_source IN ITEMS
+        _standalone_runner_source
+        _wrapper_runner_source
+        _pluginval_runner_source)
+    string(FIND "${${_display_safety_source}}"
+           "^:[0-9]+([.][0-9]+)?$" _display_safety_position)
+    if(_display_safety_position LESS 0)
+        message(FATAL_ERROR
+            "Inherited Linux DISPLAY validation is missing from ${_display_safety_source}")
+    endif()
+endforeach()
+foreach(_wrapper_evidence_contract IN ITEMS
+        "virtual_display_provider"
+        "DISPLAY=<INHERITED_X11_DISPLAY>"
+        "string(JSON _wrapper_report SET")
+    string(FIND "${_wrapper_runner_source}"
+           "${_wrapper_evidence_contract}" _wrapper_runner_position)
+    if(_wrapper_runner_position LESS 0)
+        message(FATAL_ERROR
+            "Actual-wrapper runner is missing display evidence: ${_wrapper_evidence_contract}")
+    endif()
+endforeach()
+foreach(_wrapper_verification_contract IN ITEMS
+        "_wrapper_virtual_display_provider"
+        "_wrapper_command"
+        "DISPLAY=<INHERITED_X11_DISPLAY>")
+    string(FIND "${_manifest_generator_source}\n${_manifest_verifier_source}"
+           "${_wrapper_verification_contract}" _wrapper_verifier_position)
+    if(_wrapper_verifier_position LESS 0)
+        message(FATAL_ERROR
+            "Actual-wrapper display evidence is not linked and verified: ${_wrapper_verification_contract}")
+    endif()
+endforeach()
 if(_standalone_source MATCHES "StandalonePluginHolder|StandaloneFilterWindow")
     message(FATAL_ERROR
         "Standalone lifecycle implementation still constructs JUCE's non-deferrable holder/window")
@@ -103,6 +155,19 @@ foreach(_required_contract IN ITEMS
     if(_contract_position LESS 0)
         message(FATAL_ERROR
             "Standalone lifecycle source is missing reviewed contract: ${_required_contract}")
+    endif()
+endforeach()
+foreach(_display_provider_contract IN ITEMS
+        "inherited-x11"
+        "xvfb-run"
+        "virtual_display_provider")
+    string(FIND "${_standalone_runner_source}"
+           "${_display_provider_contract}" _runner_contract_position)
+    string(FIND "${_standalone_verifier_source}"
+           "${_display_provider_contract}" _verifier_contract_position)
+    if(_runner_contract_position LESS 0 OR _verifier_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone lifecycle display-provider evidence is incomplete: ${_display_provider_contract}")
     endif()
 endforeach()
 
@@ -266,7 +331,14 @@ set(_relative_cli_command "${_standalone_executable}"
     --settings relative-settings/MiniMoog.settings
     --preset-dir relative-presets)
 if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
-    list(PREPEND _relative_cli_command xvfb-run -a)
+    if("$ENV{SYNTH_REUSE_VERIFIED_DISPLAY}" STREQUAL "1")
+        if(NOT "$ENV{DISPLAY}" MATCHES "^:[0-9]+([.][0-9]+)?$")
+            message(FATAL_ERROR
+                "verified Linux display reuse requires a safe local DISPLAY value")
+        endif()
+    else()
+        list(PREPEND _relative_cli_command xvfb-run -a)
+    endif()
 endif()
 execute_process(
     COMMAND ${_relative_cli_command}

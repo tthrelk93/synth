@@ -584,12 +584,15 @@ void testEditorConstructionPreservesParameters (TestContext& test)
         });
         juce::MessageManager::getInstance()->runDispatchLoop();
 
-        const auto parameterCount = static_cast<size_t> (parameters.size());
-        test.expect (parameterCount == valuesBeforeEditor.size(),
+        const int parameterCount = parameters.size();
+        test.expect (static_cast<size_t> (parameterCount) == valuesBeforeEditor.size(),
                      "editor construction must not change the parameter inventory");
-        for (size_t index = 0; index < valuesBeforeEditor.size() && index < parameterCount; ++index)
+        for (int index = 0;
+             index < parameterCount && static_cast<size_t> (index) < valuesBeforeEditor.size();
+             ++index)
         {
-            test.expect (std::abs (parameters[index]->getValue() - valuesBeforeEditor[index]) < 1.0e-6f,
+            const auto vectorIndex = static_cast<size_t> (index);
+            test.expect (std::abs (parameters[index]->getValue() - valuesBeforeEditor[vectorIndex]) < 1.0e-6f,
                          "editor construction must not change parameter "
                              + std::to_string (index));
         }

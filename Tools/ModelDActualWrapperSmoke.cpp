@@ -18,7 +18,7 @@
 
 namespace
 {
-constexpr double sampleRate = 48000.0;
+constexpr double validationSampleRate = 48000.0;
 constexpr int blockSize = 128;
 
 class ValidationError final : public std::runtime_error
@@ -377,8 +377,8 @@ void verifyBuses (juce::AudioPluginInstance& instance,
 
 void verifyProcessing (juce::AudioPluginInstance& instance)
 {
-    instance.setRateAndBufferSizeDetails (sampleRate, blockSize);
-    instance.prepareToPlay (sampleRate, blockSize);
+    instance.setRateAndBufferSizeDetails (validationSampleRate, blockSize);
+    instance.prepareToPlay (validationSampleRate, blockSize);
 
     juce::AudioBuffer<float> first (instance.getTotalNumOutputChannels(), blockSize);
     juce::AudioBuffer<float> second (instance.getTotalNumOutputChannels(), blockSize);
@@ -493,7 +493,7 @@ RepeatResult runRepeat (const Options& options,
         runCheck (result, logLines, "instance", [&]
         {
             instance = format.createInstanceFromDescription (*descriptions[0],
-                                                              sampleRate, blockSize,
+                                                              validationSampleRate, blockSize,
                                                               creationError);
             require (instance != nullptr,
                      "VST3 instantiation failed: " + creationError.toStdString());

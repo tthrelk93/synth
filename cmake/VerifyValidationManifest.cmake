@@ -316,10 +316,48 @@ string(JSON _wrapper_plugin_sha256 GET "${_wrapper_report}" plugin aggregate_sha
 string(JSON _wrapper_os GET "${_wrapper_report}" build os)
 string(JSON _wrapper_architecture GET "${_wrapper_report}" build architecture)
 string(JSON _wrapper_configuration GET "${_wrapper_report}" build configuration)
+string(JSON _wrapper_virtual_display_provider GET "${_wrapper_report}" build virtual_display_provider)
+if(_build_os STREQUAL "Linux")
+    if(NOT _wrapper_virtual_display_provider MATCHES "^(inherited-x11|xvfb-run)$")
+        message(FATAL_ERROR "wrapper report has an invalid Linux virtual-display provider")
+    endif()
+elseif(NOT _wrapper_virtual_display_provider STREQUAL "native")
+    message(FATAL_ERROR "wrapper report has an invalid native display provider")
+endif()
 file(RELATIVE_PATH _stage_relative_from_build "${_build_root}" "${_stage_root}")
 string(REPLACE "\\" "/" _stage_relative_from_build "${_stage_relative_from_build}")
 set(_expected_wrapper_plugin_path
     "${_stage_relative_from_build}/${_final_vst3_relative_path}")
+set(_expected_wrapper_command "")
+if(_wrapper_virtual_display_provider STREQUAL "inherited-x11")
+    list(APPEND _expected_wrapper_command
+         cmake -E env "DISPLAY=<INHERITED_X11_DISPLAY>" --)
+elseif(_wrapper_virtual_display_provider STREQUAL "xvfb-run")
+    list(APPEND _expected_wrapper_command xvfb-run -a)
+endif()
+list(APPEND _expected_wrapper_command
+    ModelDActualWrapperSmoke
+    --plugin "${_expected_wrapper_plugin_path}"
+    --repeat "${SYNTH_REPEAT_COUNT}"
+    --seed "${SYNTH_SEED}"
+    --report validation/actual-wrapper-smoke-report.json
+    --log validation/actual-wrapper-smoke.log
+    --config "${SYNTH_CONFIGURATION}"
+    --os "${SYNTH_SYSTEM_NAME}"
+    --arch "${SYNTH_ARCHITECTURE}")
+set(_wrapper_command "")
+string(JSON _wrapper_command_count LENGTH "${_wrapper_report}" command)
+if(_wrapper_command_count GREATER 0)
+    math(EXPR _last_wrapper_command_token "${_wrapper_command_count} - 1")
+    foreach(_wrapper_command_index RANGE 0 ${_last_wrapper_command_token})
+        string(JSON _wrapper_command_token GET "${_wrapper_report}"
+               command ${_wrapper_command_index})
+        list(APPEND _wrapper_command "${_wrapper_command_token}")
+    endforeach()
+endif()
+if(NOT _wrapper_command STREQUAL _expected_wrapper_command)
+    message(FATAL_ERROR "wrapper report normalized launch command is inconsistent")
+endif()
 if(NOT _wrapper_report_status STREQUAL "pass"
    OR NOT _wrapper_repeat_count STREQUAL SYNTH_REPEAT_COUNT
    OR NOT _wrapper_seed STREQUAL SYNTH_SEED
@@ -459,6 +497,14 @@ string(JSON _pluginval_plugin_sha256 GET "${_validation}" pluginval run plugin_a
 string(JSON _pluginval_os GET "${_validation}" pluginval run os)
 string(JSON _pluginval_architecture GET "${_validation}" pluginval run architecture)
 string(JSON _pluginval_configuration GET "${_validation}" pluginval run configuration)
+string(JSON _pluginval_virtual_display_provider GET "${_validation}" pluginval run virtual_display_provider)
+if(_build_os STREQUAL "Linux")
+    if(NOT _pluginval_virtual_display_provider MATCHES "^(inherited-x11|xvfb-run)$")
+        message(FATAL_ERROR "pluginval run has an invalid Linux virtual-display provider")
+    endif()
+elseif(NOT _pluginval_virtual_display_provider STREQUAL "native")
+    message(FATAL_ERROR "pluginval run has an invalid native display provider")
+endif()
 if(NOT _pluginval_status STREQUAL "pass"
    OR NOT _pluginval_version STREQUAL "1.0.4"
    OR NOT _pluginval_repeat_count STREQUAL SYNTH_REPEAT_COUNT
@@ -515,8 +561,11 @@ foreach(_index RANGE 0 ${_last_pluginval_repeat})
     foreach(_environment_variable IN LISTS _expected_pluginval_environment_variables)
         list(APPEND _expected_command "--unset=${_environment_variable}")
     endforeach()
+    if(_pluginval_virtual_display_provider STREQUAL "inherited-x11")
+        list(APPEND _expected_command "DISPLAY=<INHERITED_X11_DISPLAY>")
+    endif()
     list(APPEND _expected_command --)
-    if(_validation_os STREQUAL "Linux")
+    if(_pluginval_virtual_display_provider STREQUAL "xvfb-run")
         list(APPEND _expected_command xvfb-run -a)
     endif()
     list(APPEND _expected_command

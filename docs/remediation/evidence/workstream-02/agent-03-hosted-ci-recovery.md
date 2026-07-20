@@ -282,6 +282,54 @@ The final local regeneration produced these superseding hashes:
 | Debug | `c69e0204d246d203a61e635331eb1b406ded3347ec722b425e87ba73b78e38b2` | `02e04dedaa3cfb5ec6426b611d0b39ba1ea57784174b77ea8fdaabd8b60fd0d7` | `caf698e34ceb9dfe383fcfeea937f97124918cae13dd6e408815c834f21fa058` |
 | Release | `dece4a18a6b0897544b233c098f57efb039d65e2d6efd0edf2b9962a9c1c2b49` | `be8395e398800c01c227097d955ce971e6aa88201f48a8eb28121290228622f0` | `e6cfa6e2f53b6cb271cb04d4a5e9332781e6a001d498ca43616809ac527259cd` |
 
+## Third corrective run and verified Linux display
+
+Commit `12f225c14369b0ee2916bc65f7eb4b4a785e4a9e` published the final
+compatibility sweep. Push run
+[`29718676605`](https://github.com/tthrelk93/synth/actions/runs/29718676605)
+materialized all eight exact-head rows; duplicate PR run `29718678657` was
+cancelled. Both macOS arm64 rows completed the entire validation chain. Windows
+Debug and Release reached the last two previously uncompiled warning sites:
+one test vector index converted from `size_t` to JUCE's `int` index, and the
+actual-wrapper tool's global `sampleRate` hid a JUCE parameter under MSVC.
+
+Both Linux rows completed their strict builds, then all nine standalone
+lifecycle processes reached JUCE but reported no display under individual
+`xvfb-run -a` launches. The retained process logs contain the JUCE banner and
+ALSA discovery output before the display rejection, proving this was X11
+discovery rather than an application crash or screenshot mismatch. Agent 03
+cancelled the remaining two macOS x86_64 rows once the exact-head run could no
+longer become green; cancelled rows are not represented as failures of their
+unfinished validation steps.
+
+The combined run log SHA-256 is
+`54f669ff45500f33b200a4775c70362a59b70cd0e6db351fafb786ff22449951`.
+All eight uploads were retained under
+`/private/tmp/model-d-agent03-corrective3.QhB1TT`. The checksum index covers
+177 regular evidence files and has SHA-256
+`ff5e01531e1e299f8d896c520725a2b8724149d86e505aa113d307fcdc62bd79`;
+independent `shasum -c` verification passes.
+
+The remaining Windows conversions are now explicit. Hosted Linux now starts
+one job-scoped Xvfb server without authentication, polls it with `xdpyinfo`,
+and only exports `DISPLAY` after readiness succeeds. Lifecycle, actual-wrapper,
+and pluginval validators reuse that display only under CI's explicit verified
+reuse marker; ordinary Linux invocations retain the former isolated `xvfb-run`
+behavior. Standalone, actual-wrapper, and pluginval
+reports record `native`, `inherited-x11`, or `xvfb-run` as appropriate, and the
+deep verifiers bind exact normalized commands to that declared provider. A
+contract test requires the hosted readiness step and the provider evidence.
+
+Fresh local strict Debug and Release builds then passed, each with 9/9 CTest,
+standalone lifecycle 9/9, actual-wrapper 3/3, pluginval 1.0.4 strictness-10 in
+3/3 isolated processes, and linked-manifest deep verification. The local
+reports truthfully record the native macOS display provider. Their hashes are:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `1306365dada2c876affd71015698950c1ff99b54286acb0221c4d7b58079c5cf` | `26c882620d7a6c425199b32aa79c15e6861f0a60765a11c5cc1a9b7e1214dc07` | `fb5151825a7c7e29e6708f62ed502059ecd1b7ec348707dd8f843039fe5de62b` |
+| Release | `833eef3e843d025b61e9f08c16e198229884a3e5de6e9e670d7865abaabec26d` | `246932c0493e208eb7f6be79518d4fdbf8b755fd37bbdbade5ebf267e502bdd2` | `84bb0644582390fbd759d5c91b8735b106b37e73deeaf846e31295796b8db4e6` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining

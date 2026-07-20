@@ -16,6 +16,15 @@ foreach(_required_variable IN ITEMS
     endif()
 endforeach()
 
+function(_synth_json_quote output_variable input_value)
+    set(_escaped "${input_value}")
+    string(REPLACE "\\" "\\\\" _escaped "${_escaped}")
+    string(REPLACE "\"" "\\\"" _escaped "${_escaped}")
+    string(REPLACE "\n" "\\n" _escaped "${_escaped}")
+    string(REPLACE "\r" "\\r" _escaped "${_escaped}")
+    set(${output_variable} "\"${_escaped}\"" PARENT_SCOPE)
+endfunction()
+
 set(_manifest_path "${SYNTH_STAGE_DIRECTORY}/build-manifest.json")
 if(NOT EXISTS "${_manifest_path}")
     message(FATAL_ERROR "Staged build manifest is missing: ${_manifest_path}")
@@ -77,13 +86,41 @@ foreach(_relative_output IN ITEMS "${_staged_vst3_from_build}" "${_report_from_b
     endif()
 endforeach()
 set(_smoke_prefix "")
+set(_recorded_prefix "")
+set(_virtual_display_provider "native")
 if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
-    find_program(_xvfb_run NAMES xvfb-run)
-    if(NOT _xvfb_run)
-        message(FATAL_ERROR "Linux actual-wrapper GUI smoke requires xvfb-run")
+    if("$ENV{SYNTH_REUSE_VERIFIED_DISPLAY}" STREQUAL "1")
+        if(NOT "$ENV{DISPLAY}" MATCHES "^:[0-9]+([.][0-9]+)?$")
+            message(FATAL_ERROR
+                "verified Linux display reuse requires a safe local DISPLAY value")
+        endif()
+        set(_inherited_display "$ENV{DISPLAY}")
+        set(_smoke_prefix
+            "${CMAKE_COMMAND}" -E env "DISPLAY=${_inherited_display}" --)
+        set(_recorded_prefix
+            cmake -E env "DISPLAY=<INHERITED_X11_DISPLAY>" --)
+        set(_virtual_display_provider "inherited-x11")
+    else()
+        find_program(_xvfb_run NAMES xvfb-run)
+        if(NOT _xvfb_run)
+            message(FATAL_ERROR "Linux actual-wrapper GUI smoke requires xvfb-run")
+        endif()
+        set(_smoke_prefix "${_xvfb_run}" -a)
+        set(_recorded_prefix xvfb-run -a)
+        set(_virtual_display_provider "xvfb-run")
     endif()
-    set(_smoke_prefix "${_xvfb_run}" -a)
 endif()
+set(_recorded_command
+    ${_recorded_prefix}
+    ModelDActualWrapperSmoke
+    --plugin "${_staged_vst3_from_build}"
+    --repeat "${SYNTH_REPEAT_COUNT}"
+    --seed "${SYNTH_SEED}"
+    --report "${_report_from_build}"
+    --log "${_log_from_build}"
+    --config "${SYNTH_CONFIGURATION}"
+    --os "${SYNTH_SYSTEM_NAME}"
+    --arch "${SYNTH_ARCHITECTURE}")
 execute_process(
     COMMAND ${_smoke_prefix} "${SYNTH_SMOKE_EXECUTABLE}"
         --plugin "${_staged_vst3_from_build}"
@@ -112,6 +149,29 @@ if(NOT "${_smoke_status}" MATCHES "^[0-9]+$"
     message(FATAL_ERROR
         "Actual-wrapper smoke failed with exit ${_smoke_status}:\n${_smoke_error}")
 endif()
+if(NOT EXISTS "${SYNTH_REPORT_PATH}")
+    message(FATAL_ERROR "Actual-wrapper smoke did not create its report")
+endif()
+file(READ "${SYNTH_REPORT_PATH}" _wrapper_report)
+string(JSON _wrapper_report_type ERROR_VARIABLE _wrapper_report_error
+       TYPE "${_wrapper_report}")
+if(_wrapper_report_error OR NOT _wrapper_report_type STREQUAL "OBJECT")
+    message(FATAL_ERROR
+        "Actual-wrapper smoke report is invalid JSON: ${_wrapper_report_error}")
+endif()
+_synth_json_quote(_provider_json "${_virtual_display_provider}")
+string(JSON _wrapper_report SET "${_wrapper_report}"
+       build virtual_display_provider "${_provider_json}")
+set(_command_json "[]")
+set(_command_index 0)
+foreach(_command_token IN LISTS _recorded_command)
+    _synth_json_quote(_command_token_json "${_command_token}")
+    string(JSON _command_json SET "${_command_json}"
+           ${_command_index} "${_command_token_json}")
+    math(EXPR _command_index "${_command_index} + 1")
+endforeach()
+string(JSON _wrapper_report SET "${_wrapper_report}" command "${_command_json}")
+file(WRITE "${SYNTH_REPORT_PATH}" "${_wrapper_report}\n")
 foreach(_evidence_file IN ITEMS "${SYNTH_REPORT_PATH}" "${SYNTH_LOG_PATH}")
     if(EXISTS "${_evidence_file}")
         file(READ "${_evidence_file}" _evidence_contents)
