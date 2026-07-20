@@ -84,10 +84,13 @@ file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake" _manifes
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake" _manifest_verifier_source)
 file(READ "${SYNTH_SOURCE_ROOT}/.github/workflows/ci.yml" _ci_workflow_source)
 foreach(_virtual_display_contract IN ITEMS
-        "Start verified Linux virtual display"
+        "Start verified Linux virtual display and window manager"
         "x11-utils"
+        "openbox"
         "Xvfb \"$display\""
         "DISPLAY=\"$display\" xdpyinfo"
+        "DISPLAY=\"$display\" openbox --sm-disable"
+        "DISPLAY=\"$display\" xprop -root _NET_SUPPORTING_WM_CHECK"
         "DISPLAY=$display"
         "SYNTH_REUSE_VERIFIED_DISPLAY=1")
     string(FIND "${_ci_workflow_source}"
@@ -196,6 +199,29 @@ foreach(_display_provider_contract IN ITEMS
     if(_runner_contract_position LESS 0 OR _verifier_contract_position LESS 0)
         message(FATAL_ERROR
             "Standalone lifecycle display-provider evidence is incomplete: ${_display_provider_contract}")
+    endif()
+endforeach()
+foreach(_renderer_warmup_contract IN ITEMS
+        "renderer-warmup"
+        "fresh-process")
+    string(FIND "${_standalone_runner_source}"
+           "${_renderer_warmup_contract}" _runner_contract_position)
+    string(FIND "${_standalone_verifier_source}"
+           "${_renderer_warmup_contract}" _verifier_contract_position)
+    if(_runner_contract_position LESS 0 OR _verifier_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone lifecycle renderer warm-up evidence is incomplete: ${_renderer_warmup_contract}")
+    endif()
+endforeach()
+foreach(_windows_path_contract IN ITEMS
+        "cmake_path(CONVERT \"\${_reported_settings}\""
+        "_reported_settings_normalized"
+        "_reported_presets_normalized")
+    string(FIND "${_standalone_runner_source}"
+           "${_windows_path_contract}" _runner_contract_position)
+    if(_runner_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Standalone lifecycle runner is missing Windows path normalization: ${_windows_path_contract}")
     endif()
 endforeach()
 

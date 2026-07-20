@@ -278,6 +278,75 @@ if(SYNTH_SYSTEM_NAME STREQUAL "Linux")
         set(_virtual_display_provider "xvfb-run")
     endif()
 endif()
+
+# Run one disposable process before the measured process set. On Windows, the
+# first DirectWrite-backed render can populate process-external font caches and
+# differ byte-for-byte from subsequent fresh processes. Keeping this warm-up in
+# a separate process preserves the measured fresh-process contract while making
+# repeat 1 start from the same renderer state as repeats 2 and 3.
+set(_renderer_warmup_provider "fresh-process")
+set(_warmup_root "${_standalone_root}/renderer-warmup")
+set(_warmup_isolation_root "${_standalone_root}/renderer-warmup-isolation")
+foreach(_directory IN ITEMS home config data cache appdata localappdata tmp settings presets)
+    file(MAKE_DIRECTORY "${_warmup_isolation_root}/${_directory}")
+endforeach()
+set(_warmup_report_path "${_warmup_root}/report.json")
+set(_warmup_screenshot_path "${_warmup_root}/screenshot.png")
+set(_warmup_settings_path "${_warmup_isolation_root}/settings/MiniMoog.settings")
+set(_warmup_preset_path "${_warmup_isolation_root}/presets")
+set(_warmup_command "${CMAKE_COMMAND}" -E env
+    "HOME=${_warmup_isolation_root}/home"
+    "USERPROFILE=${_warmup_isolation_root}/home"
+    "XDG_CONFIG_HOME=${_warmup_isolation_root}/config"
+    "XDG_DATA_HOME=${_warmup_isolation_root}/data"
+    "XDG_CACHE_HOME=${_warmup_isolation_root}/cache"
+    "APPDATA=${_warmup_isolation_root}/appdata"
+    "LOCALAPPDATA=${_warmup_isolation_root}/localappdata"
+    "TMPDIR=${_warmup_isolation_root}/tmp"
+    "TEMP=${_warmup_isolation_root}/tmp"
+    "TMP=${_warmup_isolation_root}/tmp")
+if(_virtual_display_provider STREQUAL "inherited-x11")
+    list(APPEND _warmup_command "DISPLAY=${_inherited_display}")
+elseif(_virtual_display_provider STREQUAL "xvfb-run")
+    list(APPEND _warmup_command xvfb-run -a)
+endif()
+list(APPEND _warmup_command
+    "${_standalone_executable}"
+    --synth-lifecycle-test normal
+    --report "${_warmup_report_path}"
+    --screenshot "${_warmup_screenshot_path}"
+    --settings "${_warmup_settings_path}"
+    --preset-dir "${_warmup_preset_path}")
+execute_process(
+    COMMAND ${_warmup_command}
+    WORKING_DIRECTORY "${_build_root}"
+    TIMEOUT 180
+    RESULT_VARIABLE _warmup_process_status
+    OUTPUT_VARIABLE _warmup_stdout
+    ERROR_VARIABLE _warmup_stderr
+    ENCODING UTF-8)
+if(NOT _warmup_process_status STREQUAL "0"
+   OR NOT EXISTS "${_warmup_report_path}"
+   OR NOT EXISTS "${_warmup_screenshot_path}")
+    message(FATAL_ERROR
+        "Standalone renderer warm-up process failed (exit ${_warmup_process_status}):\n${_warmup_stdout}${_warmup_stderr}")
+endif()
+file(READ "${_warmup_report_path}" _warmup_report)
+string(JSON _warmup_report_type ERROR_VARIABLE _warmup_report_error
+       TYPE "${_warmup_report}")
+string(JSON _warmup_report_status ERROR_VARIABLE _warmup_status_error
+       GET "${_warmup_report}" status)
+if(_warmup_report_error OR _warmup_status_error
+   OR NOT _warmup_report_type STREQUAL "OBJECT"
+   OR NOT _warmup_report_status STREQUAL "pass")
+    message(FATAL_ERROR "Standalone renderer warm-up report is invalid or failed")
+endif()
+file(REMOVE_RECURSE "${_warmup_root}" "${_warmup_isolation_root}")
+if(EXISTS "${_warmup_root}" OR IS_SYMLINK "${_warmup_root}"
+   OR EXISTS "${_warmup_isolation_root}" OR IS_SYMLINK "${_warmup_isolation_root}")
+    message(FATAL_ERROR "Standalone renderer warm-up cleanup failed")
+endif()
+
 foreach(_mode IN ITEMS normal invalid no-device)
     string(REPLACE "-" "_" _mode_key "${_mode}")
     foreach(_repeat RANGE 1 ${SYNTH_REPEAT_COUNT})
@@ -400,9 +469,13 @@ foreach(_mode IN ITEMS normal invalid no-device)
                            GET "${_application_report}" presets path)
                     string(JSON _presets_match ERROR_VARIABLE _presets_match_error
                            GET "${_application_report}" presets matches_requested_path)
+                    cmake_path(CONVERT "${_reported_settings}" TO_CMAKE_PATH_LIST
+                               _reported_settings_normalized NORMALIZE)
+                    cmake_path(CONVERT "${_reported_presets}" TO_CMAKE_PATH_LIST
+                               _reported_presets_normalized NORMALIZE)
                     if(_settings_error OR _settings_match_error OR _presets_error OR _presets_match_error
-                       OR NOT _reported_settings STREQUAL _settings_path
-                       OR NOT _reported_presets STREQUAL _preset_path
+                       OR NOT _reported_settings_normalized STREQUAL _settings_path
+                       OR NOT _reported_presets_normalized STREQUAL _preset_path
                        OR NOT _settings_match OR NOT _presets_match
                        OR NOT EXISTS "${_settings_path}" OR IS_DIRECTORY "${_settings_path}"
                        OR IS_SYMLINK "${_settings_path}"
@@ -492,6 +565,7 @@ _synth_json_set_string(_environment os "${SYNTH_SYSTEM_NAME}")
 _synth_json_set_string(_environment architecture "${SYNTH_ARCHITECTURE}")
 _synth_json_set_string(_environment configuration "${SYNTH_CONFIGURATION}")
 _synth_json_set_string(_environment virtual_display_provider "${_virtual_display_provider}")
+_synth_json_set_string(_environment renderer_warmup_provider "${_renderer_warmup_provider}")
 set(_aggregate "{}")
 string(JSON _aggregate SET "${_aggregate}" schema_version 1)
 _synth_json_set_string(_aggregate tool_version "${SYNTH_PROJECT_VERSION}")

@@ -62,19 +62,41 @@ jobs:
             libfreetype-dev libfontconfig1-dev \
             libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
             libxinerama-dev libxrandr-dev libxrender-dev \
-            xvfb xauth x11-utils
+            xvfb xauth x11-utils openbox
 
-      - name: Start verified Linux virtual display
+      - name: Start verified Linux virtual display and window manager
         if: runner.os == 'Linux'
         shell: bash
         run: |
           set -euo pipefail
           display=":99"
           xvfb_log="$RUNNER_TEMP/model-d-xvfb.log"
+          wm_log="$RUNNER_TEMP/model-d-openbox.log"
           nohup Xvfb "$display" -screen 0 1920x1080x24 -ac -nolisten tcp > "$xvfb_log" 2>&1 &
           xvfb_pid=$!
+          xvfb_ready=false
           for attempt in {1..40}; do
             if DISPLAY="$display" xdpyinfo >/dev/null 2>&1; then
+              xvfb_ready=true
+              break
+            fi
+            if ! kill -0 "$xvfb_pid" 2>/dev/null; then
+              cat "$xvfb_log"
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if [[ "$xvfb_ready" != true ]]; then
+            cat "$xvfb_log"
+            echo "Xvfb did not become ready on $display" >&2
+            exit 1
+          fi
+
+          nohup env DISPLAY="$display" openbox --sm-disable > "$wm_log" 2>&1 &
+          wm_pid=$!
+          for attempt in {1..40}; do
+            if DISPLAY="$display" xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
+                | grep -q 'window id #'; then
               echo "DISPLAY=$display" >> "$GITHUB_ENV"
               echo "SYNTH_REUSE_VERIFIED_DISPLAY=1" >> "$GITHUB_ENV"
               exit 0
@@ -83,10 +105,15 @@ jobs:
               cat "$xvfb_log"
               exit 1
             fi
+            if ! kill -0 "$wm_pid" 2>/dev/null; then
+              cat "$wm_log"
+              exit 1
+            fi
             sleep 0.25
           done
           cat "$xvfb_log"
-          echo "Xvfb did not become ready on $display" >&2
+          cat "$wm_log"
+          echo "Openbox did not publish _NET_SUPPORTING_WM_CHECK on $display" >&2
           exit 1
 
       - name: Configure (CMake 3.24+ and warnings as errors)

@@ -925,10 +925,10 @@ private:
         const auto windowBounds = hasWindow ? mainWindow->getBounds() : Rectangle<int>{};
         if (hasWindow && ! windowBounds.isEmpty())
         {
-            // JUCE's first offscreen text render may populate an OS font cache.
-            // On a cold Windows runner that one-time cache fill can change a
-            // handful of antialias pixels. Discard one complete render so every
-            // recorded fresh-process screenshot begins from the same state.
+            // Exercise one complete offscreen render before the retained image
+            // and record that the renderer is usable. The lifecycle runner also
+            // launches a disposable process before the measured fresh-process
+            // set so process-external font caches are already populated.
             const auto renderingWarmup =
                 mainWindow->createComponentSnapshot (mainWindow->getLocalBounds(), true);
             screenshotRenderWarmupValid = renderingWarmup.isValid();

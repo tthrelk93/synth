@@ -352,9 +352,10 @@ The retained artifacts isolated three final lifecycle boundaries:
   peer; pluginval continues to exercise its independent hosted-editor path.
 - Windows Debug's first normal screenshot differed from repeats two and three
   by only 25 decoded text-antialias pixels while all application reports and
-  assertions were byte-identical. A discarded full offscreen render now warms
-  JUCE/OS font state before each fresh process records its evidence screenshot,
-  and that warm-up is asserted and deep-verified.
+  assertions were byte-identical. A discarded full offscreen render now proves
+  that the in-process renderer is usable before the retained screenshot; the
+  following hosted run established that process-external cache priming also is
+  required on a cold Windows runner.
 - Windows Release additionally exposed 79,261 changed decoded pixels bounded
   entirely to the keyboard. `PianoKey::isKeyPressed` had no initializer, so a
   release build could paint arbitrary keys as pressed. It now begins explicitly
@@ -381,6 +382,69 @@ truthfully blocked on the declared external gates.
 | Debug | `64992941832f29f1c0ccf466a8cbb0696695911eb48299b1148a4f2c0add0c10` | `c9e039cb627c4959ad2ea15a185a019611debe29cd68709e945c19d0bb402d8e` | `bca92415798a3c3d4a2c788509258321e9633482dfa363dfb9a81f434f7ddd05` |
 | Release | `692782ba79eaeaf3731d2a644733b144eb7fc43e77995b0ec0ed5ef5802f556f` | `8dbd45284a2455020b231789df5bff980ab87ba3fc4c631a6b7b739d6d2e62b1` | `e797967f899065cfc854253a8f386b185c8831b5b57ce882f36c535aea9f3d6c` |
 
+## Fifth corrective run and verified renderer/window-manager boundaries
+
+Commit `f13df447f14232bdaa71149a6bb7d8a08bb2ceda` published the deterministic
+piano-key state, in-process render assertion, and host-style wrapper peer. Push
+run [`29721931520`](https://github.com/tthrelk93/synth/actions/runs/29721931520)
+materialized all eight exact-head rows; duplicate pull-request run `29721933451`
+was cancelled. All four macOS rows completed the full chain. Both Linux rows
+completed the strict build, 9/9 CTest, every required label, and direct
+standalone lifecycle validation. Both Windows rows completed their strict
+warnings-as-errors builds and the first six CTest contracts.
+
+The terminal artifacts then bounded the remaining failures without weakening
+any gate:
+
+- Both Linux actual-wrapper processes reached the second editor-open case and
+  failed identically with `BadAtom`, major opcode `X_ChangeProperty`, atom
+  `0x0`, and serial 75. A titled host-style peer therefore is necessary but
+  not sufficient on bare Xvfb: JUCE requires the EWMH atoms published by a real
+  window manager. Hosted Linux now installs and starts Openbox only after Xvfb
+  passes `xdpyinfo`, then withholds the verified-display marker until `xprop`
+  confirms `_NET_SUPPORTING_WM_CHECK`.
+- Every Windows application report was `pass`, with empty failures and true
+  initial-key and renderer assertions. The harness nevertheless rejected all
+  nine runs because native backslash paths were compared lexically against
+  CMake-style forward-slash paths. Reported native paths are now normalized
+  before the existing absolute-path, existence, symlink, and containment
+  checks rewrite them to build-relative evidence.
+- After that independent path defect, the only byte divergence remained the
+  first normal screenshot. Debug repeat 1 was
+  `7696186f48d637f0648cc517f2874980fa6d54818ffb2ddeb4cc5916e2046a8b`
+  versus stable repeats 2/3
+  `c248cf3c5d2ff5b444f0c6f76c3b5da88ff80be72dc08bd8386747439d44aedf`;
+  Release repeat 1 was
+  `dab4acef700024ac889df8d9d5d132e12165058487d760d29251624cbc50b764`
+  before converging on the same stable hash. The runner now launches and
+  validates one disposable normal-mode process, removes all of its build-owned
+  output, then starts the unchanged measured 3-by-3 fresh-process set. The
+  aggregate records `renderer_warmup_provider: fresh-process`, and the deep
+  verifier and source contract require it.
+
+The complete run metadata, combined log, and all eight uploads are retained
+under `/private/tmp/model-d-agent03-corrective5.noBJta`. Its checksum index
+covers 296 regular files and has SHA-256
+`5341a604a3ef7eb4b3a8ce61ad2c4a1efa1ad7906c1e434023bcfe52fb851ac6`;
+independent `shasum -c` verification passes. The combined run log SHA-256 is
+`af54d0cc9848045a7c94cb128fcfd76d9c38d46e2e9835e8c3e60cf2ee029065`
+and the run-summary SHA-256 is
+`51ebab9702c0c548e01c0dfbcb615a98777819af619b466950b32111c726a47c`.
+This non-green diagnostic run does not promote a BLD status.
+
+Regression contracts were observed failing before each correction and passing
+afterward. The workflow also parses as YAML. The space-bearing local Debug and
+Release trees then passed strict all-target builds, 9/9 CTest, every required
+label with fail-on-zero behavior, standalone lifecycle 9/9 with identical
+per-mode evidence, actual-wrapper 3/3, pluginval 1.0.4 strictness-10 in 3/3
+isolated processes, and linked-manifest deep verification. The superseding
+local hashes are:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `4dac4421dac0faf0f81bcede3f6f03c6e984770cc75115882633722e94f3d92f` | `099bb067df209fcf3946274cedad1cc0e4b52fab77c485aa7b0bbad820fba11d` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `c281e8db48ae2d261e555f903b536a508d833680c6e3daeabaa68d5dcaa2c87f` | `6e158581e00364c4fcc3021465900e1355357694530c6330025b3f4b76075997` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -405,7 +469,7 @@ registration, the SDK validator, and the designated commercial hosts.
 
 BLD statuses remain unchanged through these diagnostic attempts. BLD-004
 remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The fourth correction is locally green in Debug and Release
+`in-progress`. The fifth correction is locally green in Debug and Release
 all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
 execution. Publish that correction and require one exact-head hosted run with
 all eight matrix rows green before promoting any hosted-dependent BLD row.
