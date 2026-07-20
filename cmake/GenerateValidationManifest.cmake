@@ -1,25 +1,17 @@
 cmake_minimum_required(VERSION 3.24)
 
-if(DEFINED SYNTH_EXPECTED_EVIDENCE_COUNT)
-    if(NOT SYNTH_EXPECTED_EVIDENCE_COUNT MATCHES "^[0-9]+$"
-       OR SYNTH_EXPECTED_EVIDENCE_COUNT EQUAL 0)
+if(DEFINED SYNTH_EXPECTED_EVIDENCE_FILE)
+    if("${SYNTH_EXPECTED_EVIDENCE_FILE}" STREQUAL ""
+       OR NOT EXISTS "${SYNTH_EXPECTED_EVIDENCE_FILE}")
         message(FATAL_ERROR
-            "SYNTH_EXPECTED_EVIDENCE_COUNT must be a positive integer")
+            "SYNTH_EXPECTED_EVIDENCE_FILE must name an existing inventory")
     endif()
-    set(SYNTH_EXPECTED_EVIDENCE "")
-    math(EXPR _synth_last_expected_evidence
-         "${SYNTH_EXPECTED_EVIDENCE_COUNT} - 1")
-    foreach(_synth_expected_evidence_index RANGE 0 ${_synth_last_expected_evidence})
-        set(_synth_expected_evidence_variable
-            "SYNTH_EXPECTED_EVIDENCE_${_synth_expected_evidence_index}")
-        if(NOT DEFINED ${_synth_expected_evidence_variable}
-           OR "${${_synth_expected_evidence_variable}}" STREQUAL "")
-            message(FATAL_ERROR
-                "${_synth_expected_evidence_variable} is required by SYNTH_EXPECTED_EVIDENCE_COUNT")
-        endif()
-        list(APPEND SYNTH_EXPECTED_EVIDENCE
-             "${${_synth_expected_evidence_variable}}")
-    endforeach()
+    file(STRINGS "${SYNTH_EXPECTED_EVIDENCE_FILE}" SYNTH_EXPECTED_EVIDENCE
+         ENCODING UTF-8)
+    if(NOT SYNTH_EXPECTED_EVIDENCE)
+        message(FATAL_ERROR
+            "SYNTH_EXPECTED_EVIDENCE_FILE inventory is empty")
+    endif()
 elseif(DEFINED SYNTH_EXPECTED_EVIDENCE)
     string(REPLACE "\\;" ";" SYNTH_EXPECTED_EVIDENCE
                    "${SYNTH_EXPECTED_EVIDENCE}")

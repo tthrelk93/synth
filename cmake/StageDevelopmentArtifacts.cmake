@@ -1,23 +1,15 @@
 cmake_minimum_required(VERSION 3.24)
 
-if(DEFINED SYNTH_TEST_REPORT_COUNT)
-    if(NOT SYNTH_TEST_REPORT_COUNT MATCHES "^[0-9]+$")
-        message(FATAL_ERROR "SYNTH_TEST_REPORT_COUNT must be a non-negative integer")
+if(DEFINED SYNTH_TEST_REPORTS_FILE)
+    if("${SYNTH_TEST_REPORTS_FILE}" STREQUAL ""
+       OR NOT EXISTS "${SYNTH_TEST_REPORTS_FILE}")
+        message(FATAL_ERROR
+            "SYNTH_TEST_REPORTS_FILE must name an existing inventory")
     endif()
-    set(SYNTH_TEST_REPORTS "")
-    if(SYNTH_TEST_REPORT_COUNT GREATER 0)
-        math(EXPR _synth_last_test_report "${SYNTH_TEST_REPORT_COUNT} - 1")
-        foreach(_synth_test_report_index RANGE 0 ${_synth_last_test_report})
-            set(_synth_test_report_variable
-                "SYNTH_TEST_REPORT_${_synth_test_report_index}")
-            if(NOT DEFINED ${_synth_test_report_variable}
-               OR "${${_synth_test_report_variable}}" STREQUAL "")
-                message(FATAL_ERROR
-                    "${_synth_test_report_variable} is required by SYNTH_TEST_REPORT_COUNT")
-            endif()
-            list(APPEND SYNTH_TEST_REPORTS
-                 "${${_synth_test_report_variable}}")
-        endforeach()
+    file(STRINGS "${SYNTH_TEST_REPORTS_FILE}" SYNTH_TEST_REPORTS
+         ENCODING UTF-8)
+    if(NOT SYNTH_TEST_REPORTS)
+        message(FATAL_ERROR "SYNTH_TEST_REPORTS_FILE inventory is empty")
     endif()
 elseif(DEFINED SYNTH_TEST_REPORTS)
     string(REPLACE "\\;" ";" SYNTH_TEST_REPORTS "${SYNTH_TEST_REPORTS}")

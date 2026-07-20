@@ -33,51 +33,56 @@ file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake"
      _verify_validation_source)
 
 # Multi-value -D arguments are not portable through Visual Studio when they
-# are packed into one quoted semicolon list. Require indexed arguments for the
-# final report inventory and expected-evidence inventory instead.
-foreach(_indexed_transport_contract IN ITEMS
-        "SYNTH_TEST_REPORT_COUNT"
-        "SYNTH_TEST_REPORT_"
-        "SYNTH_EXPECTED_EVIDENCE_COUNT"
-        "SYNTH_EXPECTED_EVIDENCE_")
+# are packed into one quoted semicolon list, and expanding every entry can
+# exceed cmd.exe's command-line limit. Require short build-owned inventory-file
+# arguments for both finalization commands instead.
+foreach(_inventory_transport_contract IN ITEMS
+        "SYNTH_TEST_REPORTS_FILE"
+        "SYNTH_EXPECTED_EVIDENCE_FILE"
+        "model-d-validation-inventory")
     string(FIND "${_top_level_cmake_source}"
-           "${_indexed_transport_contract}" _top_level_contract_position)
+           "${_inventory_transport_contract}" _top_level_contract_position)
     if(_top_level_contract_position LESS 0)
         message(FATAL_ERROR
-            "validation evidence does not use indexed cross-generator argument transport: ${_indexed_transport_contract}")
+            "validation evidence does not use bounded inventory-file transport: ${_inventory_transport_contract}")
     endif()
 endforeach()
-foreach(_indexed_report_contract IN ITEMS
-        "SYNTH_TEST_REPORT_COUNT"
-        "SYNTH_TEST_REPORT_")
+foreach(_report_inventory_contract IN ITEMS
+        "SYNTH_TEST_REPORTS_FILE"
+        "file(STRINGS")
     string(FIND "${_stage_development_source}"
-           "${_indexed_report_contract}" _stage_contract_position)
+           "${_report_inventory_contract}" _stage_contract_position)
     if(_stage_contract_position LESS 0)
         message(FATAL_ERROR
-            "development staging cannot reconstruct indexed report arguments: ${_indexed_report_contract}")
+            "development staging cannot read the report inventory: ${_report_inventory_contract}")
     endif()
 endforeach()
 foreach(_validation_source IN ITEMS
         _generate_validation_source
         _verify_validation_source)
-    foreach(_indexed_evidence_contract IN ITEMS
-            "SYNTH_EXPECTED_EVIDENCE_COUNT"
-            "SYNTH_EXPECTED_EVIDENCE_")
+    foreach(_evidence_inventory_contract IN ITEMS
+            "SYNTH_EXPECTED_EVIDENCE_FILE"
+            "file(STRINGS")
         string(FIND "${${_validation_source}}"
-               "${_indexed_evidence_contract}" _evidence_contract_position)
+               "${_evidence_inventory_contract}" _evidence_contract_position)
         if(_evidence_contract_position LESS 0)
             message(FATAL_ERROR
-                "validation manifest script cannot reconstruct indexed evidence arguments: ${_indexed_evidence_contract}")
+                "validation manifest script cannot read the evidence inventory: ${_evidence_inventory_contract}")
         endif()
     endforeach()
 endforeach()
-string(FIND "${_top_level_cmake_source}"
-       "_model_d_validation_reports_argument"
-       _packed_report_argument_position)
-if(NOT _packed_report_argument_position LESS 0)
-    message(FATAL_ERROR
-        "final validation staging still transports reports as a packed semicolon argument")
-endif()
+foreach(_forbidden_long_transport IN ITEMS
+        "_model_d_validation_reports_argument"
+        "_model_d_validation_report_arguments"
+        "_model_d_expected_evidence_argument"
+        "_model_d_expected_evidence_arguments")
+    string(FIND "${_top_level_cmake_source}"
+           "${_forbidden_long_transport}" _long_transport_position)
+    if(NOT _long_transport_position LESS 0)
+        message(FATAL_ERROR
+            "final validation still expands a long command-line inventory: ${_forbidden_long_transport}")
+    endif()
+endforeach()
 
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/ProvisionPluginval.cmake"
      _pluginval_provision_source)

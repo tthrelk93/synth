@@ -520,26 +520,28 @@ if(SYNTH_BUILD_VALIDATORS)
     endforeach()
     list(REMOVE_DUPLICATES _model_d_expected_validation_evidence)
     list(SORT _model_d_expected_validation_evidence)
-    list(LENGTH _model_d_validation_reports _model_d_validation_report_count)
-    set(_model_d_validation_report_arguments
-        "-DSYNTH_TEST_REPORT_COUNT=${_model_d_validation_report_count}")
-    set(_model_d_validation_report_index 0)
+    set(_model_d_validation_inventory_directory
+        "${CMAKE_BINARY_DIR}/model-d-validation-inventory")
+    file(MAKE_DIRECTORY "${_model_d_validation_inventory_directory}")
+    set(_model_d_validation_reports_file
+        "${_model_d_validation_inventory_directory}/declared-reports.txt")
+    set(_model_d_expected_evidence_file
+        "${_model_d_validation_inventory_directory}/expected-evidence.txt")
+    file(WRITE "${_model_d_validation_reports_file}" "")
     foreach(_report IN LISTS _model_d_validation_reports)
-        list(APPEND _model_d_validation_report_arguments
-            "-DSYNTH_TEST_REPORT_${_model_d_validation_report_index}=${_report}")
-        math(EXPR _model_d_validation_report_index
-             "${_model_d_validation_report_index} + 1")
+        if(_report MATCHES "[\r\n]")
+            message(FATAL_ERROR
+                "Validation report paths must not contain line breaks: ${_report}")
+        endif()
+        file(APPEND "${_model_d_validation_reports_file}" "${_report}\n")
     endforeach()
-    list(LENGTH _model_d_expected_validation_evidence
-         _model_d_expected_evidence_count)
-    set(_model_d_expected_evidence_arguments
-        "-DSYNTH_EXPECTED_EVIDENCE_COUNT=${_model_d_expected_evidence_count}")
-    set(_model_d_expected_evidence_index 0)
+    file(WRITE "${_model_d_expected_evidence_file}" "")
     foreach(_evidence IN LISTS _model_d_expected_validation_evidence)
-        list(APPEND _model_d_expected_evidence_arguments
-            "-DSYNTH_EXPECTED_EVIDENCE_${_model_d_expected_evidence_index}=${_evidence}")
-        math(EXPR _model_d_expected_evidence_index
-             "${_model_d_expected_evidence_index} + 1")
+        if(_evidence MATCHES "[\r\n]")
+            message(FATAL_ERROR
+                "Expected validation evidence paths must not contain line breaks: ${_evidence}")
+        endif()
+        file(APPEND "${_model_d_expected_evidence_file}" "${_evidence}\n")
     endforeach()
     set(_model_d_validation_manifest
         "${SYNTH_STAGE_ROOT}/$<CONFIG>-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}/validation-manifest.json")
@@ -548,7 +550,7 @@ if(SYNTH_BUILD_VALIDATORS)
         DEPENDS ModelDRunAuval
         COMMAND "${CMAKE_COMMAND}"
             ${_model_d_stage_arguments}
-            ${_model_d_validation_report_arguments}
+            "-DSYNTH_TEST_REPORTS_FILE=${_model_d_validation_reports_file}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/StageDevelopmentArtifacts.cmake"
         COMMAND "${CMAKE_COMMAND}"
             "-DSYNTH_BUILD_ROOT=${CMAKE_BINARY_DIR}"
@@ -567,7 +569,7 @@ if(SYNTH_BUILD_VALIDATORS)
             "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_CONFIGURATION=$<CONFIG>"
             "-DSYNTH_PROJECT_VERSION=${PROJECT_VERSION}"
-            ${_model_d_expected_evidence_arguments}
+            "-DSYNTH_EXPECTED_EVIDENCE_FILE=${_model_d_expected_evidence_file}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateValidationManifest.cmake"
         COMMENT "Re-staging and finalizing linked validation evidence"
         VERBATIM)
@@ -592,7 +594,7 @@ if(SYNTH_BUILD_VALIDATORS)
             "-DSYNTH_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}"
             "-DSYNTH_ARCHITECTURE=${CMAKE_SYSTEM_PROCESSOR}"
             "-DSYNTH_CONFIGURATION=$<CONFIG>"
-            ${_model_d_expected_evidence_arguments}
+            "-DSYNTH_EXPECTED_EVIDENCE_FILE=${_model_d_expected_evidence_file}"
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/VerifyValidationManifest.cmake"
         COMMENT "Verifying build and validation manifests and all declared evidence"
         VERBATIM)

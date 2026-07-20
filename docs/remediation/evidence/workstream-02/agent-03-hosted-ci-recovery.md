@@ -545,6 +545,57 @@ statuses remain truthfully blocked.
 | Debug | `3847804dd0463c3ecfc8631284e2951996770eefa86b77c36446897afe7b8f66` | `0a1f0df985bceb17e037a299945d7c060e5dfd97531962b17711de97cde46f32` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
 | Release | `b7a73270510db54af9ff29fcf4057e77a1dd06b4dd1fd3002cec2ccd02081372` | `5674dc593dbcb2aa0c1c74439b9f371f2c4a5bf720f521c482dbbac935b7bce0` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
 
+## Eighth corrective run and bounded validation inventories
+
+Commit `47718971dbc41fdb154b2d3169f6a44538d81cb3` published the indexed
+Visual Studio evidence transport. Push run
+[`29725205641`](https://github.com/tthrelk93/synth/actions/runs/29725205641)
+materialized all eight exact-head rows; duplicate pull-request run
+`29725208783` was cancelled. All four macOS and both Linux rows completed the
+entire strict build, 9/9 CTest, every required label, standalone lifecycle,
+actual-wrapper 3/3, pluginval 3/3, platform-appropriate auval, linked-manifest
+verification, and upload chain. Both Windows rows completed the same strict
+build, CTest, label, standalone, actual-wrapper, pluginval, and non-macOS auval
+gates. Final staging and both manifest-generation commands also completed.
+
+The only remaining failures occurred when Visual Studio expanded every
+expected-evidence entry into the final verification command. That command
+exceeded `cmd.exe`'s length limit, so its trailing `-P` script argument was not
+delivered and CMake treated the build directory as a source directory. The
+matching Debug and Release failures occur after the underlying evidence and
+manifests exist; they identify a command-transport limit, not a validator or
+manifest-content failure.
+
+The complete run metadata, combined log, eight job logs, and all eight uploads
+are retained under `/private/tmp/model-d-agent03-corrective8.IBGXOq`. Its
+checksum index covers 354 evidence files and has SHA-256
+`d145a4fe765b301364d513c7c1f3be966089930d90d0e1f5febe29b425d9c84c`;
+independent `shasum -c` verification passes. The combined run log SHA-256 is
+`09bfebc8f6618cd7f37d7a5a9e4dd10e42bcae0f35dfa9c609d65bd8e7b8164c`
+and the run-metadata SHA-256 is
+`c9b58e2c84553004a0b219bd85599ad42a48bd5dcbaba2a8df6732916cbd1d26`.
+This non-green diagnostic run does not promote a BLD status.
+
+Finalization now writes the declared reports and expected-evidence paths to
+two line-delimited files under the build-owned
+`model-d-validation-inventory` directory. The custom commands pass only one
+short inventory-file argument apiece, and the staging, manifest-generation,
+and manifest-verification scripts read and validate those files. Direct callers
+retain the supported legacy aggregate inputs. The path-safety contract was
+observed failing before the correction and now forbids both packed and expanded
+long command-line inventories.
+
+Fresh space-bearing local Debug and Release strict all-target builds, 9/9
+CTest, and all seven separately required labels pass. Each linked validation
+target also passes standalone lifecycle 9/9, actual-wrapper 3/3, pluginval
+1.0.4 strictness-10 in 3/3 isolated processes, manifest generation, and deep
+verification. The superseding local hashes are:
+
+| Configuration | Build manifest SHA-256 | Validation manifest SHA-256 | Standalone report SHA-256 |
+|---|---|---|---|
+| Debug | `94d40724a730271a5424a5a7306ad735e2da1043e86a70cb7fd9915eb7d09a82` | `db84070d44e83becc627ed3fd490ca558bd2fe5bf6503dc3f5a6cc3ae3d16d8b` | `4afa1972bf9fbb8348a1bbe7bc3c6da0a92f6089c66b052e8370767151900dbe` |
+| Release | `d5c75915cba5c032d78b63cfe954d212435215db9b47b499ba68834f72f88955` | `eea4e2fd5d79af91e512182913b7342130ea01d2b42a9b61668a10706af6f9dc` | `947de977fbe5adf9b660c2cd0d1b78c64b68bb6120a1a82266536f0e61578c10` |
+
 ## Factual external-gate refresh
 
 Read-only inspection found no new input that can truthfully close the remaining
@@ -569,7 +620,7 @@ registration, the SDK validator, and the designated commercial hosts.
 
 BLD statuses remain unchanged through these diagnostic attempts. BLD-004
 remains `pass`; BLD-007 and BLD-011 remain `blocked`; all other rows remain
-`in-progress`. The sixth correction is locally green in Debug and Release
+`in-progress`. The bounded-inventory correction is locally green in Debug and Release
 all-target, 9/9 CTest, lifecycle, actual-wrapper, pluginval, and linked-validation
 execution. Publish that correction and require one exact-head hosted run with
 all eight matrix rows green before promoting any hosted-dependent BLD row.
