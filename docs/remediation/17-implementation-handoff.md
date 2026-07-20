@@ -11,18 +11,18 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 | Field | Current value |
 |---|---|
 | Prepared | 2026-07-19 |
-| Current owner | Agent 01 |
+| Current owner | Agent 02 |
 | Roadmap phase | F0 — reproducible baseline |
 | Workstream | 02 — Build, Packaging, and Host Validation |
-| Overall status | in-progress; BLD-007 and BLD-011 externally blocked |
+| Overall status | in-progress; hosted branch publication is not authorized, and BLD-007/BLD-011 are externally blocked |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
-| Source prompt | [Agent 01 kickoff](16-agent-01-workstream-02-kickoff.md) |
-| Successor package | Planned untracked artifact `Agent-02-Workstream-02-Continuation-Context.zip`; build it from the final protocol commit and report its outer SHA-256 after construction. |
-| First action | Execute `.github/workflows/ci.yml` from a fresh clone on all eight supported rows and retain its uploaded validation evidence; local implementation work through BLD-012 is complete. |
+| Source prompt | Agent 02 continuation package; durable results are in the [continuation preflight](evidence/workstream-02/continuation-preflight.md). |
+| Successor package | Planned untracked artifact `Agent-03-Workstream-02-Continuation-Context.zip`; build it from the final Agent 02 ledger commit and report its outer SHA-256 after construction. |
+| First action | With explicit push authority, run `git push --set-upstream origin codex/workstream-02-build`; retain all eight push-triggered jobs' logs and `model-d-validation-*` uploads. |
 | First unmet gate | BLD-001 — supported-CI fresh-clone configure/build evidence |
 | Next owner if incomplete | Workstream 02 / F0 continuation at the first dependency-ordered non-passing BLD requirement |
-| Next owner if complete | Agent 02, Workstream 03 / F0; verify Workstream 02 seams, then begin the parameter/state contract. |
+| Next owner if complete | Agent 03, Workstream 03 / F0; verify Workstream 02 seams, then begin the parameter/state contract. |
 
 ## Workstream 02 requirement ledger
 
@@ -30,30 +30,30 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 
 | Requirement | Status | Durable evidence | Blocker or next action |
 |---|---|---|---|
-| BLD-001 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) | Local Debug/Release build is green; supported-CI fresh-clone evidence remains. |
-| BLD-002 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) | Supported CMake is independent of Projucer/generated paths; hosted cross-platform audit remains. |
-| BLD-003 | in-progress | [Dependency/license review](evidence/workstream-02/dependency-license-review.md) | Exact revision and local licence inventory are green; hosted evidence and owner licensing decision remain. |
+| BLD-001 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release and static CI audit are green; the branch/commit is not remote, so supported-CI fresh-clone evidence remains. |
+| BLD-002 | in-progress | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Supported CMake is independent of Projucer/generated paths; hosted cross-platform audit remains. |
+| BLD-003 | in-progress | [Dependency/license review](evidence/workstream-02/dependency-license-review.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Exact revision and local licence inventory are green; hosted evidence and owner licensing decision remain. |
 | BLD-004 | pass | [README clean-clone evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | All five committed commands pass verbatim from a fresh clone; hosted CI remains a separate aggregate gate. |
-| BLD-005 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) | Local wrapper, exact product set, actual-wrapper, and pluginval evidence is green; supported hosted evidence remains. |
-| BLD-006 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) | Local generated metadata, exhaustive processor tests, actual-wrapper scan, and pluginval are green; commercial/hosted scans remain. |
-| BLD-007 | blocked | [Preflight](evidence/workstream-02/preflight.md) | Product owner must confirm distribution history and approve legal manufacturer name, manufacturer code, product code, and reverse-DNS domain. |
-| BLD-008 | in-progress | [Warning baseline](evidence/workstream-02/warning-baseline.md) | Local Debug/Release evidence is clean; collect supported-CI warning reports before pass. |
-| BLD-009 | in-progress | [Standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md) | Local macOS arm64 Debug/Release passes 9/9 fresh processes per configuration; hosted macOS Intel/Windows/Linux rows remain. |
-| BLD-010 | in-progress | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) | Local Debug/Release 9/9, all labels, and sentinel proof are green; run the checked-in eight-job hosted matrix. |
-| BLD-011 | blocked | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) | Local actual-wrapper/pluginval pass; AU registration, VST3 SDK validator, commercial hosts, and hosted runs are unavailable. |
-| BLD-012 | in-progress | [Artifact staging/build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) | Linked manifests repeat and deep-verify locally; release stays blocked by BLD-007/011 and hosted evidence. |
+| BLD-005 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release wrapper, exact product set, actual-wrapper, and pluginval evidence is green; supported hosted evidence remains. |
+| BLD-006 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Local generated metadata, exhaustive processor tests, actual-wrapper scan, and pluginval are green; commercial/hosted scans remain. |
+| BLD-007 | blocked | [Preflight](evidence/workstream-02/preflight.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Product owner must confirm distribution history and approve legal manufacturer name, manufacturer code, product code, and reverse-DNS domain. |
+| BLD-008 | in-progress | [Warning baseline](evidence/workstream-02/warning-baseline.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release evidence is clean; collect supported-CI warning reports before pass. |
+| BLD-009 | in-progress | [Standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local macOS arm64 Debug/Release passes 9/9 per configuration; hosted macOS Intel/Windows/Linux rows remain. |
+| BLD-010 | in-progress | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local Debug/Release 9/9, all labels, sentinel proof, and static CI audit are green; run the unpublished eight-job hosted matrix. |
+| BLD-011 | blocked | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh local actual-wrapper/pluginval pass; AU registration, VST3 SDK validator, commercial hosts, and hosted runs are unavailable. |
+| BLD-012 | in-progress | [Artifact staging/build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) | Fresh Debug/Release linked manifests deep-verify locally; release stays blocked by BLD-007/011 and hosted evidence. |
 
 ## Current change inventory
 
 | Category | Details |
 |---|---|
-| Starting branch/commit | `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; implementation branch `codex/workstream-02-build` created before edits. |
-| Ending commit/working tree | Implementation tip `a42ec798b9c50fc8c1ce92e01731646428668a26`; the final documentation ledger is the commit containing this file. Only the preserved ZIP/extracted context should remain untracked. |
-| Pre-existing changes | `Agent-01-Workstream-02-Context.zip` and `docs/` were untracked at preflight. The planning suite under `docs/` is now the canonical maintained ledger; the ZIP remains untouched. `Agent-01-Workstream-02-Context/` is Agent 01's extracted working copy and is not staged. |
+| Starting branch/commit | Overall baseline `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; Agent 02 resumed `codex/workstream-02-build` at `6b85c5369d41b3323e4e71eb6316a0b65734848d`. |
+| Ending commit/working tree | Implementation tip remains `a42ec798b9c50fc8c1ce92e01731646428668a26`; the final Agent 02 documentation/evidence ledger is the commit containing this entry. Only preserved and successor ZIP/extracted context should remain untracked. |
+| Pre-existing changes | Agent 02 preserved `Agent-01-Workstream-02-Context.zip`, `Agent-01-Workstream-02-Context/`, `Agent-02-Workstream-02-Continuation-Context.zip`, and its extracted copy without staging or modification. |
 | Implementation files changed | `42d42c2`–`20dedb1`: CMake/JUCE foundation, warnings, instrument buses, CTest/CI, staging/build manifest. `8e8dd3a`: actual VST3 wrapper smoke. `fdd941c`/`e1fdc86`: pinned pluginval, auval/host evidence, linked manifest, validator hardening. `bddc704`/`b2ce79f`/`1864309`: project-owned standalone lifecycle and evidence isolation. `2164ff0`/`a42ec79`: symlink-ancestor/path ownership contracts and cross-platform-safe compatibility. |
-| Planning files changed | README plus roadmap, BLD matrix rows, Workstream 02 status/current evidence, this handoff, and the Workstream 02 evidence suite. |
-| Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md). |
-| Temporary scaffolding | `Agent-01-Workstream-02-Context/` is an extracted context copy and not an implementation source. Local build/evidence trees are under `/private/tmp`; they are reproducible, not repository inputs. |
+| Planning files changed | README plus roadmap, BLD matrix rows, Workstream 02 status/current evidence, this handoff, and the Workstream 02 evidence suite; Agent 02 added only continuation evidence and synchronized ownership/blocker text. |
+| Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md); [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md). |
+| Temporary scaffolding | Extracted context copies are orientation inputs, not implementation sources. Agent 02 build/evidence and checksum-verified `actionlint` trees are bounded under `/private/tmp`; they are reproducible, not repository inputs. |
 
 ## Verification ledger
 
@@ -71,6 +71,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-19; macOS arm64; Release | `cmake --build <build> --config Release --target ModelDVerifyValidationEvidence --parallel`; repeat finalization; manifest/report SHA-256; tamper/evidence-set/path tests | Actual wrapper passes 3/3; pluginval 1.0.4 strictness 10 passes 3/3 isolated processes; auval records `blocked` without user mutation; VST3 SDK validator is `not-run`; commercial hosts blocked/unrun. Two linked-manifest runs are byte-identical and deep verification is green while release remains blocked. | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) | BLD-006, BLD-011, BLD-012 |
 | 2026-07-19; macOS arm64; Debug/Release plus simulated Windows/Linux script branches | `ctest -R ModelDValidatorPathSafety --output-on-failure`; external symlink-ancestor and alias-root cases | Both configurations pass; rejected paths create no external evidence. Final independent review found no Critical, Important, or Minor issues. | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) | BLD-010–012 |
 | 2026-07-19; fresh local clone at `5bb1702`; macOS arm64 Release | Run all five commands copied verbatim from committed README: configure, build, CTest, standalone lifecycle, and validation evidence | Configure resolves exact JUCE; all targets build; CTest passes 9/9; lifecycle target passes; actual wrapper/pluginval pass 3/3; validation evidence verifies with the release aggregate truthfully blocked. | [CTest/CI evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | BLD-004 |
+| 2026-07-19 17:22 PDT; Agent 02; macOS arm64 Debug/Release | Verify continuation ZIP; refresh origin; inspect remote branch/commit/workflows/runs; checksum/install `actionlint` 1.7.12 under `/private/tmp`; fresh space-path configure/build; 9/9 CTest; `ModelDVerifyValidationEvidence`; direct auval/tool/host/identity audit | ZIP/internal manifest pass; remote contains neither branch nor commit and has no workflow run; static CI audit passes all eight declared rows; fresh Debug/Release build and 9/9 CTest pass; actual-wrapper/pluginval pass 3/3; linked evidence verifies; auval and aggregate release remain blocked. | [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md) | BLD-001–003, BLD-005–012 |
 
 ## Decisions, assumptions, and blockers
 
@@ -81,6 +82,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 - The fixed product, compatibility, phase, and evidence policies remain those in the roadmap and Workstream 02.
 - A missing reviewed legal identity blocks BLD-007 and any distribution artifact that depends on it; it is not permission to invent values.
 - Early lifecycle diagnostics exposed two pre-existing unconditional user writes. The newly created real settings file and Desktop log were moved recoverably to `/tmp/model-d-task7-settings-recovery.q2FbjJ/MiniMoog.settings` and `/tmp/model-d-task7-desktop-log-recovery.mRiFyV/my_plugin_log.txt`; the original user locations are absent. No pre-existing file was overwritten or deleted.
+- The checked-in CI branch and continuation commit are not present on `origin`. Although the authenticated account can administer workflows, no explicit push authority was supplied, so Agent 02 did not mutate the remote. Hosted evidence requires an authorized branch publication.
 
 ## Successor handoff package protocol
 
@@ -114,10 +116,11 @@ assistant response reports the outer ZIP SHA-256. The successor's
 ## Exact resumption point
 
 All independent local implementation through BLD-012 is complete. Resume with
-the first dependency-ordered gate, BLD-001: publish or otherwise run the current
-branch through `.github/workflows/ci.yml`, retain all eight jobs' logs/uploads,
-and reconcile BLD-001–006/008–010/012 from those results. Do not push or install
-anything into a real user account without the appropriate authorization.
+the first dependency-ordered gate, BLD-001: after obtaining explicit push
+authority, run `git push --set-upstream origin codex/workstream-02-build`. The
+push trigger must execute `.github/workflows/ci.yml`; retain all eight jobs'
+logs/uploads and reconcile BLD-001–006/008–010/012 from those results. Do not
+push or install anything into a real user account without that authorization.
 
 In parallel, obtain the product owner's distribution-history and legal identity
 decision for `cmake/ProductIdentity.cmake`, plus the JUCE licensing decision.
@@ -127,7 +130,7 @@ fixed `validation/required-host-matrix.json` checks and regenerate
 `ModelDVerifyValidationEvidence`. Preserve all frozen target, bus, status-token,
 and evidence-ownership seams.
 
-If Agent 01 stops before all BLD requirements pass, the next agent stays in Workstream 02 and resumes at the first dependency-ordered non-passing requirement listed above. If every BLD requirement passes with linked evidence and the Workstream 02 Definition of Done is complete, the next agent advances to Workstream 03 in F0 and starts by verifying the frozen build targets, wrapper/bus contract, and CTest seams.
+If Agent 02 stops before all BLD requirements pass, the next agent stays in Workstream 02 and resumes at the first dependency-ordered non-passing requirement listed above. If every BLD requirement passes with linked evidence and the Workstream 02 Definition of Done is complete, the next agent advances to Workstream 03 in F0 and starts by verifying the frozen build targets, wrapper/bus contract, and CTest seams.
 
 ## Handoff history
 
@@ -158,6 +161,25 @@ If Agent 01 stops before all BLD requirements pass, the next agent stays in Work
 - **First unmet gate:** BLD-001 supported-CI fresh-clone configure/build evidence.
 - **Exact resumption point:** run `.github/workflows/ci.yml` for all eight rows and retain uploads; then obtain external approvals/access and rerun `ModelDVerifyValidationEvidence` with AU/SDK/host evidence.
 - **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Workstream 02 exit gate passes.
+
+### 2026-07-19 17:22 PDT — Agent 02 continuation handoff
+
+- **From / to:** Agent 02 / Workstream 02 continuation plus product owner.
+- **Branch and commits:** resumed `codex/workstream-02-build` at `6b85c5369d41b3323e4e71eb6316a0b65734848d`; no implementation code changed; the ending documentation/evidence commit is the commit containing this entry.
+- **Pre-existing changes preserved:** `Agent-01-Workstream-02-Context.zip`, `Agent-01-Workstream-02-Context/`, `Agent-02-Workstream-02-Continuation-Context.zip`, and its extracted copy remain untracked and unmodified.
+- **Phase/workstream/status:** F0 / Workstream 02 / incomplete. BLD-004 passes; BLD-007 and BLD-011 are externally blocked; the remaining hosted-dependent rows are in progress.
+- **Requirements:** statuses are unchanged: BLD-004 is `pass`; BLD-001–003/005–006/008–010/012 are `in-progress`; BLD-007 and BLD-011 are `blocked`. New durable evidence is the [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md).
+- **Implementation changes:** none; frozen targets, wrapper/bus topology, validator contracts, and evidence ownership remain unchanged.
+- **Planning changes:** transferred roadmap/workstream/handoff ownership to Agent 02, recorded the unpublished-branch hosted blocker, linked fresh continuation evidence, and synchronized the exact authorized resumption action.
+- **Commands and results:** continuation ZIP `unzip -t` and internal SHA-256 manifest pass; `git fetch origin` and GitHub API inspection show neither the continuation branch/commit nor a workflow run; checksum-verified `actionlint` 1.7.12 passes; fresh macOS arm64 Debug and Release builds pass warnings-as-errors and 9/9 CTest; both `ModelDVerifyValidationEvidence` runs pass actual-wrapper 3/3, pluginval 3/3, standalone 9/9, and deep manifest verification while auval/release remain blocked.
+- **Artifacts:** fresh Release build manifest `290ffed993458f37da3c11c1e219f2fa7b114cc3d7b1f3cc406da2fd0776dfa2`; validation manifest `1a7ad52ecc08933b459286ea1d711e55af9586a603f9cf6abb9c61749e8611de`; standalone report `bdf55117a0239a019ef2fe69e7b0d4d2e9cb1adc4527fa45371326c68a54f55e`; all are temporary-tree evidence described in the continuation report.
+- **Decisions and assumptions:** repository write capability is not treated as push authority. No remote mutation, AU installation, legal identity, licensing choice, distribution history, or host result was invented.
+- **Blockers and known defects:** the branch must be published with explicit authority before the eight hosted jobs can exist. Product identity/distribution/licensing approval, AU registration in an ephemeral account, the VST3 SDK validator, and commercial-host access remain required.
+- **Temporary work/cleanup:** Agent 02 build and downloaded-tool trees are bounded under `/private/tmp`; predecessor recovery files remain untouched. No repository build/cache/tool output is tracked.
+- **Successor package:** `Agent-03-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct and fully verify it from the ending ledger commit, then report the outer SHA-256 after construction.
+- **First unmet gate:** BLD-001 supported-CI fresh-clone configure/build evidence.
+- **Exact resumption point:** obtain explicit push authority, run `git push --set-upstream origin codex/workstream-02-build`, wait for all eight push-triggered jobs, download every `model-d-validation-*` artifact, and reconcile hosted-dependent rows from durable results.
+- **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
 
 ## Required template for every later handoff entry
 

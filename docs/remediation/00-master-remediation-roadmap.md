@@ -1,6 +1,6 @@
 # Synthesizer Remediation Roadmap
 
-Status: implementation in progress — Workstream 02 / Agent 01.
+Status: implementation in progress — Workstream 02 / Agent 02.
 Repository baseline inspected: `main` at `c30038d` (`Update README.md`).
 Audit corpus: the attached **Synthesizer Remediation Planning Suite** specification. It is the only supplied original-audit text, so every sentence-level deficit and proposed product improvement in that specification is treated as a finding. The line-by-line ownership audit is in the [traceability matrix](01-traceability-matrix.md).
 
@@ -10,7 +10,7 @@ The core planning baseline is this roadmap, the traceability matrix, and Workstr
 
 | Phase | Active workstream | Status | Entry gate | Exit/next owner |
 |---|---|---|---|---|
-| F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress — Agent 01; BLD-007 and BLD-011 externally blocked | Approved planning baseline | Run the checked-in eight-job hosted CI matrix; obtain reviewed identity/distribution/licensing decisions, AU registration, VST3 SDK validator, and required commercial-host access. |
+| F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress — Agent 02; BLD-007 and BLD-011 externally blocked | Approved planning baseline | Authorize publication of the current branch and run the checked-in eight-job hosted CI matrix; obtain reviewed identity/distribution/licensing decisions, AU registration, VST3 SDK validator, and required commercial-host access. |
 | F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | Not started | Workstream 02 passes | Workstream 03 contract freeze plus Workstream 12 harness coordination. |
 | F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Not started | Workstream 02 test/offline targets and Workstream 03 contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4. |
 | F1–F6 | Workstreams 04–15 | Not started | The phase gates below | Follow the fixed roadmap order; no agent skips an unmet gate. |
