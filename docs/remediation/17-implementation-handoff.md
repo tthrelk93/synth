@@ -14,12 +14,12 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 | Current owner | Agent 02 |
 | Roadmap phase | F0 — reproducible baseline |
 | Workstream | 02 — Build, Packaging, and Host Validation |
-| Overall status | in-progress; hosted branch publication is not authorized, and BLD-007/BLD-011 are externally blocked |
+| Overall status | in-progress; branch and draft PR are published, initial hosted triggers failed before job startup during a critical GitHub Actions outage, and BLD-007/BLD-011 are externally blocked |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
-| Source prompt | Agent 02 continuation package; durable results are in the [continuation preflight](evidence/workstream-02/continuation-preflight.md). |
+| Source prompt | Agent 02 continuation package; durable results are in the [continuation preflight](evidence/workstream-02/continuation-preflight.md) and [hosted CI execution report](evidence/workstream-02/hosted-ci-execution.md). |
 | Successor package | Planned untracked artifact `Agent-03-Workstream-02-Continuation-Context.zip`; build it from the final Agent 02 ledger commit and report its outer SHA-256 after construction. |
-| First action | With explicit push authority, run `git push --set-upstream origin codex/workstream-02-build`; retain all eight push-triggered jobs' logs and `model-d-validation-*` uploads. |
+| First action | Push the hosted-execution evidence commit to retrigger CI, wait for GitHub Actions recovery, then retain all eight jobs' results and `model-d-validation-*` uploads. |
 | First unmet gate | BLD-001 — supported-CI fresh-clone configure/build evidence |
 | Next owner if incomplete | Workstream 02 / F0 continuation at the first dependency-ordered non-passing BLD requirement |
 | Next owner if complete | Agent 03, Workstream 03 / F0; verify Workstream 02 seams, then begin the parameter/state contract. |
