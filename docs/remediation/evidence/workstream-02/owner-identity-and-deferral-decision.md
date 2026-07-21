@@ -97,6 +97,24 @@ and the standalone-lifecycle report SHA-256 is
 These reports are build-tree evidence; this document retains their reproducible
 commands, exact commit, outcomes, and hashes.
 
+## Exact-head hosted confirmation
+
+GitHub Actions push run
+[`29869102847`](https://github.com/tthrelk93/synth/actions/runs/29869102847)
+completed successfully at exact source commit
+`7177557f0973fced64967d387b8b8ba2f1396aa9`. All eight supported
+platform/configuration rows passed strict builds, 10/10 CTest, every required
+label, standalone lifecycle, actual-wrapper/pluginval validation, and linked
+manifest verification. All four macOS rows passed the dynamic staged-AU install,
+ephemeral `auval`, bounded cleanup, and final upload steps. The raw failing
+sentinel was correctly skipped.
+
+This hosted result confirms the CI basename correction and expanded identity
+contract across macOS arm64/x86_64 Debug/Release, Windows x86_64 Debug/Release,
+and Linux x86_64 Debug/Release. It does not satisfy the separately required
+designated-account AU, Steinberg SDK validator, or commercial-host evidence;
+BLD-006/011/012 remain in progress and the release aggregate remains blocked.
+
 ## Temporary external-validation deferral
 
 The owner authorized Workstream 03 to begin while commercial-host checks,
