@@ -50,54 +50,56 @@ flag, APVTS root, child order, or serialized value drift fails the test.
 ## Current ID use-site audit
 
 The processor's layout and processing reads are in
-`Source/PluginProcessor.cpp`; the editor attachment/control use is in
-`Source/PluginEditor.cpp`. No current ID is directly referenced by
+`Source/PluginProcessor.cpp`; the editor uses explicit slider/toggle listeners
+and `setValueNotifyingHost`, not JUCE `SliderAttachment` or `ButtonAttachment`.
+The table distinguishes active manual controls from inactive/commented control
+construction and helper references. No current ID is directly referenced by
 `PresetManager`, `SynthPreset`, or `PresetLibrary`; those flows persist the
 APVTS XML state as a whole.
 
 | ID | Processor | Editor | Preset |
 | --- | --- | --- | --- |
-| `osc1Waveform` | layout + DSP read | attachment | APVTS XML only |
-| `osc2Waveform` | layout + DSP read | attachment | APVTS XML only |
-| `osc3Waveform` | layout + DSP read | attachment | APVTS XML only |
-| `osc1Range` | layout + DSP read | attachment | APVTS XML only |
-| `osc2Range` | layout + DSP read | attachment | APVTS XML only |
-| `osc3Range` | layout + DSP read | attachment | APVTS XML only |
-| `osc1Vol` | layout + DSP read | attachment | APVTS XML only |
-| `osc2Vol` | layout + DSP read | attachment | APVTS XML only |
-| `osc3Vol` | layout + DSP read | attachment | APVTS XML only |
-| `tune` | layout + DSP read | attachment | APVTS XML only |
-| `osc2Freq` | layout + DSP read | attachment | APVTS XML only |
-| `osc3Freq` | layout + DSP read | attachment | APVTS XML only |
-| `filterCutoff` | layout + DSP read | attachment | APVTS XML only |
-| `filterEmphasis` | layout + DSP read | attachment | APVTS XML only |
-| `filterContour` | layout + DSP read | attachment | APVTS XML only |
-| `outputVolKnob` | layout + DSP read | attachment | APVTS XML only |
-| `extInputVolKnob` | layout + DSP read | attachment | APVTS XML only |
-| `ctrlGlideKnob` | layout + DSP read | attachment | APVTS XML only |
-| `ctrlModMixKnob` | layout + DSP read | attachment | APVTS XML only |
-| `filterAttackTimeKnob` | layout + DSP read | attachment | APVTS XML only |
-| `filterDecayTimeKnob` | layout + DSP read | attachment | APVTS XML only |
-| `loudnessAttackTimeKnob` | layout + DSP read | attachment | APVTS XML only |
-| `loudnessDecayTimeKnob` | layout + DSP read | attachment | APVTS XML only |
-| `filterSustainKnob` | layout + DSP read | attachment | APVTS XML only |
-| `noiseVolKnob` | layout + DSP read | attachment | APVTS XML only |
-| `loudnessSustainLevelKnob` | layout + DSP read | attachment | APVTS XML only |
-| `outputPhonesVolKnob` | layout + DSP read | attachment | APVTS XML only |
-| `feedbackKnob` | layout + DSP read | attachment | APVTS XML only |
-| `modWheelValue` | layout + DSP read | attachment | APVTS XML only |
-| `pitchWheelValue` | layout + DSP read | attachment | APVTS XML only |
-| `osc1OnOff` | layout + DSP read | attachment | APVTS XML only |
-| `osc2OnOff` | layout + DSP read | attachment | APVTS XML only |
-| `osc3OnOff` | layout + DSP read | attachment | APVTS XML only |
-| `a440HzOnOff` | layout + DSP read | attachment | APVTS XML only |
-| `osc3CtrlMode` | layout + DSP read | attachment | APVTS XML only |
-| `oscModSwitch` | layout + DSP read | attachment | APVTS XML only |
-| `noiseOnOffSwitch` | layout + DSP read | attachment | APVTS XML only |
-| `extInputVolSwitch` | layout + DSP read | attachment | APVTS XML only |
-| `whitePinkSwitch` | layout + DSP read | attachment | APVTS XML only |
-| `filterModSwitch` | layout + DSP read | attachment | APVTS XML only |
-| `keyboardCtrlSwitch1` | layout + DSP read | attachment | APVTS XML only |
-| `keyboardCtrlSwitch2` | layout + DSP read | attachment | APVTS XML only |
-| `decaySwitch` | layout + DSP read | attachment | APVTS XML only |
-| `glideSwitch` | layout + DSP read | attachment | APVTS XML only |
+| `osc1Waveform` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc2Waveform` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc3Waveform` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc1Range` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc2Range` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc3Range` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc1Vol` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc2Vol` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc3Vol` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `tune` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc2Freq` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `osc3Freq` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `filterCutoff` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `filterEmphasis` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `filterContour` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `outputVolKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `extInputVolKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `ctrlGlideKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `ctrlModMixKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `filterAttackTimeKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `filterDecayTimeKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `loudnessAttackTimeKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `loudnessDecayTimeKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `filterSustainKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `noiseVolKnob` | layout + DSP read | live manual slider + toggle mapping | APVTS XML only |
+| `loudnessSustainLevelKnob` | layout + DSP read | live manual slider mapping | APVTS XML only |
+| `outputPhonesVolKnob` | layout only; no DSP consumer | inactive/commented control mapping; label/helper references | APVTS XML only |
+| `feedbackKnob` | layout + DSP read | inactive/commented control mapping; label/helper references | APVTS XML only |
+| `modWheelValue` | layout + DSP read | live wheel mapping | APVTS XML only |
+| `pitchWheelValue` | layout + DSP read | live wheel mapping | APVTS XML only |
+| `osc1OnOff` | layout + DSP read | live manual slider-toggle + toggle mapping | APVTS XML only |
+| `osc2OnOff` | layout + DSP read | live manual slider-toggle + toggle mapping | APVTS XML only |
+| `osc3OnOff` | layout + DSP read | live manual slider-toggle + toggle mapping | APVTS XML only |
+| `a440HzOnOff` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `osc3CtrlMode` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `oscModSwitch` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `noiseOnOffSwitch` | layout + DSP read | live manual slider-toggle + toggle mapping | APVTS XML only |
+| `extInputVolSwitch` | layout + DSP read | live manual slider-toggle + toggle mapping | APVTS XML only |
+| `whitePinkSwitch` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `filterModSwitch` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `keyboardCtrlSwitch1` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `keyboardCtrlSwitch2` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `decaySwitch` | layout + DSP read | live manual toggle mapping | APVTS XML only |
+| `glideSwitch` | layout + DSP read | live manual toggle mapping | APVTS XML only |
