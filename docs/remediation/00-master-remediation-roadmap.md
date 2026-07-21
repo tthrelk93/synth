@@ -1,6 +1,6 @@
 # Synthesizer Remediation Roadmap
 
-Status: implementation in progress — Workstream 02 / Agent 05.
+Status: implementation in progress — Workstream 02 / Agent 06.
 Repository baseline inspected: `main` at `c30038d` (`Update README.md`).
 Audit corpus: the attached **Synthesizer Remediation Planning Suite** specification. It is the only supplied original-audit text, so every sentence-level deficit and proposed product improvement in that specification is treated as a finding. The line-by-line ownership audit is in the [traceability matrix](01-traceability-matrix.md).
 
@@ -10,7 +10,7 @@ The core planning baseline is this roadmap, the traceability matrix, and Workstr
 
 | Phase | Active workstream | Status | Entry gate | Exit/next owner |
 |---|---|---|---|---|
-| F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress — Agent 05; exact implementation run `29728203657` passes all eight supported rows, and the 2026-07-21 owner approval promotes BLD-003, so BLD-001–005/008–010 pass, BLD-006/012 remain in progress, and BLD-007/011 are externally blocked | Approved planning baseline | Obtain commercial-host category/menu evidence for BLD-006, then the reviewed identity/distribution inputs and unavailable validator/host access; do not start Workstream 03 until every BLD row and exit gate passes. |
+| F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress — Agent 06; exact implementation run `29728203657` passes all eight supported rows, the JUCE Starter decision closes BLD-003, and the [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) passes a fresh local baseline while confirming the remaining external inputs are unavailable, so BLD-001–005/008–010 pass, BLD-006/012 remain in progress, and BLD-007/011 are externally blocked | Approved planning baseline | Supply commercial-host category/menu access for BLD-006, then the reviewed identity/distribution inputs and designated AU/SDK-validator/host access; do not start Workstream 03 until every BLD row and exit gate passes. |
 | F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | Not started | Workstream 02 passes | Workstream 03 contract freeze plus Workstream 12 harness coordination. |
 | F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Not started | Workstream 02 test/offline targets and Workstream 03 contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4. |
 | F1–F6 | Workstreams 04–15 | Not started | The phase gates below | Follow the fixed roadmap order; no agent skips an unmet gate. |
