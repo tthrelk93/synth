@@ -632,7 +632,8 @@ if(SYNTH_BUILD_TESTS)
     target_link_libraries(ModelDTests
         PRIVATE
             ModelDPlugin
-            SynthProjectOptions)
+            SynthProjectOptions
+            juce::juce_cryptography)
     target_compile_definitions(ModelDTests PRIVATE
         SYNTH_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
 

@@ -17,7 +17,12 @@ enum class Kind
 enum class UnitKey
 {
     unspecified,
-    none
+    none,
+    choice,
+    semitones,
+    panelIndex,
+    normalized,
+    boolean
 };
 
 enum class MappingKey
@@ -31,7 +36,13 @@ enum class MappingKey
 enum class SmoothingClass
 {
     unspecified,
-    none
+    none,
+    gainControl,
+    control,
+    dedicatedPitch,
+    dedicatedCutoff,
+    dedicatedGlide,
+    contourStage
 };
 
 enum class PersistenceScope

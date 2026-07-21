@@ -3,6 +3,8 @@
 
 #include "ParameterRegistry.h"
 
+#include <juce_cryptography/juce_cryptography.h>
+
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -12,6 +14,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #define SYNTH_STRINGIFY_IMPL(value) #value
@@ -19,6 +22,8 @@
 
 namespace
 {
+using namespace std::literals;
+
 class TestContext
 {
 public:
@@ -115,6 +120,203 @@ bool equalsStringView (const juce::String& actual, std::string_view expected)
     return std::string_view { actual.toRawUTF8() } == expected;
 }
 
+constexpr std::array legacyParameterIds {
+    "osc1Waveform"sv, "osc2Waveform"sv, "osc3Waveform"sv,
+    "osc1Range"sv, "osc2Range"sv, "osc3Range"sv,
+    "osc1Vol"sv, "osc2Vol"sv, "osc3Vol"sv,
+    "tune"sv, "osc2Freq"sv, "osc3Freq"sv,
+    "filterCutoff"sv, "filterEmphasis"sv, "filterContour"sv,
+    "outputVolKnob"sv, "extInputVolKnob"sv, "ctrlGlideKnob"sv,
+    "ctrlModMixKnob"sv, "filterAttackTimeKnob"sv,
+    "filterDecayTimeKnob"sv, "loudnessAttackTimeKnob"sv,
+    "loudnessDecayTimeKnob"sv, "filterSustainKnob"sv,
+    "noiseVolKnob"sv, "loudnessSustainLevelKnob"sv,
+    "outputPhonesVolKnob"sv, "feedbackKnob"sv, "modWheelValue"sv,
+    "pitchWheelValue"sv, "osc1OnOff"sv, "osc2OnOff"sv,
+    "osc3OnOff"sv, "a440HzOnOff"sv, "osc3CtrlMode"sv,
+    "oscModSwitch"sv, "noiseOnOffSwitch"sv, "extInputVolSwitch"sv,
+    "whitePinkSwitch"sv, "filterModSwitch"sv, "keyboardCtrlSwitch1"sv,
+    "keyboardCtrlSwitch2"sv, "decaySwitch"sv, "glideSwitch"sv
+};
+
+constexpr std::array newParameterIds {
+    "keyboard.priorityMode"sv,
+    "keyboard.triggerMode"sv,
+    "output.mainEnabled"sv,
+    "output.phonesEnabled"sv
+};
+
+constexpr auto correctedDisplayNames = std::to_array<std::pair<std::string_view,
+                                                                std::string_view>> ({
+    { "tune"sv, "Master Tune"sv },
+    { "osc2Freq"sv, "Oscillator 2 Frequency Offset"sv },
+    { "osc3Freq"sv, "Oscillator 3 Frequency Offset"sv },
+    { "filterCutoff"sv, "Filter Cutoff"sv },
+    { "filterContour"sv, "Filter Amount of Contour"sv },
+    { "outputVolKnob"sv, "Main Output Volume"sv },
+    { "extInputVolKnob"sv, "External Input Volume"sv },
+    { "ctrlGlideKnob"sv, "Glide Time"sv },
+    { "ctrlModMixKnob"sv, "Modulation Mix"sv },
+    { "filterAttackTimeKnob"sv, "Filter Contour Attack Time"sv },
+    { "filterDecayTimeKnob"sv, "Filter Contour Decay Time"sv },
+    { "loudnessAttackTimeKnob"sv, "Loudness Contour Attack Time"sv },
+    { "loudnessDecayTimeKnob"sv, "Loudness Contour Decay Time"sv },
+    { "filterSustainKnob"sv, "Filter Contour Sustain Level"sv },
+    { "loudnessSustainLevelKnob"sv, "Loudness Contour Sustain Level"sv },
+    { "outputPhonesVolKnob"sv, "Phones Volume"sv },
+    { "feedbackKnob"sv, "Feedback Amount"sv },
+    { "modWheelValue"sv, "Modulation Wheel"sv },
+    { "pitchWheelValue"sv, "Pitch Wheel"sv },
+    { "osc1OnOff"sv, "Oscillator 1 Enabled"sv },
+    { "osc2OnOff"sv, "Oscillator 2 Enabled"sv },
+    { "osc3OnOff"sv, "Oscillator 3 Enabled"sv },
+    { "a440HzOnOff"sv, "A-440 Tuner Enabled"sv },
+    { "osc3CtrlMode"sv, "Oscillator 3 Keyboard Control"sv },
+    { "oscModSwitch"sv, "Oscillator Modulation Enabled"sv },
+    { "noiseOnOffSwitch"sv, "Noise Enabled"sv },
+    { "extInputVolSwitch"sv, "External Input Enabled"sv },
+    { "whitePinkSwitch"sv, "Noise Color"sv },
+    { "filterModSwitch"sv, "Filter Modulation Enabled"sv },
+    { "keyboardCtrlSwitch1"sv, "Keyboard Control Switch 1"sv },
+    { "keyboardCtrlSwitch2"sv, "Keyboard Control Switch 2"sv },
+    { "decaySwitch"sv, "Decay Enabled"sv },
+    { "glideSwitch"sv, "Glide Enabled"sv }
+});
+
+template <std::size_t Size>
+bool contains (const std::array<std::string_view, Size>& values, std::string_view candidate)
+{
+    return std::find (values.begin(), values.end(), candidate) != values.end();
+}
+
+const ParameterRegistry::Descriptor* findDescriptor (
+    std::span<const ParameterRegistry::Descriptor> descriptors,
+    std::string_view id)
+{
+    const auto found = std::find_if (descriptors.begin(), descriptors.end(), [id] (const auto& descriptor)
+    {
+        return descriptor.id == id;
+    });
+    return found == descriptors.end() ? nullptr : &*found;
+}
+
+std::string_view kindName (ParameterRegistry::Kind kind)
+{
+    switch (kind)
+    {
+        case ParameterRegistry::Kind::choice: return "choice";
+        case ParameterRegistry::Kind::floating: return "float";
+        case ParameterRegistry::Kind::boolean: return "bool";
+    }
+
+    return "invalid";
+}
+
+std::string_view unitKeyName (ParameterRegistry::UnitKey unitKey)
+{
+    switch (unitKey)
+    {
+        case ParameterRegistry::UnitKey::unspecified: return "unspecified";
+        case ParameterRegistry::UnitKey::none: return "none";
+        case ParameterRegistry::UnitKey::choice: return "choice";
+        case ParameterRegistry::UnitKey::semitones: return "semitones";
+        case ParameterRegistry::UnitKey::panelIndex: return "panelIndex";
+        case ParameterRegistry::UnitKey::normalized: return "normalized";
+        case ParameterRegistry::UnitKey::boolean: return "boolean";
+    }
+
+    return "invalid";
+}
+
+std::string_view mappingKeyName (ParameterRegistry::MappingKey mapping)
+{
+    switch (mapping)
+    {
+        case ParameterRegistry::MappingKey::unspecified: return "unspecified";
+        case ParameterRegistry::MappingKey::indexedChoice: return "indexedChoice";
+        case ParameterRegistry::MappingKey::linear: return "linear";
+        case ParameterRegistry::MappingKey::boolean: return "boolean";
+    }
+
+    return "invalid";
+}
+
+std::string_view smoothingClassName (ParameterRegistry::SmoothingClass smoothing)
+{
+    switch (smoothing)
+    {
+        case ParameterRegistry::SmoothingClass::unspecified: return "unspecified";
+        case ParameterRegistry::SmoothingClass::none: return "none";
+        case ParameterRegistry::SmoothingClass::gainControl: return "gainControl";
+        case ParameterRegistry::SmoothingClass::control: return "control";
+        case ParameterRegistry::SmoothingClass::dedicatedPitch: return "dedicatedPitch";
+        case ParameterRegistry::SmoothingClass::dedicatedCutoff: return "dedicatedCutoff";
+        case ParameterRegistry::SmoothingClass::dedicatedGlide: return "dedicatedGlide";
+        case ParameterRegistry::SmoothingClass::contourStage: return "contourStage";
+    }
+
+    return "invalid";
+}
+
+std::string_view persistenceScopeName (ParameterRegistry::PersistenceScope persistence)
+{
+    switch (persistence)
+    {
+        case ParameterRegistry::PersistenceScope::unspecified: return "unspecified";
+        case ParameterRegistry::PersistenceScope::apvtsState: return "apvtsState";
+    }
+
+    return "invalid";
+}
+
+juce::String makeRegistryV2Export()
+{
+    auto registry = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    registry->setProperty ("schema", "model-d.parameter-registry.v2");
+
+    juce::Array<juce::var> parameters;
+    const auto descriptors = ParameterRegistry::descriptors();
+    parameters.ensureStorageAllocated (static_cast<int> (descriptors.size()));
+
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto& descriptor = descriptors[index];
+        auto entry = juce::DynamicObject::Ptr { new juce::DynamicObject };
+        entry->setProperty ("index", static_cast<int> (index));
+        entry->setProperty ("id", juce::String { descriptor.id.data(), descriptor.id.size() });
+        entry->setProperty ("semantic_key", juce::String { descriptor.semanticKey.data(), descriptor.semanticKey.size() });
+        entry->setProperty ("version_hint", descriptor.versionHint);
+        entry->setProperty ("display_name", juce::String { descriptor.displayName.data(), descriptor.displayName.size() });
+        entry->setProperty ("short_label", juce::String { descriptor.shortLabel.data(), descriptor.shortLabel.size() });
+        entry->setProperty ("unit_key", juce::String { unitKeyName (descriptor.unitKey).data(), unitKeyName (descriptor.unitKey).size() });
+        entry->setProperty ("kind", juce::String { kindName (descriptor.kind).data(), kindName (descriptor.kind).size() });
+        entry->setProperty ("range_start", descriptor.rangeStart);
+        entry->setProperty ("range_end", descriptor.rangeEnd);
+        entry->setProperty ("range_interval", descriptor.rangeInterval);
+        entry->setProperty ("range_skew", descriptor.rangeSkew);
+        entry->setProperty ("symmetric_skew", descriptor.symmetricSkew);
+        entry->setProperty ("physical_default", descriptor.physicalDefault);
+
+        juce::Array<juce::var> choices;
+        choices.ensureStorageAllocated (static_cast<int> (descriptor.choiceValues.size()));
+        for (const auto choice : descriptor.choiceValues)
+            choices.add (juce::String { choice.data(), choice.size() });
+        entry->setProperty ("choice_values", juce::var { choices });
+
+        entry->setProperty ("mapping_key", juce::String { mappingKeyName (descriptor.mapping).data(), mappingKeyName (descriptor.mapping).size() });
+        entry->setProperty ("automatable", descriptor.automatable);
+        entry->setProperty ("smoothing_class", juce::String { smoothingClassName (descriptor.smoothing).data(), smoothingClassName (descriptor.smoothing).size() });
+        entry->setProperty ("persistence_scope", juce::String { persistenceScopeName (descriptor.persistence).data(), persistenceScopeName (descriptor.persistence).size() });
+        parameters.add (juce::var { entry.get() });
+    }
+
+    registry->setProperty ("parameters", juce::var { parameters });
+    return juce::JSON::toString (juce::var { registry.get() },
+                                 juce::JSON::FormatOptions {}
+                                     .withSpacing (juce::JSON::Spacing::none))
+        + "\n";
+}
+
 juce::var makeLegacyParameterInventory (MoogMiniAudioProcessor& processor)
 {
     auto inventory = juce::DynamicObject::Ptr { new juce::DynamicObject };
@@ -209,9 +411,58 @@ void setRepresentativeParameterState (MoogMiniAudioProcessor& processor)
     }
 }
 
+void expectFixtureHash (TestContext& test,
+                        const juce::File& file,
+                        std::string_view expectedHash,
+                        std::string_view description)
+{
+    const auto actualHash = juce::SHA256 { file }.toHexString();
+    test.expect (equalsStringView (actualHash, expectedHash),
+                 std::string { description } + " SHA-256 must remain unchanged");
+}
+
+void expectLegacyStateFixture (TestContext& test,
+                               const juce::File& file,
+                               std::string_view expectedHash,
+                               std::string_view description)
+{
+    expectFixtureHash (test, file, expectedHash, description);
+    const auto state = juce::parseXML (file);
+    test.expect (state != nullptr, std::string { description } + " must be valid XML");
+    if (state == nullptr)
+        return;
+
+    test.expect (state->hasTagName ("Parameters"),
+                 std::string { description } + " must retain the unversioned Parameters root");
+    test.expect (state->getNumAttributes() == 0,
+                 std::string { description } + " root must remain unversioned");
+    test.expect (state->getNumChildElements() == static_cast<int> (legacyParameterIds.size()),
+                 std::string { description } + " must contain exactly 44 parameter values");
+
+    std::vector<std::string_view> expectedStateOrder (legacyParameterIds.begin(),
+                                                      legacyParameterIds.end());
+    std::sort (expectedStateOrder.begin(), expectedStateOrder.end());
+    std::set<std::string> observedIds;
+    int index = 0;
+    for (const auto* child = state->getFirstChildElement();
+         child != nullptr;
+         child = child->getNextElement(), ++index)
+    {
+        test.expect (child->hasTagName ("PARAM"),
+                     std::string { description } + " children must all be PARAM elements");
+        test.expect (child->hasAttribute ("id") && child->hasAttribute ("value"),
+                     std::string { description } + " PARAM elements must contain id/value attributes");
+        const auto id = child->getStringAttribute ("id");
+        test.expect (observedIds.emplace (id.toStdString()).second,
+                     std::string { description } + " parameter IDs must be unique");
+        if (static_cast<std::size_t> (index) < expectedStateOrder.size())
+            test.expect (equalsStringView (id, expectedStateOrder[static_cast<std::size_t> (index)]),
+                         std::string { description } + " parameter ID order must remain exact");
+    }
+}
+
 void testLegacyParameterFixtures (TestContext& test)
 {
-    MoogMiniAudioProcessor processor;
     const auto inventoryFile = legacyFixtureFile ("Tests/fixtures/parameters/legacy-parameter-inventory.json");
     const auto defaultStateFile = legacyFixtureFile ("Tests/fixtures/state/legacy-default-state.xml");
     const auto representativeStateFile = legacyFixtureFile ("Tests/fixtures/state/legacy-representative-state.xml");
@@ -225,52 +476,107 @@ void testLegacyParameterFixtures (TestContext& test)
 
     if (inventoryFile.existsAsFile())
     {
+        expectFixtureHash (test, inventoryFile,
+                           "7ade5c456c54e0822e41082558aed0c94860b6b46f9368713fc3ac103b5bc21d",
+                           "legacy parameter inventory fixture");
         juce::var expectedInventory;
         const auto parsed = juce::JSON::parse (inventoryFile.loadFileAsString(), expectedInventory);
         test.expect (parsed.wasOk() && expectedInventory.isObject(),
                      "legacy parameter inventory fixture must be valid JSON object");
         if (parsed.wasOk() && expectedInventory.isObject())
-            test.expect (juce::JSON::toString (expectedInventory,
-                                               juce::JSON::FormatOptions {}
-                                                   .withSpacing (juce::JSON::Spacing::none))
-                             + "\n" == serialiseLegacyParameterInventory (processor),
-                         "live parameter enumeration must match legacy inventory exactly");
+        {
+            const auto* object = expectedInventory.getDynamicObject();
+            test.expect (object->getProperty ("schema").toString()
+                             == "model-d.legacy-parameter-inventory.v1",
+                         "legacy parameter inventory schema must remain v1");
+            const auto* parameters = object->getProperty ("parameters").getArray();
+            test.expect (parameters != nullptr
+                             && parameters->size() == static_cast<int> (legacyParameterIds.size()),
+                         "legacy parameter inventory must contain exactly 44 IDs");
+            if (parameters != nullptr)
+            {
+                const auto count = std::min (parameters->size(),
+                                             static_cast<int> (legacyParameterIds.size()));
+                for (int index = 0; index < count; ++index)
+                {
+                    const auto* entry = (*parameters)[index].getDynamicObject();
+                    test.expect (entry != nullptr,
+                                 "legacy parameter inventory entries must be objects");
+                    if (entry == nullptr)
+                        continue;
+                    test.expect (equalsStringView (entry->getProperty ("id").toString(),
+                                                   legacyParameterIds[static_cast<std::size_t> (index)]),
+                                 "legacy parameter inventory ID/order must remain exact");
+                    test.expect (static_cast<int> (entry->getProperty ("version_hint")) == 0,
+                                 "legacy parameter inventory version hints must remain zero");
+                }
+            }
+        }
     }
 
-    const auto liveDefaultState = serialiseProcessorState (processor);
     if (defaultStateFile.existsAsFile())
-    {
-        const auto expectedDefaultState = juce::parseXML (defaultStateFile);
-        test.expect (expectedDefaultState != nullptr,
-                     "legacy default state fixture must be valid XML");
-        test.expect (liveDefaultState != nullptr
-                         && expectedDefaultState != nullptr
-                         && liveDefaultState->isEquivalentTo (expectedDefaultState.get(), false),
-                     "live default APVTS XML must match legacy default state structurally and value-for-value");
-    }
-
-    setRepresentativeParameterState (processor);
-    const auto liveRepresentativeState = serialiseProcessorState (processor);
+        expectLegacyStateFixture (
+            test, defaultStateFile,
+            "07d2069f7c3f274b83e31beab503165064d3fcffd346967281eb2e0157844b21",
+            "legacy default state fixture");
     if (representativeStateFile.existsAsFile())
-    {
-        const auto expectedRepresentativeState = juce::parseXML (representativeStateFile);
-        test.expect (expectedRepresentativeState != nullptr,
-                     "legacy representative state fixture must be valid XML");
-        test.expect (liveRepresentativeState != nullptr
-                         && expectedRepresentativeState != nullptr
-                         && liveRepresentativeState->isEquivalentTo (expectedRepresentativeState.get(), false),
-                     "live representative APVTS XML must match legacy representative state structurally and value-for-value");
-    }
+        expectLegacyStateFixture (
+            test, representativeStateFile,
+            "e0d769001dd411425c6dfea6c572b0f9358fdf6cf27b36731eccc3f6526ff0fa",
+            "legacy representative state fixture");
 }
 
 void testParameterRegistry (TestContext& test)
 {
     const auto descriptors = ParameterRegistry::descriptors();
-    test.expect (descriptors.size() == 44,
-                 "parameter registry must contain exactly 44 legacy descriptors");
+    test.expect (descriptors.size() == 48,
+                 "parameter registry must contain exactly 48 v2 descriptors");
+
+    const auto prefixCount = std::min (descriptors.size(), legacyParameterIds.size());
+    for (std::size_t index = 0; index < prefixCount; ++index)
+    {
+        test.expect (descriptors[index].id == legacyParameterIds[index],
+                     "all 44 legacy IDs must remain an exact order-preserving prefix");
+        test.expect (descriptors[index].versionHint == 0,
+                     "all 44 legacy descriptors must retain version hint zero");
+    }
+
+    for (std::size_t offset = 0; offset < newParameterIds.size(); ++offset)
+    {
+        const auto index = legacyParameterIds.size() + offset;
+        if (index >= descriptors.size())
+            break;
+        test.expect (descriptors[index].id == newParameterIds[offset],
+                     "the four v2 IDs must be appended in exact approved order");
+        test.expect (descriptors[index].versionHint == 1,
+                     "the four v2 descriptors must use version hint one");
+        test.expect (descriptors[index].automatable,
+                     "the four v2 descriptors must be automatable");
+    }
 
     std::set<std::string> ids;
     std::set<std::string> semanticKeys;
+
+    constexpr std::array semanticChoiceIds {
+        "osc1Waveform"sv, "osc2Waveform"sv, "osc3Waveform"sv,
+        "osc1Range"sv, "osc2Range"sv, "osc3Range"sv,
+        "whitePinkSwitch"sv, "keyboard.priorityMode"sv,
+        "keyboard.triggerMode"sv
+    };
+    constexpr std::array semitoneIds { "tune"sv, "osc2Freq"sv, "osc3Freq"sv };
+    constexpr std::array gainControlIds {
+        "osc1Vol"sv, "osc2Vol"sv, "osc3Vol"sv, "outputVolKnob"sv,
+        "extInputVolKnob"sv, "noiseVolKnob"sv, "outputPhonesVolKnob"sv
+    };
+    constexpr std::array controlIds {
+        "ctrlModMixKnob"sv, "filterEmphasis"sv, "filterContour"sv,
+        "feedbackKnob"sv, "modWheelValue"sv
+    };
+    constexpr std::array contourStageIds {
+        "filterAttackTimeKnob"sv, "filterDecayTimeKnob"sv,
+        "loudnessAttackTimeKnob"sv, "loudnessDecayTimeKnob"sv,
+        "filterSustainKnob"sv, "loudnessSustainLevelKnob"sv
+    };
 
     for (const auto& descriptor : descriptors)
     {
@@ -306,7 +612,90 @@ void testParameterRegistry (TestContext& test)
         test.expect ((descriptor.kind == ParameterRegistry::Kind::choice)
                          == ! descriptor.choiceValues.empty(),
                      "choice values must be present for choice parameters only");
+
+        const auto expectedUnit = contains (semanticChoiceIds, descriptor.id)
+                                    ? ParameterRegistry::UnitKey::choice
+                                : contains (semitoneIds, descriptor.id)
+                                    ? ParameterRegistry::UnitKey::semitones
+                                : descriptor.kind == ParameterRegistry::Kind::choice
+                                    ? ParameterRegistry::UnitKey::panelIndex
+                                : descriptor.kind == ParameterRegistry::Kind::floating
+                                    ? ParameterRegistry::UnitKey::normalized
+                                    : ParameterRegistry::UnitKey::boolean;
+        test.expect (descriptor.unitKey == expectedUnit,
+                     "every descriptor must use its exact semantic unit policy");
+
+        const auto expectedMapping = descriptor.kind == ParameterRegistry::Kind::choice
+                                       ? ParameterRegistry::MappingKey::indexedChoice
+                                   : descriptor.kind == ParameterRegistry::Kind::floating
+                                       ? ParameterRegistry::MappingKey::linear
+                                       : ParameterRegistry::MappingKey::boolean;
+        test.expect (descriptor.mapping == expectedMapping,
+                     "every descriptor must use its exact non-invented mapping key");
+
+        const auto expectedSmoothing = contains (gainControlIds, descriptor.id)
+                                         ? ParameterRegistry::SmoothingClass::gainControl
+                                     : contains (controlIds, descriptor.id)
+                                         ? ParameterRegistry::SmoothingClass::control
+                                     : descriptor.id == "pitchWheelValue"
+                                         ? ParameterRegistry::SmoothingClass::dedicatedPitch
+                                     : descriptor.id == "filterCutoff"
+                                         ? ParameterRegistry::SmoothingClass::dedicatedCutoff
+                                     : descriptor.id == "ctrlGlideKnob"
+                                         ? ParameterRegistry::SmoothingClass::dedicatedGlide
+                                     : contains (contourStageIds, descriptor.id)
+                                         ? ParameterRegistry::SmoothingClass::contourStage
+                                         : ParameterRegistry::SmoothingClass::none;
+        test.expect (descriptor.smoothing == expectedSmoothing,
+                     "every descriptor must use its exact smoothing class");
+        test.expect (descriptor.persistence == ParameterRegistry::PersistenceScope::apvtsState,
+                     "every descriptor must retain APVTS-state persistence");
     }
+
+    for (const auto& [id, expectedName] : correctedDisplayNames)
+    {
+        const auto* descriptor = findDescriptor (descriptors, id);
+        test.expect (descriptor != nullptr && descriptor->displayName == expectedName,
+                     "corrected legacy display name must match the approved v2 contract");
+    }
+
+    const auto* priority = findDescriptor (descriptors, "keyboard.priorityMode");
+    const auto* trigger = findDescriptor (descriptors, "keyboard.triggerMode");
+    const auto* mainEnabled = findDescriptor (descriptors, "output.mainEnabled");
+    const auto* phonesEnabled = findDescriptor (descriptors, "output.phonesEnabled");
+
+    test.expect (priority != nullptr
+                     && priority->kind == ParameterRegistry::Kind::choice
+                     && priority->displayName == "Note Priority"
+                     && priority->physicalDefault == 0.0f
+                     && priority->choiceValues.size() == 3
+                     && priority->choiceValues[0] == "Low"
+                     && priority->choiceValues[1] == "High"
+                     && priority->choiceValues[2] == "Last",
+                 "Note Priority descriptor must match the exact approved contract");
+    test.expect (trigger != nullptr
+                     && trigger->kind == ParameterRegistry::Kind::choice
+                     && trigger->displayName == "Trigger Mode"
+                     && trigger->physicalDefault == 0.0f
+                     && trigger->choiceValues.size() == 2
+                     && trigger->choiceValues[0] == "Single"
+                     && trigger->choiceValues[1] == "Multi",
+                 "Trigger Mode descriptor must match the exact approved contract");
+    test.expect (mainEnabled != nullptr
+                     && mainEnabled->kind == ParameterRegistry::Kind::boolean
+                     && mainEnabled->displayName == "Main Output Enabled"
+                     && mainEnabled->physicalDefault == 1.0f,
+                 "Main Output Enabled descriptor must default on");
+    test.expect (phonesEnabled != nullptr
+                     && phonesEnabled->kind == ParameterRegistry::Kind::boolean
+                     && phonesEnabled->displayName == "Phones Output Enabled"
+                     && phonesEnabled->physicalDefault == 1.0f,
+                 "Phones Output Enabled descriptor must default on");
+
+    const auto* tune = findDescriptor (descriptors, "tune");
+    test.expect (tune != nullptr && tune->physicalDefault == 5.0f
+                     && tune->choiceValues.size() > 5 && tune->choiceValues[5] == "Zero",
+                 "new instances must default Master Tune to index 5/Zero");
 
     MoogMiniAudioProcessor processor;
     const auto liveParameters = processor.getParameters();
@@ -357,10 +746,19 @@ void testParameterRegistry (TestContext& test)
                 const auto choiceCount = std::min (descriptor.choiceValues.size(),
                                                    static_cast<std::size_t> (choice->choices.size()));
                 for (std::size_t choiceIndex = 0; choiceIndex < choiceCount; ++choiceIndex)
+                {
                     test.expect (equalsStringView (
                                      choice->choices[static_cast<int> (choiceIndex)],
                                      descriptor.choiceValues[choiceIndex]),
                                  "processor live choice order/text must match the registry");
+                    const auto physicalIndex = static_cast<float> (choiceIndex);
+                    const auto normalised = parameter->convertTo0to1 (physicalIndex);
+                    test.expect (parameter->convertFrom0to1 (normalised) == physicalIndex,
+                                 "choice index-normalized round trips must be exact");
+                }
+                test.expect (parameter->convertTo0to1 (descriptor.rangeStart) == 0.0f
+                                 && parameter->convertTo0to1 (descriptor.rangeEnd) == 1.0f,
+                             "choice normalized endpoints must be exact");
             }
         }
         else if (descriptor.kind == ParameterRegistry::Kind::floating)
@@ -384,17 +782,96 @@ void testParameterRegistry (TestContext& test)
         test.expect (parsed.wasOk() && expectedInventory.isObject(),
                      "legacy parameter inventory fixture must be valid for registry comparison");
         if (parsed.wasOk() && expectedInventory.isObject())
-            test.expect (juce::JSON::toString (expectedInventory,
-                                               juce::JSON::FormatOptions {}
-                                                   .withSpacing (juce::JSON::Spacing::none))
-                             + "\n" == serialiseLegacyParameterInventory (processor),
-                         "registry-built live layout must match the exact legacy host inventory");
+        {
+            const auto* parameters = expectedInventory.getDynamicObject()
+                                         ->getProperty ("parameters").getArray();
+            if (parameters != nullptr)
+            {
+                const auto count = std::min ({ descriptors.size(), legacyParameterIds.size(),
+                                               static_cast<std::size_t> (parameters->size()) });
+                for (std::size_t index = 0; index < count; ++index)
+                {
+                    const auto* legacy = (*parameters)[static_cast<int> (index)].getDynamicObject();
+                    if (legacy == nullptr)
+                        continue;
+                    const auto& descriptor = descriptors[index];
+                    const auto expectedName = std::find_if (
+                        correctedDisplayNames.begin(), correctedDisplayNames.end(),
+                        [&descriptor] (const auto& item) { return item.first == descriptor.id; });
+                    const auto displayName = expectedName == correctedDisplayNames.end()
+                                               ? legacy->getProperty ("name").toString()
+                                               : juce::String { expectedName->second.data(),
+                                                                expectedName->second.size() };
+                    test.expect (equalsStringView (displayName, descriptor.displayName),
+                                 "unlisted legacy names must remain unchanged and listed names exact");
+                    test.expect (descriptor.rangeStart == static_cast<float> (legacy->getProperty ("range_start"))
+                                     && descriptor.rangeEnd == static_cast<float> (legacy->getProperty ("range_end"))
+                                     && descriptor.rangeInterval == static_cast<float> (legacy->getProperty ("range_interval"))
+                                     && descriptor.rangeSkew == static_cast<float> (legacy->getProperty ("range_skew"))
+                                     && descriptor.symmetricSkew == static_cast<bool> (legacy->getProperty ("range_symmetric_skew")),
+                                 "legacy physical host-storage ranges and normalization must remain exact");
+                    const auto expectedDefault = descriptor.id == "tune"
+                                                   ? 5.0f
+                                                   : static_cast<float> (legacy->getProperty ("physical_default"));
+                    test.expect (descriptor.physicalDefault == expectedDefault,
+                                 "only Tune may change its legacy physical default");
+                    if (const auto* choices = legacy->getProperty ("choices").getArray())
+                    {
+                        test.expect (descriptor.choiceValues.size()
+                                         == static_cast<std::size_t> (choices->size()),
+                                     "legacy choice counts must remain exact");
+                        const auto choiceCount = std::min (descriptor.choiceValues.size(),
+                                                           static_cast<std::size_t> (choices->size()));
+                        for (std::size_t choiceIndex = 0; choiceIndex < choiceCount; ++choiceIndex)
+                            test.expect (equalsStringView ((*choices)[static_cast<int> (choiceIndex)].toString(),
+                                                           descriptor.choiceValues[choiceIndex]),
+                                         "legacy choice strings/order must remain exact");
+                    }
+                }
+            }
+        }
     }
+
+    const auto expectLiveDefault = [&] (std::string_view id,
+                                        float expectedPhysical,
+                                        std::string_view expectedText)
+    {
+        const auto parameterId = juce::String { id.data(), id.size() };
+        const auto* parameter = processor.apvts.getParameter (parameterId);
+        test.expect (parameter != nullptr, "required v2 default parameter must exist");
+        if (parameter == nullptr)
+            return;
+        test.expect (parameter->convertFrom0to1 (parameter->getDefaultValue()) == expectedPhysical,
+                     "required v2 physical default must match");
+        test.expect (equalsStringView (parameter->getText (parameter->getDefaultValue(), 256),
+                                       expectedText),
+                     "required v2 default text must match");
+    };
+    expectLiveDefault ("tune", 5.0f, "Zero");
+    expectLiveDefault ("keyboard.priorityMode", 0.0f, "Low");
+    expectLiveDefault ("keyboard.triggerMode", 0.0f, "Single");
+    expectLiveDefault ("output.mainEnabled", 1.0f, "On");
+    expectLiveDefault ("output.phonesEnabled", 1.0f, "On");
+
+    const auto registryFixture = legacyFixtureFile (
+        "Tests/fixtures/parameters/parameter-registry-v2.json");
+    test.expect (registryFixture.existsAsFile(),
+                 "canonical parameter registry v2 fixture must exist");
+    if (registryFixture.existsAsFile())
+        test.expect (registryFixture.loadFileAsString() == makeRegistryV2Export(),
+                     "canonical registry export must equal the v2 fixture byte-for-byte");
+
     testLegacyParameterFixtures (test);
 }
 
 int captureLegacyFixture (std::string_view mode)
 {
+    if (mode == "capture-registry-v2")
+    {
+        std::cout << makeRegistryV2Export().toStdString();
+        return 0;
+    }
+
     MoogMiniAudioProcessor processor;
     if (mode == "capture-parameters")
         std::cout << serialiseLegacyParameterInventory (processor).toStdString();
