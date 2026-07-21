@@ -1,13 +1,13 @@
-# MiniMoog
+# TTH Model One
 
-A JUCE 8 Model D–inspired MIDI instrument. The supported build produces one
+A JUCE 8 Model D–inspired MIDI instrument by TTH Audio. The supported build produces one
 instrument product as VST3 and Standalone on macOS, Windows, and Linux, plus AU
 on macOS. It does not produce a separate effect plug-in.
 
-The checked-in product identity is development-only and is not approved for
-distribution. Release packaging remains blocked until the manufacturer name,
-four-character codes, reverse-DNS domain, and distribution history are reviewed
-in `cmake/ProductIdentity.cmake`.
+The owner-approved product identity is defined in `cmake/ProductIdentity.cmake`,
+and the owner confirmed that no prior distribution exists. Public release and
+distribution remain blocked until the deferred commercial-host,
+designated-account AU, and Steinberg validator checks are complete.
 
 ## Prerequisites
 
@@ -48,9 +48,9 @@ CI stages products and manifests beneath:
 
 ```text
 build with spaces/<config>/development-stage/<config>-<system>-<architecture>/
-  VST3/MiniMoog.vst3
-  Standalone/MiniMoog.app | MiniMoog.exe | MiniMoog
-  AU/MiniMoog.component                 # macOS only
+  VST3/TTH Model One.vst3
+  Standalone/TTH Model One.app | TTH Model One.exe | TTH Model One
+  AU/TTH Model One.component                 # macOS only
   build-manifest.json
   validation-manifest.json
 ```
