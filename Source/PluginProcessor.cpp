@@ -9,6 +9,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ParameterRegistry.h"
+#include "StateContract.h"
 #include <algorithm>
 #include <cmath>
 #include "Oscillator.h"
@@ -63,6 +64,7 @@ circularBuffer(1024)
     osc1.setTune(Oscillator::Tune::Zero);
     
     currentNoteNumber = -1; // Initialize current note number
+    canonicalState = StateContract::makeNativeState (apvts.copyState());
     
 }
 
@@ -787,26 +789,32 @@ juce::AudioProcessorEditor* MoogMiniAudioProcessor::createEditor()
 //==============================================================================
 void MoogMiniAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    // Here we create an XML element with the state information
-    auto state = apvts.copyState();
-    std::unique_ptr<juce::XmlElement> xml(state.createXml());
-    copyXmlToBinary(*xml, destData);
+    StateContract::serialiseBinary (
+        StateContract::withCurrentParameters (canonicalState, apvts.copyState()),
+        destData);
 }
 
 void MoogMiniAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
-    // Here we retrieve the XML from the binary data
-    std::unique_ptr<juce::XmlElement> xmlState(getXmlFromBinary(data, sizeInBytes));
-    
-    if (xmlState != nullptr)
-    {
-        // If the XML is valid, we use it to restore the state
-        if (xmlState->hasTagName(apvts.state.getType()))
-        {
-            apvts.replaceState(juce::ValueTree::fromXml(*xmlState));
-            restoredStateFromHost = true;
-        }
-    }
+    static_cast<void> (restoreState (data, sizeInBytes));
+}
+
+StateContract::RestoreResult MoogMiniAudioProcessor::restoreState (const void* data,
+                                                                   int sizeInBytes)
+{
+    auto prepared = StateContract::parseAndPrepare (data, sizeInBytes);
+    if (! prepared.result.succeeded())
+        return prepared.result;
+
+    apvts.replaceState (prepared.apvtsState);
+    canonicalState = std::move (prepared.canonicalState);
+    restoredStateFromHost = true;
+    return prepared.result;
+}
+
+StateContract::ContourContract MoogMiniAudioProcessor::getContourContract() const noexcept
+{
+    return StateContract::contourContract (canonicalState);
 }
 
 bool MoogMiniAudioProcessor::shouldAutoLoadLastPreset() const {

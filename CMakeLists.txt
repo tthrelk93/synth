@@ -161,6 +161,7 @@ set(MODEL_D_PLUGIN_SOURCES
         Source/PresetManager.cpp
         Source/SignalFlowOverlay.cpp
         Source/SmokeComponent.cpp
+        Source/StateContract.cpp
         Source/VintageLookAndFeel.cpp
         Source/WaveformDisplay.cpp
         Source/WaveformSlider.cpp)
@@ -183,6 +184,7 @@ target_link_libraries(ModelDPlugin
         juce::juce_audio_formats
         juce::juce_audio_processors
         juce::juce_audio_utils
+        juce::juce_cryptography
         juce::juce_data_structures
         juce::juce_dsp
         juce::juce_events
@@ -644,6 +646,7 @@ if(SYNTH_BUILD_TESTS)
 
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)
+    synth_add_model_d_test(ModelDStateV2Contract state state-v2)
     synth_add_model_d_test(ModelDLegacyParameterFixtures state fixtures)
     synth_add_model_d_test(ModelDParameterRegistry state registry)
     synth_add_model_d_test(ModelDDspContract dsp dsp)

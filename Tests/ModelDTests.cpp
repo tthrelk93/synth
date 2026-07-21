@@ -15,6 +15,7 @@
 #include <set>
 #include <string>
 #include <string_view>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -414,6 +415,53 @@ juce::String canonicaliseXmlFixture (const juce::XmlElement& state)
 {
     return state.toString().replace ("\r\n", "\n");
 }
+
+juce::MemoryBlock binaryFromXml (const juce::XmlElement& xml)
+{
+    juce::MemoryBlock result;
+    MoogMiniAudioProcessor::copyXmlToBinary (xml, result);
+    return result;
+}
+
+juce::MemoryBlock serialiseProcessorStateBytes (MoogMiniAudioProcessor& processor)
+{
+    juce::MemoryBlock result;
+    processor.getStateInformation (result);
+    return result;
+}
+
+juce::XmlElement* findParameterXml (juce::XmlElement& root, std::string_view id)
+{
+    auto* parameters = root.hasTagName ("parameters")
+                         ? &root : root.getChildByName ("parameters");
+    if (parameters == nullptr)
+        return nullptr;
+    for (auto* child = parameters->getFirstChildElement(); child != nullptr;
+         child = child->getNextElement())
+        if (child->hasTagName ("PARAM")
+            && equalsStringView (child->getStringAttribute ("id"), id))
+            return child;
+    return nullptr;
+}
+
+float physicalParameterValue (MoogMiniAudioProcessor& processor, std::string_view id)
+{
+    const auto parameterId = juce::String { id.data(), id.size() };
+    const auto* value = processor.apvts.getRawParameterValue (parameterId);
+    return value == nullptr ? std::numeric_limits<float>::quiet_NaN() : value->load();
+}
+
+bool fixtureMatchesXml (const juce::File& fixture, const juce::XmlElement& xml)
+{
+    juce::MemoryBlock expected;
+    if (! fixture.loadFileAsData (expected))
+        return false;
+    const auto actualText = canonicaliseXmlFixture (xml);
+    const juce::MemoryBlock actual { actualText.toRawUTF8(), actualText.getNumBytesAsUTF8() };
+    return actual == expected;
+}
+
+std::unique_ptr<juce::XmlElement> copyStateXml (const juce::XmlElement& xml);
 
 void setRepresentativeParameterState (MoogMiniAudioProcessor& processor)
 {
@@ -937,6 +985,32 @@ int captureLegacyFixture (std::string_view mode)
     }
 
     MoogMiniAudioProcessor processor;
+    if (mode == "capture-state-v2-native")
+    {
+        const auto state = serialiseProcessorState (processor);
+        if (state != nullptr)
+            std::cout << canonicaliseXmlFixture (*state).toStdString();
+        return state == nullptr ? 1 : 0;
+    }
+    if (mode == "capture-state-v2-migrated-default"
+        || mode == "capture-state-v2-migrated-representative")
+    {
+        const auto fixture = legacyFixtureFile (
+            mode == "capture-state-v2-migrated-default"
+                ? "Tests/fixtures/state/legacy-default-state.xml"
+                : "Tests/fixtures/state/legacy-representative-state.xml");
+        const auto legacy = juce::parseXML (fixture);
+        if (legacy == nullptr)
+            return 1;
+        const auto binary = binaryFromXml (*legacy);
+        const auto result = processor.restoreState (binary.getData(),
+                                                    static_cast<int> (binary.getSize()));
+        const auto state = serialiseProcessorState (processor);
+        if (! result.succeeded() || state == nullptr)
+            return 1;
+        std::cout << canonicaliseXmlFixture (*state).toStdString();
+        return 0;
+    }
     if (mode == "capture-parameters")
         std::cout << serialiseLegacyParameterInventory (processor).toStdString();
     else if (mode == "capture-default-state")
@@ -1506,6 +1580,702 @@ void testStateSmoke (TestContext& test)
                  "restored processor state must retain the existing host-restore marker");
 }
 
+void testStateV2Contract (TestContext& test)
+{
+    MoogMiniAudioProcessor processor;
+    const auto state = serialiseProcessorState (processor);
+    test.expect (state != nullptr, "new processor state must serialize as XML");
+    if (state == nullptr)
+        return;
+
+    test.expect (state->hasTagName ("modelDState"),
+                 "new processor state root must be modelDState");
+    test.expect (state->getNumAttributes() == 3,
+                 "modelDState must contain exactly three ordered properties");
+    if (state->getNumAttributes() == 3)
+    {
+        test.expect (state->getAttributeName (0) == "stateVersion"
+                         && state->getStringAttribute ("stateVersion") == "2",
+                     "stateVersion must be the first property and strict integer 2");
+        test.expect (state->getAttributeName (1) == "engineVersion"
+                         && state->getStringAttribute ("engineVersion")
+                                == JucePlugin_VersionString,
+                     "engineVersion must be the second property and product metadata");
+        test.expect (state->getAttributeName (2) == "calibrationProfileId"
+                         && state->getStringAttribute ("calibrationProfileId") == "baseline",
+                     "calibrationProfileId must be the third property and baseline");
+    }
+
+    constexpr std::array expectedChildren {
+        "parameters"sv, "compatibility"sv, "ui"sv,
+        "recreation"sv, "extensions"sv, "migrationLog"sv
+    };
+    test.expect (state->getNumChildElements() == static_cast<int> (expectedChildren.size()),
+                 "modelDState must contain exactly six reserved children");
+    auto* child = state->getFirstChildElement();
+    for (const auto expectedName : expectedChildren)
+    {
+        test.expect (child != nullptr && equalsStringView (child->getTagName(), expectedName),
+                     "modelDState reserved child order must be canonical");
+        if (child != nullptr)
+            child = child->getNextElement();
+    }
+
+    const auto* parameters = state->getChildByName ("parameters");
+    const auto descriptors = ParameterRegistry::descriptors();
+    test.expect (parameters != nullptr
+                     && parameters->getNumChildElements() == static_cast<int> (descriptors.size()),
+                 "canonical parameters must contain all 48 registry entries");
+    if (parameters != nullptr)
+    {
+        auto* parameter = parameters->getFirstChildElement();
+        for (const auto& descriptor : descriptors)
+        {
+            test.expect (parameter != nullptr && parameter->hasTagName ("PARAM")
+                             && equalsStringView (parameter->getStringAttribute ("id"), descriptor.id),
+                         "canonical parameters must use production-registry order");
+            test.expect (parameter != nullptr
+                             && parameter->getDoubleAttribute ("value")
+                                    == static_cast<double> (descriptor.physicalDefault),
+                         "new state must serialize exact registry physical defaults");
+            if (parameter != nullptr)
+                parameter = parameter->getNextElement();
+        }
+    }
+
+    const auto* compatibility = state->getChildByName ("compatibility");
+    test.expect (compatibility != nullptr
+                     && compatibility->getStringAttribute ("contourContract")
+                            == "canonicalContours"
+                     && compatibility->getStringAttribute ("sourceVersion") == "2"
+                     && compatibility->getStringAttribute ("migratedAtVersion") == "0"
+                     && compatibility->getStringAttribute ("sourceHash").isEmpty(),
+                 "new state must use native canonical compatibility metadata");
+    test.expect (processor.shouldAutoLoadLastPreset(),
+                 "serializing a new state must not set the host-restore lifecycle flag");
+
+    const auto nativeFixture = legacyFixtureFile (
+        "Tests/fixtures/state/native-default-state-v2.xml");
+    test.expect (nativeFixture.existsAsFile(), "native v2 capture fixture must exist");
+    if (nativeFixture.existsAsFile())
+        test.expect (fixtureMatchesXml (nativeFixture, *state),
+                     "native v2 production capture must equal its fixture byte-for-byte");
+}
+
+void expectMigrationFixture (TestContext& test,
+                             const juce::File& legacyFixture,
+                             const juce::File& migratedFixture,
+                             std::string_view description)
+{
+    const auto legacy = juce::parseXML (legacyFixture);
+    test.expect (legacy != nullptr, std::string { description } + " legacy XML must parse");
+    if (legacy == nullptr)
+        return;
+
+    const auto legacyBinary = binaryFromXml (*legacy);
+    MoogMiniAudioProcessor migrated;
+    const auto result = migrated.restoreState (legacyBinary.getData(),
+                                               static_cast<int> (legacyBinary.getSize()));
+    test.expect (result.code == StateContract::RestoreCode::successMigratedV0,
+                 std::string { description } + " must return success_migrated_v0");
+    test.expect (migrated.getContourContract()
+                     == StateContract::ContourContract::legacyCrossedContours,
+                 std::string { description } + " must retain legacy crossed contours");
+    test.expect (! migrated.shouldAutoLoadLastPreset(),
+                 std::string { description } + " must set the successful host-restore marker");
+
+    for (const auto& descriptor : ParameterRegistry::descriptors())
+    {
+        const auto* source = findParameterXml (*legacy, descriptor.id);
+        const auto expected = source != nullptr
+                                ? static_cast<float> (source->getDoubleAttribute ("value"))
+                                : descriptor.physicalDefault;
+        test.expect (physicalParameterValue (migrated, descriptor.id) == expected,
+                     std::string { description }
+                         + " must preserve every present physical value without pair swaps");
+    }
+    test.expect (physicalParameterValue (migrated, "keyboard.priorityMode") == 0.0f
+                     && physicalParameterValue (migrated, "keyboard.triggerMode") == 0.0f
+                     && physicalParameterValue (migrated, "output.mainEnabled") == 1.0f
+                     && physicalParameterValue (migrated, "output.phonesEnabled") == 1.0f,
+                 std::string { description } + " must add Low/Single/Main/Phones defaults");
+
+    const auto migratedXml = serialiseProcessorState (migrated);
+    test.expect (migratedXml != nullptr,
+                 std::string { description } + " migrated v2 XML must serialize");
+    test.expect (migratedFixture.existsAsFile(),
+                 std::string { description } + " migrated v2 fixture must exist");
+    if (migratedXml != nullptr && migratedFixture.existsAsFile())
+        test.expect (fixtureMatchesXml (migratedFixture, *migratedXml),
+                     std::string { description }
+                         + " migration must equal the checked v2 fixture byte-for-byte");
+
+    const auto firstSave = serialiseProcessorStateBytes (migrated);
+    MoogMiniAudioProcessor reloaded;
+    const auto reloadResult = reloaded.restoreState (firstSave.getData(),
+                                                     static_cast<int> (firstSave.getSize()));
+    const auto secondSave = serialiseProcessorStateBytes (reloaded);
+    test.expect (reloadResult.code == StateContract::RestoreCode::success
+                     && reloaded.getContourContract()
+                            == StateContract::ContourContract::legacyCrossedContours
+                     && firstSave == secondSave,
+                 std::string { description }
+                     + " save-again must remain deterministic v2 legacy mode");
+
+    MoogMiniAudioProcessor repeated;
+    const auto repeatedResult = repeated.restoreState (
+        legacyBinary.getData(), static_cast<int> (legacyBinary.getSize()));
+    test.expect (repeatedResult.code == StateContract::RestoreCode::successMigratedV0
+                     && firstSave == serialiseProcessorStateBytes (repeated),
+                 std::string { description } + " repeated v0 migration must be deterministic");
+}
+
+void testStateV2Migration (TestContext& test)
+{
+    expectMigrationFixture (
+        test,
+        legacyFixtureFile ("Tests/fixtures/state/legacy-default-state.xml"),
+        legacyFixtureFile ("Tests/fixtures/state/migrated-default-state-v2.xml"),
+        "legacy default state");
+    expectMigrationFixture (
+        test,
+        legacyFixtureFile ("Tests/fixtures/state/legacy-representative-state.xml"),
+        legacyFixtureFile ("Tests/fixtures/state/migrated-representative-state-v2.xml"),
+        "legacy representative state");
+
+    const auto representative = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-representative-state.xml"));
+    test.expect (representative != nullptr, "partial v0 source fixture must parse");
+    if (representative != nullptr)
+    {
+        auto partial = juce::parseXML (representative->toString());
+        auto* missing = partial == nullptr ? nullptr
+                                           : findParameterXml (*partial, "filterAttackTimeKnob");
+        test.expect (missing != nullptr, "partial v0 test must find its one removed contour");
+        if (partial != nullptr && missing != nullptr)
+        {
+            partial->removeChildElement (missing, true);
+            const auto binary = binaryFromXml (*partial);
+            MoogMiniAudioProcessor migrated;
+            const auto result = migrated.restoreState (binary.getData(),
+                                                       static_cast<int> (binary.getSize()));
+            test.expect (result.code == StateContract::RestoreCode::successMigratedV0,
+                         "partial v0 must migrate successfully");
+            test.expect (physicalParameterValue (migrated, "filterAttackTimeKnob") == 0.0f,
+                         "partial v0 must use the missing contour's historical default only");
+            test.expect (physicalParameterValue (migrated, "filterDecayTimeKnob") == 0.75f
+                             && physicalParameterValue (migrated, "loudnessAttackTimeKnob") == 0.75f
+                             && physicalParameterValue (migrated, "loudnessDecayTimeKnob") == 0.75f
+                             && physicalParameterValue (migrated, "filterSustainKnob") == 8.0f
+                             && physicalParameterValue (migrated, "loudnessSustainLevelKnob") == 8.0f,
+                         "partial v0 must preserve every other contour value without swapping");
+            const auto output = serialiseProcessorState (migrated);
+            const auto* log = output == nullptr ? nullptr : output->getChildByName ("migrationLog");
+            int preciseWarnings = 0;
+            if (log != nullptr)
+                for (auto* entry = log->getFirstChildElement(); entry != nullptr;
+                     entry = entry->getNextElement())
+                    preciseWarnings += entry->getStringAttribute ("warningCode")
+                                           == "defaulted.parameter.filterAttackTimeKnob" ? 1 : 0;
+            test.expect (preciseWarnings == 1,
+                         "partial v0 must log its exact missing contour warning once");
+        }
+
+        auto distinctContours = copyStateXml (*representative);
+        if (distinctContours != nullptr)
+        {
+            constexpr std::array distinctValues {
+                std::pair { "filterAttackTimeKnob", "0.11" },
+                std::pair { "filterDecayTimeKnob", "0.22" },
+                std::pair { "filterSustainKnob", "3" },
+                std::pair { "loudnessAttackTimeKnob", "0.66" },
+                std::pair { "loudnessDecayTimeKnob", "0.77" },
+                std::pair { "loudnessSustainLevelKnob", "9" }
+            };
+            for (const auto& [id, value] : distinctValues)
+                findParameterXml (*distinctContours, id)->setAttribute ("value", value);
+            const auto binary = binaryFromXml (*distinctContours);
+            MoogMiniAudioProcessor migrated;
+            const auto result = migrated.restoreState (binary.getData(),
+                                                       static_cast<int> (binary.getSize()));
+            test.expect (result.succeeded()
+                             && migrated.getContourContract()
+                                    == StateContract::ContourContract::legacyCrossedContours
+                             && std::abs (physicalParameterValue (migrated, "filterAttackTimeKnob")
+                                             - 0.11f) < 1.0e-6f
+                             && std::abs (physicalParameterValue (migrated, "filterDecayTimeKnob")
+                                             - 0.22f) < 1.0e-6f
+                             && physicalParameterValue (migrated, "filterSustainKnob") == 3.0f
+                             && std::abs (physicalParameterValue (migrated, "loudnessAttackTimeKnob")
+                                             - 0.66f) < 1.0e-6f
+                             && std::abs (physicalParameterValue (migrated, "loudnessDecayTimeKnob")
+                                             - 0.77f) < 1.0e-6f
+                             && physicalParameterValue (migrated, "loudnessSustainLevelKnob") == 9.0f,
+                         "v0 migration must never swap any of six distinct contour ID values");
+        }
+    }
+
+    const auto legacyDefault = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-default-state.xml"));
+    if (legacyDefault != nullptr)
+    {
+        const auto binary = binaryFromXml (*legacyDefault);
+        MoogMiniAudioProcessor migrated;
+        const auto result = migrated.restoreState (binary.getData(),
+                                                   static_cast<int> (binary.getSize()));
+        test.expect (result.succeeded() && physicalParameterValue (migrated, "tune") == 0.0f,
+                     "present v0 Tune index 0 must restore as 0, not new-instance index 5");
+
+        auto missingTune = copyStateXml (*legacyDefault);
+        auto* tune = missingTune == nullptr ? nullptr : findParameterXml (*missingTune, "tune");
+        if (missingTune != nullptr && tune != nullptr)
+        {
+            missingTune->removeChildElement (tune, true);
+            const auto missingTuneBinary = binaryFromXml (*missingTune);
+            MoogMiniAudioProcessor missingTuneMigrated;
+            const auto missingTuneResult = missingTuneMigrated.restoreState (
+                missingTuneBinary.getData(), static_cast<int> (missingTuneBinary.getSize()));
+            const auto missingTuneOutput = serialiseProcessorState (missingTuneMigrated);
+            const auto* log = missingTuneOutput == nullptr ? nullptr
+                                                           : missingTuneOutput->getChildByName ("migrationLog");
+            int warningCount = 0;
+            if (log != nullptr)
+                for (auto* entry = log->getFirstChildElement(); entry != nullptr;
+                     entry = entry->getNextElement())
+                    warningCount += entry->getStringAttribute ("warningCode")
+                                        == "defaulted.parameter.tune" ? 1 : 0;
+            test.expect (missingTuneResult.succeeded()
+                             && physicalParameterValue (missingTuneMigrated, "tune") == 0.0f
+                             && warningCount == 1,
+                         "missing v0 Tune must use historical index 0 and log its exact warning");
+        }
+    }
+
+    auto allKnown = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-default-state.xml"));
+    test.expect (allKnown != nullptr, "all-known v0 source must parse");
+    if (allKnown != nullptr)
+    {
+        constexpr std::array appendedValues {
+            std::pair { "keyboard.priorityMode", 2.0 },
+            std::pair { "keyboard.triggerMode", 1.0 },
+            std::pair { "output.mainEnabled", 0.0 },
+            std::pair { "output.phonesEnabled", 0.0 }
+        };
+        for (const auto& [id, value] : appendedValues)
+        {
+            auto parameter = std::make_unique<juce::XmlElement> ("PARAM");
+            parameter->setAttribute ("id", id);
+            parameter->setAttribute ("value", value);
+            allKnown->addChildElement (parameter.release());
+        }
+        const auto binary = binaryFromXml (*allKnown);
+        MoogMiniAudioProcessor migrated;
+        const auto result = migrated.restoreState (binary.getData(),
+                                                   static_cast<int> (binary.getSize()));
+        test.expect (result.succeeded()
+                         && physicalParameterValue (migrated, "keyboard.priorityMode") == 2.0f
+                         && physicalParameterValue (migrated, "keyboard.triggerMode") == 1.0f
+                         && physicalParameterValue (migrated, "output.mainEnabled") == 0.0f
+                         && physicalParameterValue (migrated, "output.phonesEnabled") == 0.0f,
+                     "v0 must recognize and preserve supplied values for all 48 current IDs");
+    }
+
+    auto legacyPreset = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-default-state.xml"));
+    if (legacyPreset != nullptr)
+    {
+        legacyPreset->setAttribute ("presetName", "Legacy Bass");
+        const auto binary = binaryFromXml (*legacyPreset);
+        MoogMiniAudioProcessor migrated;
+        const auto result = migrated.restoreState (binary.getData(),
+                                                   static_cast<int> (binary.getSize()));
+        const auto output = serialiseProcessorState (migrated);
+        const auto* extensions = output == nullptr ? nullptr : output->getChildByName ("extensions");
+        const auto* preset = extensions == nullptr ? nullptr
+                                                    : extensions->getChildByName ("legacyPreset");
+        test.expect (result.succeeded() && preset != nullptr
+                         && preset->getStringAttribute ("presetName") == "Legacy Bass",
+                     "bounded legacy presetName must survive migration as opaque extension metadata");
+
+        legacyPreset->setAttribute ("unsafeProperty", "reject");
+        const auto unsafeBinary = binaryFromXml (*legacyPreset);
+        MoogMiniAudioProcessor rejected;
+        test.expect (rejected.restoreState (unsafeBinary.getData(),
+                                           static_cast<int> (unsafeBinary.getSize())).code
+                         == StateContract::RestoreCode::unexpectedProperty,
+                     "unknown legacy root properties must remain rejected");
+    }
+
+    auto unknownLegacy = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-default-state.xml"));
+    if (unknownLegacy != nullptr)
+    {
+        auto unknown = std::make_unique<juce::XmlElement> ("PARAM");
+        unknown->setAttribute ("id", "vendor.safeValue");
+        unknown->setAttribute ("value", "12.5");
+        unknownLegacy->addChildElement (unknown.release());
+        const auto binary = binaryFromXml (*unknownLegacy);
+        MoogMiniAudioProcessor migrated;
+        const auto result = migrated.restoreState (binary.getData(), static_cast<int> (binary.getSize()));
+        const auto output = serialiseProcessorState (migrated);
+        const auto* extensions = output == nullptr ? nullptr : output->getChildByName ("extensions");
+        const auto* legacyParameters = extensions == nullptr ? nullptr
+                                                              : extensions->getChildByName ("legacyParameters");
+        const auto* preserved = legacyParameters == nullptr ? nullptr
+                                                             : legacyParameters->getChildByName ("legacyParameter");
+        test.expect (result.succeeded() && preserved != nullptr
+                         && preserved->getStringAttribute ("id") == "vendor.safeValue"
+                         && preserved->getDoubleAttribute ("value") == 12.5,
+                     "well-formed unknown v0 PARAM must survive as opaque extension data");
+
+        findParameterXml (*unknownLegacy, "vendor.safeValue")->setAttribute ("value", "NaN");
+        const auto unsafeBinary = binaryFromXml (*unknownLegacy);
+        MoogMiniAudioProcessor rejected;
+        test.expect (rejected.restoreState (unsafeBinary.getData(),
+                                           static_cast<int> (unsafeBinary.getSize())).code
+                         == StateContract::RestoreCode::nonFiniteValue,
+                     "non-finite unknown v0 PARAM must be rejected");
+    }
+
+    auto semanticA = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-default-state.xml"));
+    auto semanticB = semanticA == nullptr ? nullptr : copyStateXml (*semanticA);
+    if (semanticA != nullptr && semanticB != nullptr)
+    {
+        auto* first = semanticB->getFirstChildElement();
+        semanticB->removeChildElement (first, false);
+        semanticB->addChildElement (first);
+        findParameterXml (*semanticB, "filterCutoff")->setAttribute ("value", "0.500000");
+        const auto binaryA = binaryFromXml (*semanticA);
+        const auto binaryB = binaryFromXml (*semanticB);
+        MoogMiniAudioProcessor migratedA;
+        MoogMiniAudioProcessor migratedB;
+        const auto resultA = migratedA.restoreState (binaryA.getData(), static_cast<int> (binaryA.getSize()));
+        const auto resultB = migratedB.restoreState (binaryB.getData(), static_cast<int> (binaryB.getSize()));
+        test.expect (resultA.succeeded() && resultB.succeeded()
+                         && serialiseProcessorStateBytes (migratedA)
+                                == serialiseProcessorStateBytes (migratedB),
+                     "semantically identical v0 trees must produce identical hashes and v2 bytes");
+    }
+}
+
+void testStateV2ExtensionRoundTrip (TestContext& test)
+{
+    MoogMiniAudioProcessor source;
+    auto xml = serialiseProcessorState (source);
+    test.expect (xml != nullptr, "safe-extension source state must serialize");
+    if (xml == nullptr)
+        return;
+    auto* extensions = xml->getChildByName ("extensions");
+    test.expect (extensions != nullptr, "canonical state must expose extensions child");
+    if (extensions == nullptr)
+        return;
+
+    auto vendor = std::make_unique<juce::XmlElement> ("vendorData");
+    vendor->setAttribute ("vendor", "example.test");
+    vendor->setAttribute ("payload", "safe-value-01");
+    auto leaf = std::make_unique<juce::XmlElement> ("nestedValue");
+    leaf->setAttribute ("name", "mode");
+    leaf->setAttribute ("value", "alpha");
+    vendor->addChildElement (leaf.release());
+    extensions->addChildElement (vendor.release());
+    const auto expectedExtensions = extensions->toString();
+
+    const auto input = binaryFromXml (*xml);
+    MoogMiniAudioProcessor restored;
+    const auto result = restored.restoreState (input.getData(), static_cast<int> (input.getSize()));
+    const auto first = serialiseProcessorStateBytes (restored);
+    auto firstXml = serialiseProcessorState (restored);
+    test.expect (result.code == StateContract::RestoreCode::success,
+                 "safe v2 extension state must restore successfully");
+    test.expect (input == first,
+                 "canonical v2 serialize-parse-serialize must be byte-identical");
+    test.expect (firstXml != nullptr
+                     && firstXml->getChildByName ("extensions") != nullptr
+                     && firstXml->getChildByName ("extensions")->toString() == expectedExtensions,
+                 "safe extension subtree must be preserved byte-for-byte");
+
+    MoogMiniAudioProcessor repeated;
+    const auto repeatedResult = repeated.restoreState (first.getData(), static_cast<int> (first.getSize()));
+    test.expect (repeatedResult.code == StateContract::RestoreCode::success
+                     && first == serialiseProcessorStateBytes (repeated),
+                 "repeated native v2 round trips must be byte-deterministic");
+}
+
+std::unique_ptr<juce::XmlElement> copyStateXml (const juce::XmlElement& xml)
+{
+    return juce::parseXML (xml.toString());
+}
+
+void testStateV2FailuresAreAtomic (TestContext& test)
+{
+    constexpr auto codes = std::to_array<std::pair<StateContract::RestoreCode,
+                                                     std::string_view>> ({
+        { StateContract::RestoreCode::success, "success"sv },
+        { StateContract::RestoreCode::successMigratedV0, "success_migrated_v0"sv },
+        { StateContract::RestoreCode::malformedData, "malformed_data"sv },
+        { StateContract::RestoreCode::wrongRoot, "wrong_root"sv },
+        { StateContract::RestoreCode::missingStateVersion, "missing_state_version"sv },
+        { StateContract::RestoreCode::invalidStateVersion, "invalid_state_version"sv },
+        { StateContract::RestoreCode::nonIntegerStateVersion, "non_integer_state_version"sv },
+        { StateContract::RestoreCode::negativeStateVersion, "negative_state_version"sv },
+        { StateContract::RestoreCode::futureStateVersion, "future_state_version"sv },
+        { StateContract::RestoreCode::unsupportedStateVersion, "unsupported_state_version"sv },
+        { StateContract::RestoreCode::missingRequiredProperty, "missing_required_property"sv },
+        { StateContract::RestoreCode::missingRequiredChild, "missing_required_child"sv },
+        { StateContract::RestoreCode::duplicateRequiredChild, "duplicate_required_child"sv },
+        { StateContract::RestoreCode::duplicateParameterId, "duplicate_parameter_id"sv },
+        { StateContract::RestoreCode::missingParameterId, "missing_parameter_id"sv },
+        { StateContract::RestoreCode::unknownParameterId, "unknown_parameter_id"sv },
+        { StateContract::RestoreCode::invalidNumericValue, "invalid_numeric_value"sv },
+        { StateContract::RestoreCode::nonFiniteValue, "non_finite_value"sv },
+        { StateContract::RestoreCode::outOfRangeValue, "out_of_range_value"sv },
+        { StateContract::RestoreCode::invalidDiscreteValue, "invalid_discrete_value"sv },
+        { StateContract::RestoreCode::unsafeExtensionStructure, "unsafe_extension_structure"sv },
+        { StateContract::RestoreCode::unexpectedProperty, "unexpected_property"sv },
+        { StateContract::RestoreCode::unexpectedChild, "unexpected_child"sv },
+        { StateContract::RestoreCode::invalidCompatibility, "invalid_compatibility"sv },
+        { StateContract::RestoreCode::invalidUi, "invalid_ui"sv },
+        { StateContract::RestoreCode::invalidRecreation, "invalid_recreation"sv },
+        { StateContract::RestoreCode::invalidMigrationLog, "invalid_migration_log"sv }
+    });
+    std::set<std::string> stableCodes;
+    for (const auto& [code, expected] : codes)
+    {
+        const auto actual = StateContract::stableCode (code);
+        test.expect (actual == expected, "every restore result must expose its exact stable code");
+        test.expect (stableCodes.emplace (actual).second,
+                     "every restore result stable code must be unique");
+    }
+
+    MoogMiniAudioProcessor sentinel;
+    setParameter (sentinel, "filterCutoff", 0.75f, test);
+    setParameter (sentinel, "tune", 0.8f, test);
+    const auto validSentinel = serialiseProcessorStateBytes (sentinel);
+    const auto success = sentinel.restoreState (validSentinel.getData(),
+                                                static_cast<int> (validSentinel.getSize()));
+    test.expect (success.code == StateContract::RestoreCode::success
+                     && ! sentinel.shouldAutoLoadLastPreset(),
+                 "sentinel must first complete one successful host restore");
+    const auto beforeFailure = serialiseProcessorStateBytes (sentinel);
+    const auto contourBefore = sentinel.getContourContract();
+
+    const auto baseline = serialiseProcessorState (sentinel);
+    test.expect (baseline != nullptr, "failure corpus baseline must serialize");
+    if (baseline == nullptr)
+        return;
+
+    const auto expectRejected = [&] (std::unique_ptr<juce::XmlElement> candidate,
+                                      StateContract::RestoreCode expected,
+                                      std::string_view description)
+    {
+        test.expect (candidate != nullptr, std::string { description } + " XML must be constructible");
+        if (candidate == nullptr)
+            return;
+        const auto binary = binaryFromXml (*candidate);
+        const auto result = sentinel.restoreState (binary.getData(), static_cast<int> (binary.getSize()));
+        test.expect (result.code == expected,
+                     std::string { description } + " must return the exact stable error code");
+        test.expect (serialiseProcessorStateBytes (sentinel) == beforeFailure,
+                     std::string { description } + " must leave every live serialized byte unchanged");
+        test.expect (! sentinel.shouldAutoLoadLastPreset()
+                         && sentinel.getContourContract() == contourBefore,
+                     std::string { description }
+                         + " must preserve the previous successful lifecycle and metadata");
+    };
+
+    const auto malformed = sentinel.restoreState ("not-a-juce-state", 16);
+    test.expect (malformed.code == StateContract::RestoreCode::malformedData
+                     && serialiseProcessorStateBytes (sentinel) == beforeFailure,
+                 "malformed binary/XML must fail atomically");
+    const auto truncated = sentinel.restoreState (beforeFailure.getData(),
+                                                  static_cast<int> (beforeFailure.getSize() / 2));
+    test.expect (truncated.code == StateContract::RestoreCode::malformedData
+                     && serialiseProcessorStateBytes (sentinel) == beforeFailure,
+                 "truncated binary must fail atomically");
+
+    expectRejected (std::make_unique<juce::XmlElement> ("wrongRoot"),
+                    StateContract::RestoreCode::wrongRoot, "wrong root");
+
+    auto missingVersion = copyStateXml (*baseline);
+    missingVersion->removeAttribute ("stateVersion");
+    expectRejected (std::move (missingVersion), StateContract::RestoreCode::missingStateVersion,
+                    "missing version");
+    for (const auto& [version, expected, description] :
+         std::to_array<std::tuple<const char*, StateContract::RestoreCode, const char*>> ({
+             { "abc", StateContract::RestoreCode::invalidStateVersion, "invalid version" },
+             { "2.5", StateContract::RestoreCode::nonIntegerStateVersion, "noninteger version" },
+             { "-1", StateContract::RestoreCode::negativeStateVersion, "negative version" },
+             { "1", StateContract::RestoreCode::unsupportedStateVersion, "unsupported past version" },
+             { "3", StateContract::RestoreCode::futureStateVersion, "future version" }
+         }))
+    {
+        auto candidate = copyStateXml (*baseline);
+        candidate->setAttribute ("stateVersion", version);
+        expectRejected (std::move (candidate), expected, description);
+    }
+
+    auto missingProperty = copyStateXml (*baseline);
+    missingProperty->removeAttribute ("engineVersion");
+    expectRejected (std::move (missingProperty),
+                    StateContract::RestoreCode::missingRequiredProperty,
+                    "missing required property");
+    auto unexpectedProperty = copyStateXml (*baseline);
+    unexpectedProperty->setAttribute ("unknownProperty", "reject");
+    expectRejected (std::move (unexpectedProperty),
+                    StateContract::RestoreCode::unexpectedProperty,
+                    "unexpected v2 property");
+    auto unexpectedChild = copyStateXml (*baseline);
+    unexpectedChild->addChildElement (new juce::XmlElement ("unknownChild"));
+    expectRejected (std::move (unexpectedChild), StateContract::RestoreCode::unexpectedChild,
+                    "unexpected v2 child");
+
+    auto invalidCompatibility = copyStateXml (*baseline);
+    invalidCompatibility->getChildByName ("compatibility")
+        ->setAttribute ("contourContract", "invalidContours");
+    expectRejected (std::move (invalidCompatibility),
+                    StateContract::RestoreCode::invalidCompatibility,
+                    "invalid compatibility metadata");
+    auto invalidUi = copyStateXml (*baseline);
+    invalidUi->getChildByName ("ui")->setAttribute ("viewMode", "invalidView");
+    expectRejected (std::move (invalidUi), StateContract::RestoreCode::invalidUi,
+                    "invalid UI metadata");
+    auto invalidRecreation = copyStateXml (*baseline);
+    invalidRecreation->getChildByName ("recreation")->setAttribute ("enabled", "2");
+    expectRejected (std::move (invalidRecreation),
+                    StateContract::RestoreCode::invalidRecreation,
+                    "invalid recreation metadata");
+    auto invalidMigrationLog = copyStateXml (*baseline);
+    auto logEntry = std::make_unique<juce::XmlElement> ("ENTRY");
+    logEntry->setAttribute ("from", "0");
+    logEntry->setAttribute ("to", "2");
+    logEntry->setAttribute ("action", "unexpectedNativeEntry");
+    logEntry->setAttribute ("warningCode", "unexpected.native.entry");
+    invalidMigrationLog->getChildByName ("migrationLog")
+        ->addChildElement (logEntry.release());
+    expectRejected (std::move (invalidMigrationLog),
+                    StateContract::RestoreCode::invalidMigrationLog,
+                    "invalid native migration log");
+
+    auto missingChild = copyStateXml (*baseline);
+    missingChild->removeChildElement (missingChild->getChildByName ("migrationLog"), true);
+    expectRejected (std::move (missingChild), StateContract::RestoreCode::missingRequiredChild,
+                    "missing reserved child");
+    auto duplicateChild = copyStateXml (*baseline);
+    duplicateChild->addChildElement (
+        new juce::XmlElement (*duplicateChild->getChildByName ("ui")));
+    expectRejected (std::move (duplicateChild), StateContract::RestoreCode::duplicateRequiredChild,
+                    "duplicate reserved child");
+
+    auto duplicateParameter = copyStateXml (*baseline);
+    auto* duplicateParameters = duplicateParameter->getChildByName ("parameters");
+    duplicateParameters->addChildElement (
+        new juce::XmlElement (*duplicateParameters->getFirstChildElement()));
+    expectRejected (std::move (duplicateParameter), StateContract::RestoreCode::duplicateParameterId,
+                    "duplicate parameter");
+    auto missingParameter = copyStateXml (*baseline);
+    auto* missingParameters = missingParameter->getChildByName ("parameters");
+    missingParameters->removeChildElement (missingParameters->getFirstChildElement(), true);
+    expectRejected (std::move (missingParameter), StateContract::RestoreCode::missingParameterId,
+                    "missing parameter");
+    auto unknownParameter = copyStateXml (*baseline);
+    findParameterXml (*unknownParameter, "osc1Waveform")->setAttribute ("id", "unknown.direct");
+    expectRejected (std::move (unknownParameter), StateContract::RestoreCode::unknownParameterId,
+                    "unknown direct v2 parameter");
+
+    for (const auto& [id, value, expected, description] :
+         std::to_array<std::tuple<const char*, const char*, StateContract::RestoreCode, const char*>> ({
+             { "filterCutoff", "NaN", StateContract::RestoreCode::nonFiniteValue, "NaN value" },
+             { "filterCutoff", "Inf", StateContract::RestoreCode::nonFiniteValue, "infinite value" },
+             { "filterCutoff", "0.5junk", StateContract::RestoreCode::invalidNumericValue, "trailing-junk value" },
+             { "filterCutoff", "2.0", StateContract::RestoreCode::outOfRangeValue, "out-of-range value" },
+             { "osc1Waveform", "1.5", StateContract::RestoreCode::invalidDiscreteValue, "non-discrete choice" },
+             { "output.mainEnabled", "0.5", StateContract::RestoreCode::invalidDiscreteValue, "non-boolean value" }
+         }))
+    {
+        auto candidate = copyStateXml (*baseline);
+        findParameterXml (*candidate, id)->setAttribute ("value", value);
+        expectRejected (std::move (candidate), expected, description);
+    }
+
+    auto unsafeExtension = copyStateXml (*baseline);
+    unsafeExtension->getChildByName ("extensions")
+        ->addChildElement (new juce::XmlElement ("parameters"));
+    expectRejected (std::move (unsafeExtension),
+                    StateContract::RestoreCode::unsafeExtensionStructure,
+                    "reserved extension nesting");
+
+    auto overlongName = copyStateXml (*baseline);
+    overlongName->getChildByName ("extensions")->addChildElement (
+        new juce::XmlElement (juce::String::repeatedString (
+            "n", StateContract::maxExtensionNameBytes + 1)));
+    expectRejected (std::move (overlongName),
+                    StateContract::RestoreCode::unsafeExtensionStructure,
+                    "overlong extension name");
+
+    auto overlongValue = copyStateXml (*baseline);
+    auto valueNode = std::make_unique<juce::XmlElement> ("safeNode");
+    valueNode->setAttribute (
+        "payload", juce::String::repeatedString ("v", StateContract::maxExtensionValueBytes + 1));
+    overlongValue->getChildByName ("extensions")->addChildElement (valueNode.release());
+    expectRejected (std::move (overlongValue),
+                    StateContract::RestoreCode::unsafeExtensionStructure,
+                    "overlong extension value");
+
+    auto tooManyNodes = copyStateXml (*baseline);
+    auto* nodeContainer = tooManyNodes->getChildByName ("extensions");
+    for (int index = 0; index <= StateContract::maxExtensionNodes; ++index)
+        nodeContainer->addChildElement (new juce::XmlElement ("safeNode"));
+    expectRejected (std::move (tooManyNodes),
+                    StateContract::RestoreCode::unsafeExtensionStructure,
+                    "extension node-count limit");
+
+    auto overTotalBudget = copyStateXml (*baseline);
+    auto budgetNode = std::make_unique<juce::XmlElement> ("safeNode");
+    const auto maximumValue = juce::String::repeatedString (
+        "v", StateContract::maxExtensionValueBytes);
+    const auto valuesToExceedBudget = StateContract::maxExtensionTotalValueBytes
+                                   / StateContract::maxExtensionValueBytes + 1;
+    for (int index = 0; index < valuesToExceedBudget; ++index)
+        budgetNode->setAttribute ("value" + juce::String { index }, maximumValue);
+    overTotalBudget->getChildByName ("extensions")->addChildElement (budgetNode.release());
+    expectRejected (std::move (overTotalBudget),
+                    StateContract::RestoreCode::unsafeExtensionStructure,
+                    "extension total-value budget");
+
+    auto deepestFault = copyStateXml (*baseline);
+    auto* cursor = deepestFault->getChildByName ("extensions");
+    for (int depth = 0; depth <= StateContract::maxExtensionDepth; ++depth)
+    {
+        auto* next = new juce::XmlElement ("safeNode");
+        cursor->addChildElement (next);
+        cursor = next;
+    }
+    expectRejected (std::move (deepestFault),
+                    StateContract::RestoreCode::unsafeExtensionStructure,
+                    "deepest extension boundary fault");
+
+    auto lastParameterFault = copyStateXml (*baseline);
+    auto* parameters = lastParameterFault->getChildByName ("parameters");
+    parameters->getChildElement (parameters->getNumChildElements() - 1)
+        ->setAttribute ("value", "0.5");
+    expectRejected (std::move (lastParameterFault),
+                    StateContract::RestoreCode::invalidDiscreteValue,
+                    "last-parameter fault");
+
+    const auto processorSource = legacyFixtureFile ("Source/PluginProcessor.cpp").loadFileAsString();
+    const auto processStart = processorSource.indexOf ("void MoogMiniAudioProcessor::processBlock");
+    const auto stateStart = processorSource.indexOf ("void MoogMiniAudioProcessor::getStateInformation");
+    const auto processSource = processorSource.substring (processStart, stateStart);
+    test.expect (processStart >= 0 && stateStart > processStart
+                     && ! processSource.contains ("StateContract")
+                     && ! processSource.contains ("copyState")
+                     && ! processSource.contains ("replaceState")
+                     && ! processSource.contains ("Xml"),
+                 "processBlock must contain no state/XML/copy/restore operation");
+}
+
 void testMidiSampleZeroSmoke (TestContext& test)
 {
     MoogMiniAudioProcessor processor;
@@ -1560,6 +2330,13 @@ int runMode (std::string_view mode)
         testUnitContract (test);
     else if (mode == "state")
         testStateSmoke (test);
+    else if (mode == "state-v2")
+    {
+        testStateV2Contract (test);
+        testStateV2Migration (test);
+        testStateV2ExtensionRoundTrip (test);
+        testStateV2FailuresAreAtomic (test);
+    }
     else if (mode == "fixtures")
         testLegacyParameterFixtures (test);
     else if (mode == "registry")

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<modelDState stateVersion="2" engineVersion="1.0.0" calibrationProfileId="baseline">
+  <parameters>
+    <PARAM id="osc1Waveform" value="0.0"/>
+    <PARAM id="osc2Waveform" value="0.0"/>
+    <PARAM id="osc3Waveform" value="0.0"/>
+    <PARAM id="osc1Range" value="2.0"/>
+    <PARAM id="osc2Range" value="2.0"/>
+    <PARAM id="osc3Range" value="2.0"/>
+    <PARAM id="osc1Vol" value="0.0"/>
+    <PARAM id="osc2Vol" value="0.0"/>
+    <PARAM id="osc3Vol" value="0.0"/>
+    <PARAM id="tune" value="0.0"/>
+    <PARAM id="osc2Freq" value="8.0"/>
+    <PARAM id="osc3Freq" value="8.0"/>
+    <PARAM id="filterCutoff" value="0.5"/>
+    <PARAM id="filterEmphasis" value="0.0"/>
+    <PARAM id="filterContour" value="0.0"/>
+    <PARAM id="outputVolKnob" value="0.0"/>
+    <PARAM id="extInputVolKnob" value="0.0"/>
+    <PARAM id="ctrlGlideKnob" value="0.0"/>
+    <PARAM id="ctrlModMixKnob" value="0.0"/>
+    <PARAM id="filterAttackTimeKnob" value="0.0"/>
+    <PARAM id="filterDecayTimeKnob" value="0.0"/>
+    <PARAM id="loudnessAttackTimeKnob" value="0.5"/>
+    <PARAM id="loudnessDecayTimeKnob" value="0.5"/>
+    <PARAM id="filterSustainKnob" value="0.0"/>
+    <PARAM id="noiseVolKnob" value="0.0"/>
+    <PARAM id="loudnessSustainLevelKnob" value="0.0"/>
+    <PARAM id="outputPhonesVolKnob" value="0.0"/>
+    <PARAM id="feedbackKnob" value="0.0"/>
+    <PARAM id="modWheelValue" value="0.0"/>
+    <PARAM id="pitchWheelValue" value="0.5"/>
+    <PARAM id="osc1OnOff" value="0.0"/>
+    <PARAM id="osc2OnOff" value="0.0"/>
+    <PARAM id="osc3OnOff" value="0.0"/>
+    <PARAM id="a440HzOnOff" value="0.0"/>
+    <PARAM id="osc3CtrlMode" value="0.0"/>
+    <PARAM id="oscModSwitch" value="0.0"/>
+    <PARAM id="noiseOnOffSwitch" value="0.0"/>
+    <PARAM id="extInputVolSwitch" value="0.0"/>
+    <PARAM id="whitePinkSwitch" value="0.0"/>
+    <PARAM id="filterModSwitch" value="0.0"/>
+    <PARAM id="keyboardCtrlSwitch1" value="0.0"/>
+    <PARAM id="keyboardCtrlSwitch2" value="0.0"/>
+    <PARAM id="decaySwitch" value="0.0"/>
+    <PARAM id="glideSwitch" value="0.0"/>
+    <PARAM id="keyboard.priorityMode" value="0.0"/>
+    <PARAM id="keyboard.triggerMode" value="0.0"/>
+    <PARAM id="output.mainEnabled" value="1.0"/>
+    <PARAM id="output.phonesEnabled" value="1.0"/>
+  </parameters>
+  <compatibility contourContract="legacyCrossedContours" sourceVersion="0" migratedAtVersion="2"
+                 sourceHash="db5c6907fb42e7273c20f9f9f29232f4a922a950c8d9589eb90274c0828926ec"/>
+  <ui viewMode="authentic"/>
+  <recreation enabled="0" linkedPresetId=""/>
+  <extensions/>
+  <migrationLog>
+    <ENTRY from="0" to="2" action="defaultParameter" warningCode="defaulted.parameter.keyboard.priorityMode"/>
+    <ENTRY from="0" to="2" action="defaultParameter" warningCode="defaulted.parameter.keyboard.triggerMode"/>
+    <ENTRY from="0" to="2" action="defaultParameter" warningCode="defaulted.parameter.output.mainEnabled"/>
+    <ENTRY from="0" to="2" action="defaultParameter" warningCode="defaulted.parameter.output.phonesEnabled"/>
+    <ENTRY from="0" to="2" action="defaultMetadata" warningCode="defaulted.ui.viewMode"/>
+    <ENTRY from="0" to="2" action="defaultMetadata" warningCode="defaulted.recreation.enabled"/>
+    <ENTRY from="0" to="2" action="defaultMetadata" warningCode="defaulted.recreation.linkedPresetId"/>
+    <ENTRY from="0" to="2" action="defaultMetadata" warningCode="defaulted.calibrationProfileId"/>
+    <ENTRY from="0" to="2" action="preserveLegacyCrossedContours" warningCode="legacy.contourRoutingPreserved"/>
+  </migrationLog>
+</modelDState>

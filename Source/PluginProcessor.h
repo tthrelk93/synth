@@ -13,6 +13,7 @@
 #include "CircularBuffer.h"
 #include "LadderFilter.h"
 #include "ModWheel.h"
+#include "StateContract.h"
 
 
 
@@ -65,6 +66,8 @@ public:
     //==============================================================================
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
+    StateContract::RestoreResult restoreState (const void* data, int sizeInBytes);
+    StateContract::ContourContract getContourContract() const noexcept;
     
     float mapFilterCutoffValueToFrequency(float filterCutoffValue);
     
@@ -196,6 +199,7 @@ private:
     std::atomic<int> stageBufferWriteIndex { 0 };
 
     bool restoredStateFromHost = false;
+    juce::ValueTree canonicalState;
     
     juce::MidiBuffer incomingMidi;
     juce::CriticalSection midiCriticalSection;
