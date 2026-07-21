@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -315,6 +316,18 @@ juce::String makeRegistryV2Export()
                                  juce::JSON::FormatOptions {}
                                      .withSpacing (juce::JSON::Spacing::none))
         + "\n";
+}
+
+bool registryFixtureMatchesExport (const juce::File& fixture,
+                                   const juce::String& expectedExport)
+{
+    juce::MemoryBlock actualBytes;
+    if (! fixture.loadFileAsData (actualBytes))
+        return false;
+
+    const juce::MemoryBlock expectedBytes { expectedExport.toRawUTF8(),
+                                            expectedExport.getNumBytesAsUTF8() };
+    return actualBytes == expectedBytes;
 }
 
 juce::var makeLegacyParameterInventory (MoogMiniAudioProcessor& processor)
@@ -788,13 +801,51 @@ void testParameterRegistry (TestContext& test)
             if (parameters != nullptr)
             {
                 const auto count = std::min ({ descriptors.size(), legacyParameterIds.size(),
-                                               static_cast<std::size_t> (parameters->size()) });
+                                               static_cast<std::size_t> (parameters->size()),
+                                               static_cast<std::size_t> (liveParameters.size()) });
                 for (std::size_t index = 0; index < count; ++index)
                 {
                     const auto* legacy = (*parameters)[static_cast<int> (index)].getDynamicObject();
                     if (legacy == nullptr)
                         continue;
                     const auto& descriptor = descriptors[index];
+                    const auto* live = dynamic_cast<const juce::RangedAudioParameter*> (
+                        liveParameters[static_cast<int> (index)]);
+                    test.expect (live != nullptr,
+                                 "legacy inventory entries must map to live ranged parameters");
+                    if (live == nullptr)
+                        continue;
+
+                    const auto legacyType = legacy->getProperty ("type").toString();
+                    const auto expectedKind = legacyType == "choice"
+                                                ? ParameterRegistry::Kind::choice
+                                            : legacyType == "float"
+                                                ? ParameterRegistry::Kind::floating
+                                                : ParameterRegistry::Kind::boolean;
+                    test.expect (legacyType == "choice" || legacyType == "float"
+                                     || legacyType == "bool",
+                                 "legacy inventory parameter type must be recognized");
+                    test.expect (descriptor.kind == expectedKind,
+                                 "legacy descriptor kind must match immutable inventory type");
+                    test.expect ((dynamic_cast<const juce::AudioParameterChoice*> (live) != nullptr)
+                                     == (legacyType == "choice")
+                                     && (dynamic_cast<const juce::AudioParameterFloat*> (live) != nullptr)
+                                     == (legacyType == "float")
+                                     && (dynamic_cast<const juce::AudioParameterBool*> (live) != nullptr)
+                                     == (legacyType == "bool"),
+                                 "legacy live subclass must match immutable inventory type");
+                    test.expect (descriptor.automatable
+                                     == static_cast<bool> (legacy->getProperty ("automatable")),
+                                 "legacy descriptor automatable flag must match immutable inventory");
+                    test.expect (live->isAutomatable()
+                                     == static_cast<bool> (legacy->getProperty ("automatable"))
+                                     && live->isDiscrete()
+                                     == static_cast<bool> (legacy->getProperty ("discrete"))
+                                     && live->isBoolean()
+                                     == static_cast<bool> (legacy->getProperty ("boolean"))
+                                     && live->isMetaParameter()
+                                     == static_cast<bool> (legacy->getProperty ("meta")),
+                                 "legacy live host flags must match immutable inventory");
                     const auto expectedName = std::find_if (
                         correctedDisplayNames.begin(), correctedDisplayNames.end(),
                         [&descriptor] (const auto& item) { return item.first == descriptor.id; });
@@ -858,8 +909,21 @@ void testParameterRegistry (TestContext& test)
     test.expect (registryFixture.existsAsFile(),
                  "canonical parameter registry v2 fixture must exist");
     if (registryFixture.existsAsFile())
-        test.expect (registryFixture.loadFileAsString() == makeRegistryV2Export(),
+        test.expect (registryFixtureMatchesExport (registryFixture, makeRegistryV2Export()),
                      "canonical registry export must equal the v2 fixture byte-for-byte");
+
+    const auto bomFixture = juce::File::createTempFile ("-parameter-registry-v2-bom.json");
+    const auto expectedExport = makeRegistryV2Export();
+    juce::MemoryOutputStream bomBytes;
+    constexpr std::array<std::uint8_t, 3> utf8Bom { 0xef, 0xbb, 0xbf };
+    bomBytes.write (utf8Bom.data(), utf8Bom.size());
+    bomBytes.write (expectedExport.toRawUTF8(), expectedExport.getNumBytesAsUTF8());
+    test.expect (bomFixture.replaceWithData (bomBytes.getData(), bomBytes.getDataSize()),
+                 "BOM-prefixed registry negative fixture must be writable");
+    test.expect (! registryFixtureMatchesExport (bomFixture, expectedExport),
+                 "byte-exact registry guard must reject a UTF-8 BOM prefix");
+    test.expect (bomFixture.deleteFile(),
+                 "BOM-prefixed registry negative fixture must be removed");
 
     testLegacyParameterFixtures (test);
 }

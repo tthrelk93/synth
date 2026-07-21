@@ -146,3 +146,52 @@ ctest --test-dir '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release buil
 Observed result: 12/12 passed, 0 failed. The label summary retained all seven
 required labels: `artifact`, `dsp`, `host`, `midi`, `realtime`, `state`, and
 `unit`.
+
+## Independent review remediation
+
+A fresh review found two acceptance-level gaps in the tests, not in the
+approved production registry or fixtures:
+
+1. `File::loadFileAsString()` decoded the registry fixture before comparison,
+   so files with different raw encodings could compare equal. The guard now
+   loads the fixture with `loadFileAsData()` and compares the exact file bytes
+   to the generated UTF-8 bytes, including the final newline. A negative test
+   writes the same JSON with a three-byte UTF-8 BOM and proves that the guard
+   rejects it.
+2. The first-44 preservation checks now use the immutable legacy inventory as
+   an independent oracle for every descriptor kind and live JUCE parameter
+   subclass, plus `automatable`, `discrete`, `boolean`, and `meta` host flags.
+   A bool/float/choice or frozen-host-flag drift can no longer pass merely
+   because the production descriptor and its generated live parameter agree
+   with each other.
+
+No production registry source or fixture changed in this remediation.
+
+The negative test was first run against the decoded-text implementation:
+
+```sh
+cmake --build '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release build with spaces' --config Release --target ModelDTests -j 4 && \
+ctest --test-dir '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release build with spaces' -C Release -R '^ModelDParameterRegistry$' --output-on-failure
+```
+
+Observed RED: the executable built, then `ModelDParameterRegistry` failed only
+with `byte-exact registry guard must reject a UTF-8 BOM prefix`; 0/1 passed.
+
+After switching the helper to raw bytes, focused verification used:
+
+```sh
+cmake --build '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release build with spaces' --config Release --target ModelDTests -j 4 && \
+ctest --test-dir '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release build with spaces' -C Release -R '^(ModelDParameterRegistry|ModelDLegacyParameterFixtures)$' --output-on-failure
+```
+
+Observed GREEN: 2/2 passed, 0 failed.
+
+Fresh full verification used:
+
+```sh
+ctest --test-dir '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release build with spaces' -C Release --output-on-failure
+```
+
+Observed result: 12/12 passed, 0 failed in 25.78 seconds. All seven required
+labels remained present: `artifact`, `dsp`, `host`, `midi`, `realtime`,
+`state`, and `unit`.
