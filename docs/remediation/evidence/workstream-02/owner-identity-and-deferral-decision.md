@@ -34,8 +34,29 @@ Audio is incorporated or that a trademark has been registered.
 The authoritative values are committed in `cmake/ProductIdentity.cmake`. A
 fresh macOS arm64 Release configure with
 `SYNTH_VALIDATE_DISTRIBUTION_IDENTITY=ON` accepted them after the same guard was
-observed failing for the former placeholders. Exact strict build and CTest
-results are appended after the final post-change baseline.
+observed failing for the former placeholders.
+
+## Fresh post-change verification
+
+On 2026-07-21 at 13:35 PDT, commit
+`87b5418e24b6e47b48c7029714c7995e0f642858` was verified on macOS 13.0.1
+arm64 with AppleClang 14.0.3, CMake 4.3.1, and a space-bearing build path.
+
+The Release configure enabled distribution-identity validation, warnings as
+errors, tests, and validators. It resolved JUCE 8.0.10 at exact commit
+`3af3ce009f6a02f6fa651008fffb5b41743a9fab`; the strict all-target build passed;
+and CTest passed 9/9. Each required label contained tests: `unit=1`, `state=1`,
+`dsp=1`, `midi=1`, `realtime=1`, `host=2`, and `artifact=2`.
+
+The build produced `TTH Model One.vst3`, `TTH Model One.component`, and
+`TTH Model One.app`. Generated JUCE definitions and metadata record manufacturer
+`TTH Audio`, codes `TTHA` / `TM01`, bundle
+`io.github.tthrelk93.TTHModelOne`, VST3 category `Instrument|Synth`, and AU type
+`aumu`.
+
+No commercial DAW, designated-user AU registration, local designated-account
+`auval`, or Steinberg SDK validator was run in this baseline. Their statuses
+remain deferred and non-passing.
 
 ## Temporary external-validation deferral
 
