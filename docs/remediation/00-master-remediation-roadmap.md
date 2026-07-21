@@ -1,17 +1,17 @@
 # Synthesizer Remediation Roadmap
 
-Status: implementation in progress — Workstream 02 / Agent 06.
+Status: implementation in progress — Workstream 03 / Agent 07, with Workstream 02 external validation retained as pre-release gates.
 Repository baseline inspected: `main` at `c30038d` (`Update README.md`).
 Audit corpus: the attached **Synthesizer Remediation Planning Suite** specification. It is the only supplied original-audit text, so every sentence-level deficit and proposed product improvement in that specification is treated as a finding. The line-by-line ownership audit is in the [traceability matrix](01-traceability-matrix.md).
 
 ## Implementation control
 
-The core planning baseline is this roadmap, the traceability matrix, and Workstreams 02–15. Operational execution is coordinated through the [Agent 01 kickoff prompt](16-agent-01-workstream-02-kickoff.md) and the canonical [implementation handoff](17-implementation-handoff.md). The implementing agent must update this table, its active workstream plan, and the handoff as work progresses; the matrix is updated in the same change whenever implementation evidence invalidates a finding, dependency, requirement, acceptance criterion, or ownership decision.
+The core planning baseline is this roadmap, the traceability matrix, and Workstreams 02–15. Operational execution is coordinated through the [Agent 07 Workstream 03 kickoff](18-agent-07-workstream-03-kickoff.md) and the canonical [implementation handoff](17-implementation-handoff.md). The implementing agent must update this table, its active workstream plan, and the handoff as work progresses; the matrix is updated in the same change whenever implementation evidence invalidates a finding, dependency, requirement, acceptance criterion, or ownership decision.
 
 | Phase | Active workstream | Status | Entry gate | Exit/next owner |
 |---|---|---|---|---|
-| F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress — Agent 06; exact implementation run `29728203657` passes all eight supported rows, the JUCE Starter decision closes BLD-003, and the [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) passes a fresh local baseline while confirming the remaining external inputs are unavailable, so BLD-001–005/008–010 pass, BLD-006/012 remain in progress, and BLD-007/011 are externally blocked | Approved planning baseline | Supply commercial-host category/menu access for BLD-006, then the reviewed identity/distribution inputs and designated AU/SDK-validator/host access; do not start Workstream 03 until every BLD row and exit gate passes. |
-| F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | Not started | Workstream 02 passes | Workstream 03 contract freeze plus Workstream 12 harness coordination. |
+| F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress as a pre-release validation track; exact run `29728203657` passes all eight supported rows, BLD-007 now passes through the [owner identity/deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md), and BLD-006/011/012 remain in progress pending external host/account/tool evidence | Approved planning baseline | Retain BLD-006/011/012 as visible pre-release gates; accept owner-supplied external evidence later without blocking Workstream 03. |
+| F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | In progress — Agent 07 under the owner-approved temporary scheduling exception | Workstream 02 automated build/test seams pass; owner-approved exception carries BLD-006/011/012 as pre-release gates | Workstream 03 contract freeze plus Workstream 12 harness coordination. |
 | F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Not started | Workstream 02 test/offline targets and Workstream 03 contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4. |
 | F1–F6 | Workstreams 04–15 | Not started | The phase gates below | Follow the fixed roadmap order; no agent skips an unmet gate. |
 
@@ -51,6 +51,8 @@ These decisions are inputs to every workstream and may not be reopened by an imp
 
 | Topic | Decision |
 |---|---|
+| Product identity and history | No prior distribution exists. Approved host identity is TTH Audio / TTH Model One, manufacturer/product codes `TTHA` / `TM01`, reverse-DNS domain `io.github.tthrelk93`, and bundle ID `io.github.tthrelk93.TTHModelOne`. |
+| Temporary external-gate scheduling | Workstream 03 may proceed while BLD-006/011/012 remain visibly in progress as pre-release gates. No unrun DAW, designated-account, AU, or SDK-validator check may be represented as passing. |
 | Classic defaults | Low-note priority and single-trigger legato (multi-trigger off). |
 | Modern options | Saved, automatable Low/High/Last priority and Single/Multi trigger parameters. |
 | Plug-in topology | One MIDI instrument target. It has a required stereo main output, an optional stereo auxiliary **External Input**, and an optional stereo **Phones/Cue** output where the wrapper/host supports auxiliary outputs. There is no separate effect target in the initial remediation. |
@@ -89,7 +91,7 @@ If a later official manual revision conflicts with the bundled manual, do not si
 Inspection confirmed that the approved audit remains materially accurate without relying on stale line numbers:
 
 - The baseline README promised a CMake build while no `CMakeLists.txt` existed. Workstream 02 now supplies the supported CMake/CI build and reconciled README commands. Exact implementation run `29728203657` passes fresh configure/build, 9/9 CTest, every label, lifecycle, validators, linked manifests, and upload on all eight supported rows.
-- `MiniMoog.jucer` still contains `../../Downloads/JUCE/modules` and tracked `JuceLibraryCode/JucePluginDefines.h` retains historical placeholder/effect metadata, but neither is authoritative or compiled by the supported CMake build. The supported wrapper is one MIDI instrument; legal identity remains unapproved.
+- `MiniMoog.jucer` still contains `../../Downloads/JUCE/modules` and tracked `JuceLibraryCode/JucePluginDefines.h` retains historical placeholder/effect metadata, but neither is authoritative or compiled by the supported CMake build. The supported wrapper is one MIDI instrument, and `cmake/ProductIdentity.cmake` now carries the owner-approved TTH Model One identity; BLD-007 does not require editing historical non-authoritative generated files.
 - `MoogMiniAudioProcessor::createParameterLayout` repeats metadata inline, defaults `tune` to index 0 rather than `Zero`, gives several unrelated parameters the name “Output Volume,” and has no state version, note-priority, trigger-mode, or main-output parameter.
 - `MoogMiniAudioProcessor::processBlock` cross-routes filter/loudness contour controls, processes all MIDI before rendering the block, stops oscillators on note-off before release, uses a single `currentNoteNumber`, performs per-sample pitch/filter exponent work, applies filter modulation in linear hertz, and reads a `feedbackKnob` that does not create an audible feedback path.
 - `Oscillator::calculateDetunedFrequency` treats the `Frequency` enum index (0–16) as semitones instead of mapping it to −8…+8. `Oscillator::processNextSample` directly emits discontinuous saw/square/pulse waveforms, allocates a `juce::String` per sample, and uses complementary 70/30 pulse shapes.
