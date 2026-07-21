@@ -152,6 +152,7 @@ set(MODEL_D_PLUGIN_SOURCES
         Source/CustomPanelComponent.cpp
         Source/CustomSliderLookAndFeel.cpp
         Source/ModWheelSlider.cpp
+        Source/ParameterRegistry.cpp
         Source/PianoKey.cpp
         Source/PitchWheelLookAndFeel.cpp
         Source/PitchWheelSlider.cpp
@@ -643,6 +644,7 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)
     synth_add_model_d_test(ModelDLegacyParameterFixtures state fixtures)
+    synth_add_model_d_test(ModelDParameterRegistry state registry)
     synth_add_model_d_test(ModelDDspContract dsp dsp)
     synth_add_model_d_test(ModelDMidiSampleZero midi midi)
     synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)

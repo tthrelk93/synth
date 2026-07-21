@@ -8,6 +8,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "ParameterRegistry.h"
 #include <algorithm>
 #include <cmath>
 #include "Oscillator.h"
@@ -72,127 +73,7 @@ MoogMiniAudioProcessor::~MoogMiniAudioProcessor()
 //==============================================================================
 juce::AudioProcessorValueTreeState::ParameterLayout MoogMiniAudioProcessor::createParameterLayout()
 {
-    std::vector<std::unique_ptr<juce::RangedAudioParameter>> params;
-    
-    // Waveform selection parameters for each oscillator
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc1Waveform", "Oscillator 1 Waveform",
-                                                                  juce::StringArray{"Triangle", "Sharktooth", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc2Waveform", "Oscillator 2 Waveform",
-                                                                  juce::StringArray{"Triangle", "Sharktooth", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc3Waveform", "Oscillator 3 Waveform",
-                                                                  juce::StringArray{"Triangle", "ReverseSaw", "Sawtooth", "Square", "WideRectangle", "NarrowRectangle"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc1Range", "Oscillator 1 Range",
-                                                                  juce::StringArray{"LO", "ThirtyTwo", "Sixteen", "Eight", "Four", "Two"}, 2));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc2Range", "Oscillator 2 Range",
-                                                                  juce::StringArray{"LO", "ThirtyTwo", "Sixteen", "Eight", "Four", "Two"}, 2));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc3Range", "Oscillator 3 Range",
-                                                                  juce::StringArray{"LO", "ThirtyTwo", "Sixteen", "Eight", "Four", "Two"}, 2));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc1Vol", "Oscillator 1 Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc2Vol", "Oscillator 2 Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc3Vol", "Oscillator 3 Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("tune", "Tune",
-                                                                  juce::StringArray{"NegTwoHalf", "NegTwo", "NegOneHalf", "NegOne", "NegHalf", "Zero", "PosHalf", "PosOne", "PosOneHalf", "PosTwo", "PosTwoHalf"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc2Freq", "Oscillator 2 Frequency",
-                                                                  juce::StringArray{"FreqNegEight", "FreqNegSeven", "FreqNegSix", "FreqNegFive", "FreqNegFour", "FreqNegThree", "FreqNegTwo", "FreqNegOne", "FreqZero", "FreqPosOne", "FreqPosTwo", "FreqPosThree", "FreqPosFour", "FreqPosFive", "FreqPosSix", "FreqPosSeven", "FreqPosEight",}, 8));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("osc3Freq", "Oscillator 3 Frequency",
-                                                                  juce::StringArray{"FreqNegEight", "FreqNegSeven", "FreqNegSix", "FreqNegFive", "FreqNegFour", "FreqNegThree", "FreqNegTwo", "FreqNegOne", "FreqZero", "FreqPosOne", "FreqPosTwo", "FreqPosThree", "FreqPosFour", "FreqPosFive", "FreqPosSix", "FreqPosSeven", "FreqPosEight",}, 8));
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("filterCutoff", "Filter Cutoff Frequency", 0.0f, 1.0f, 0.5f));
-    
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("filterEmphasis", "Filter Emphasis",
-                                                                  juce::StringArray{"EmphZero", "EmphOne", "EmphTwo", "EmphThree", "EmphFour", "EmphFive", "EmphSix", "EmphSeven", "EmphEight", "EmphNine", "EmphTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("filterContour", "Filter Contour",
-                                                                  juce::StringArray{"ContourZero", "ContourOne", "ContourTwo", "ContourThree", "ContourFour", "ContourFive", "ContourSix", "ContourSeven", "ContourEight", "ContourNine", "ContourTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("outputVolKnob", "Output Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("extInputVolKnob", "Output Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("ctrlGlideKnob", "Output Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("ctrlModMixKnob", "Output Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("filterAttackTimeKnob", "Filter Attack Time", 0.0f, 1.0f, 0.0f));
-    
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("filterDecayTimeKnob", "Filter Decay Time", 0.0f, 1.0f, 0.0f));
-    
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("loudnessAttackTimeKnob", "Loudness Attack Time", 0.0f, 1.0f, 0.5f));
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("loudnessDecayTimeKnob", "Loudness Decay Time", 0.0f, 1.0f, 0.5f));
-    
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("filterSustainKnob", "Filter Sustain",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("noiseVolKnob", "Noise Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("loudnessSustainLevelKnob", "Output Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterChoice>("outputPhonesVolKnob", "Output Volume",
-                                                                  juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("feedbackKnob", "Feedback Knob", 0.0f, 1.0f, 0.0f));
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("modWheelValue", "Mod Wheel Value", 0.0f, 1.0f, 0.0f));
-    
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("pitchWheelValue", "Pitch Wheel Value", 0.0f, 1.0f, 0.5f));
-    
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("osc1OnOff", "Oscillator 1 On/Off", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("osc2OnOff", "Oscillator 2 On/Off", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("osc3OnOff", "Oscillator 3 On/Off", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("a440HzOnOff", "A440Hz On/Off", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("osc3CtrlMode", "Oscillator 3 Control Mode", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("oscModSwitch", "Oscillator Mod Switch", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("noiseOnOffSwitch", "Noise On/Off", false));
-
-    params.push_back(std::make_unique<juce::AudioParameterBool>("extInputVolSwitch", "External Input On/Off", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("whitePinkSwitch", "White / Pink", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("filterModSwitch", "Filter Mod Switch", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("keyboardCtrlSwitch1", "Keyboard Control Switch 1", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("keyboardCtrlSwitch2", "Keyboard Control Switch 1", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("decaySwitch", "Decay Switch", false));
-    
-    params.push_back(std::make_unique<juce::AudioParameterBool>("glideSwitch", "Glide Switch", false));
-    
-    
-    
-    return { params.begin(), params.end() };
+    return ParameterRegistry::createParameterLayout();
 }
 
 CircularBuffer& MoogMiniAudioProcessor::getCircularBuffer() {

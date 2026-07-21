@@ -1,12 +1,15 @@
 #include "PluginProcessor.h"
 #include "PresetManager.h"
 
+#include "ParameterRegistry.h"
+
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <iostream>
 #include <limits>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -105,6 +108,11 @@ double absoluteSum (const juce::AudioBuffer<float>& buffer)
 juce::File legacyFixtureFile (const juce::String& relativePath)
 {
     return juce::File { SYNTH_SOURCE_ROOT }.getChildFile (relativePath);
+}
+
+bool equalsStringView (const juce::String& actual, std::string_view expected)
+{
+    return std::string_view { actual.toRawUTF8() } == expected;
 }
 
 juce::var makeLegacyParameterInventory (MoogMiniAudioProcessor& processor)
@@ -253,6 +261,136 @@ void testLegacyParameterFixtures (TestContext& test)
                          && liveRepresentativeState->isEquivalentTo (expectedRepresentativeState.get(), false),
                      "live representative APVTS XML must match legacy representative state structurally and value-for-value");
     }
+}
+
+void testParameterRegistry (TestContext& test)
+{
+    const auto descriptors = ParameterRegistry::descriptors();
+    test.expect (descriptors.size() == 44,
+                 "parameter registry must contain exactly 44 legacy descriptors");
+
+    std::set<std::string> ids;
+    std::set<std::string> semanticKeys;
+
+    for (const auto& descriptor : descriptors)
+    {
+        test.expect (! descriptor.id.empty(), "registry parameter ID must be nonempty");
+        test.expect (! descriptor.semanticKey.empty(), "registry semantic key must be nonempty");
+        test.expect (ids.emplace (descriptor.id).second, "registry parameter IDs must be unique");
+        test.expect (semanticKeys.emplace (descriptor.semanticKey).second,
+                     "registry semantic keys must be unique");
+        test.expect (! descriptor.displayName.empty(), "registry display name must be nonempty");
+        test.expect (descriptor.unitKey != ParameterRegistry::UnitKey::unspecified,
+                     "registry unit key must be explicit");
+        test.expect (descriptor.mapping != ParameterRegistry::MappingKey::unspecified,
+                     "registry normalized mapping key must be explicit");
+        test.expect (descriptor.smoothing != ParameterRegistry::SmoothingClass::unspecified,
+                     "registry smoothing class must be explicit");
+        test.expect (descriptor.persistence != ParameterRegistry::PersistenceScope::unspecified,
+                     "registry persistence scope must be explicit");
+        test.expect (std::isfinite (descriptor.rangeStart)
+                         && std::isfinite (descriptor.rangeEnd)
+                         && std::isfinite (descriptor.rangeInterval)
+                         && std::isfinite (descriptor.rangeSkew)
+                         && std::isfinite (descriptor.physicalDefault),
+                     "registry range/default metadata must be finite");
+        test.expect (descriptor.rangeStart < descriptor.rangeEnd,
+                     "registry range start must be less than range end");
+        test.expect (descriptor.rangeInterval > 0.0f,
+                     "registry range interval must be positive");
+        test.expect (descriptor.rangeSkew > 0.0f,
+                     "registry range skew must be positive");
+        test.expect (descriptor.physicalDefault >= descriptor.rangeStart
+                         && descriptor.physicalDefault <= descriptor.rangeEnd,
+                     "registry physical default must lie within its range");
+        test.expect ((descriptor.kind == ParameterRegistry::Kind::choice)
+                         == ! descriptor.choiceValues.empty(),
+                     "choice values must be present for choice parameters only");
+    }
+
+    MoogMiniAudioProcessor processor;
+    const auto liveParameters = processor.getParameters();
+    test.expect (static_cast<std::size_t> (liveParameters.size()) == descriptors.size(),
+                 "processor live layout size must match the registry");
+
+    const auto comparedCount = std::min (descriptors.size(),
+                                         static_cast<std::size_t> (liveParameters.size()));
+    for (std::size_t index = 0; index < comparedCount; ++index)
+    {
+        const auto& descriptor = descriptors[index];
+        const auto* parameter = dynamic_cast<const juce::RangedAudioParameter*> (
+            liveParameters[static_cast<int> (index)]);
+        test.expect (parameter != nullptr, "registry live parameter must be ranged");
+        if (parameter == nullptr)
+            continue;
+
+        const auto& range = parameter->getNormalisableRange();
+        test.expect (equalsStringView (parameter->getParameterID(), descriptor.id),
+                     "processor live parameter ID/order must come from the registry");
+        test.expect (parameter->getVersionHint() == descriptor.versionHint,
+                     "processor live version hint must match the registry");
+        test.expect (equalsStringView (parameter->getName (256), descriptor.displayName),
+                     "processor live display name must match the registry");
+        test.expect (equalsStringView (parameter->getLabel(), descriptor.shortLabel),
+                     "processor live short label must match the registry");
+        test.expect (range.start == descriptor.rangeStart
+                         && range.end == descriptor.rangeEnd
+                         && range.interval == descriptor.rangeInterval
+                         && range.skew == descriptor.rangeSkew
+                         && range.symmetricSkew == descriptor.symmetricSkew,
+                     "processor live physical range must match the registry");
+        test.expect (parameter->convertFrom0to1 (parameter->getDefaultValue())
+                         == descriptor.physicalDefault,
+                     "processor live physical default must match the registry");
+        test.expect (parameter->isAutomatable() == descriptor.automatable,
+                     "processor live automatable flag must match the registry");
+
+        if (descriptor.kind == ParameterRegistry::Kind::choice)
+        {
+            const auto* choice = dynamic_cast<const juce::AudioParameterChoice*> (parameter);
+            test.expect (choice != nullptr, "registry choice descriptor must build a choice parameter");
+            if (choice != nullptr)
+            {
+                test.expect (static_cast<std::size_t> (choice->choices.size())
+                                 == descriptor.choiceValues.size(),
+                             "processor live choice count must match the registry");
+                const auto choiceCount = std::min (descriptor.choiceValues.size(),
+                                                   static_cast<std::size_t> (choice->choices.size()));
+                for (std::size_t choiceIndex = 0; choiceIndex < choiceCount; ++choiceIndex)
+                    test.expect (equalsStringView (
+                                     choice->choices[static_cast<int> (choiceIndex)],
+                                     descriptor.choiceValues[choiceIndex]),
+                                 "processor live choice order/text must match the registry");
+            }
+        }
+        else if (descriptor.kind == ParameterRegistry::Kind::floating)
+        {
+            test.expect (dynamic_cast<const juce::AudioParameterFloat*> (parameter) != nullptr,
+                         "registry float descriptor must build a float parameter");
+        }
+        else if (descriptor.kind == ParameterRegistry::Kind::boolean)
+        {
+            test.expect (dynamic_cast<const juce::AudioParameterBool*> (parameter) != nullptr,
+                         "registry bool descriptor must build a bool parameter");
+        }
+    }
+
+    const auto inventoryFile = legacyFixtureFile (
+        "Tests/fixtures/parameters/legacy-parameter-inventory.json");
+    if (inventoryFile.existsAsFile())
+    {
+        juce::var expectedInventory;
+        const auto parsed = juce::JSON::parse (inventoryFile.loadFileAsString(), expectedInventory);
+        test.expect (parsed.wasOk() && expectedInventory.isObject(),
+                     "legacy parameter inventory fixture must be valid for registry comparison");
+        if (parsed.wasOk() && expectedInventory.isObject())
+            test.expect (juce::JSON::toString (expectedInventory,
+                                               juce::JSON::FormatOptions {}
+                                                   .withSpacing (juce::JSON::Spacing::none))
+                             + "\n" == serialiseLegacyParameterInventory (processor),
+                         "registry-built live layout must match the exact legacy host inventory");
+    }
+    testLegacyParameterFixtures (test);
 }
 
 int captureLegacyFixture (std::string_view mode)
@@ -883,6 +1021,8 @@ int runMode (std::string_view mode)
         testStateSmoke (test);
     else if (mode == "fixtures")
         testLegacyParameterFixtures (test);
+    else if (mode == "registry")
+        testParameterRegistry (test);
     else if (mode == "dsp")
         testProcessingContract (test);
     else if (mode == "midi")
