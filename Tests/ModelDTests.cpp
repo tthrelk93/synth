@@ -6,6 +6,7 @@
 #include <cmath>
 #include <iostream>
 #include <limits>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -99,6 +100,185 @@ double absoluteSum (const juce::AudioBuffer<float>& buffer)
             result += std::abs (buffer.getSample (channel, sample));
 
     return result;
+}
+
+juce::File legacyFixtureFile (const juce::String& relativePath)
+{
+    return juce::File { SYNTH_SOURCE_ROOT }.getChildFile (relativePath);
+}
+
+juce::var makeLegacyParameterInventory (MoogMiniAudioProcessor& processor)
+{
+    auto inventory = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    inventory->setProperty ("schema", "model-d.legacy-parameter-inventory.v1");
+
+    juce::Array<juce::var> parameters;
+    const auto liveParameters = processor.getParameters();
+    parameters.ensureStorageAllocated (liveParameters.size());
+
+    for (int index = 0; index < liveParameters.size(); ++index)
+    {
+        const auto* parameter = dynamic_cast<const juce::RangedAudioParameter*> (liveParameters[index]);
+        if (parameter == nullptr)
+            continue;
+
+        auto entry = juce::DynamicObject::Ptr { new juce::DynamicObject };
+        const auto& range = parameter->getNormalisableRange();
+        entry->setProperty ("index", index);
+        entry->setProperty ("id", parameter->getParameterID());
+        entry->setProperty ("version_hint", parameter->getVersionHint());
+        entry->setProperty ("name", parameter->getName (256));
+        entry->setProperty ("unit", parameter->getLabel());
+        entry->setProperty ("range_start", range.start);
+        entry->setProperty ("range_end", range.end);
+        entry->setProperty ("range_interval", range.interval);
+        entry->setProperty ("range_skew", range.skew);
+        entry->setProperty ("range_symmetric_skew", range.symmetricSkew);
+        entry->setProperty ("normalized_default", parameter->getDefaultValue());
+        entry->setProperty ("physical_default",
+                            parameter->convertFrom0to1 (parameter->getDefaultValue()));
+        entry->setProperty ("automatable", parameter->isAutomatable());
+        entry->setProperty ("discrete", parameter->isDiscrete());
+        entry->setProperty ("boolean", parameter->isBoolean());
+        entry->setProperty ("meta", parameter->isMetaParameter());
+
+        if (const auto* choice = dynamic_cast<const juce::AudioParameterChoice*> (parameter))
+        {
+            entry->setProperty ("type", "choice");
+            juce::Array<juce::var> choices;
+            choices.ensureStorageAllocated (choice->choices.size());
+            for (const auto& value : choice->choices)
+                choices.add (value);
+            entry->setProperty ("choices", juce::var { choices });
+        }
+        else if (dynamic_cast<const juce::AudioParameterFloat*> (parameter) != nullptr)
+        {
+            entry->setProperty ("type", "float");
+        }
+        else if (dynamic_cast<const juce::AudioParameterBool*> (parameter) != nullptr)
+        {
+            entry->setProperty ("type", "bool");
+        }
+        else
+        {
+            entry->setProperty ("type", "unsupported");
+        }
+
+        parameters.add (juce::var { entry.get() });
+    }
+
+    inventory->setProperty ("parameters", juce::var { parameters });
+    return juce::var { inventory.get() };
+}
+
+juce::String serialiseLegacyParameterInventory (MoogMiniAudioProcessor& processor)
+{
+    return juce::JSON::toString (makeLegacyParameterInventory (processor),
+                                 juce::JSON::FormatOptions {}
+                                     .withSpacing (juce::JSON::Spacing::none))
+        + "\n";
+}
+
+std::unique_ptr<juce::XmlElement> serialiseProcessorState (MoogMiniAudioProcessor& processor)
+{
+    juce::MemoryBlock state;
+    processor.getStateInformation (state);
+    return std::unique_ptr<juce::XmlElement> (
+        MoogMiniAudioProcessor::getXmlFromBinary (state.getData(), static_cast<int> (state.getSize())));
+}
+
+juce::String canonicaliseXmlFixture (const juce::XmlElement& state)
+{
+    return state.toString().replace ("\r\n", "\n");
+}
+
+void setRepresentativeParameterState (MoogMiniAudioProcessor& processor)
+{
+    for (auto* parameter : processor.getParameters())
+    {
+        const auto candidate = parameter->getDefaultValue() == 0.75f ? 0.25f : 0.75f;
+        parameter->setValueNotifyingHost (candidate);
+    }
+}
+
+void testLegacyParameterFixtures (TestContext& test)
+{
+    MoogMiniAudioProcessor processor;
+    const auto inventoryFile = legacyFixtureFile ("Tests/fixtures/parameters/legacy-parameter-inventory.json");
+    const auto defaultStateFile = legacyFixtureFile ("Tests/fixtures/state/legacy-default-state.xml");
+    const auto representativeStateFile = legacyFixtureFile ("Tests/fixtures/state/legacy-representative-state.xml");
+
+    test.expect (inventoryFile.existsAsFile(),
+                 "legacy parameter inventory fixture must exist");
+    test.expect (defaultStateFile.existsAsFile(),
+                 "legacy default state fixture must exist");
+    test.expect (representativeStateFile.existsAsFile(),
+                 "legacy representative state fixture must exist");
+
+    if (inventoryFile.existsAsFile())
+    {
+        juce::var expectedInventory;
+        const auto parsed = juce::JSON::parse (inventoryFile.loadFileAsString(), expectedInventory);
+        test.expect (parsed.wasOk() && expectedInventory.isObject(),
+                     "legacy parameter inventory fixture must be valid JSON object");
+        if (parsed.wasOk() && expectedInventory.isObject())
+            test.expect (juce::JSON::toString (expectedInventory,
+                                               juce::JSON::FormatOptions {}
+                                                   .withSpacing (juce::JSON::Spacing::none))
+                             + "\n" == serialiseLegacyParameterInventory (processor),
+                         "live parameter enumeration must match legacy inventory exactly");
+    }
+
+    const auto liveDefaultState = serialiseProcessorState (processor);
+    if (defaultStateFile.existsAsFile())
+    {
+        const auto expectedDefaultState = juce::parseXML (defaultStateFile);
+        test.expect (expectedDefaultState != nullptr,
+                     "legacy default state fixture must be valid XML");
+        test.expect (liveDefaultState != nullptr
+                         && expectedDefaultState != nullptr
+                         && liveDefaultState->isEquivalentTo (expectedDefaultState.get(), false),
+                     "live default APVTS XML must match legacy default state structurally and value-for-value");
+    }
+
+    setRepresentativeParameterState (processor);
+    const auto liveRepresentativeState = serialiseProcessorState (processor);
+    if (representativeStateFile.existsAsFile())
+    {
+        const auto expectedRepresentativeState = juce::parseXML (representativeStateFile);
+        test.expect (expectedRepresentativeState != nullptr,
+                     "legacy representative state fixture must be valid XML");
+        test.expect (liveRepresentativeState != nullptr
+                         && expectedRepresentativeState != nullptr
+                         && liveRepresentativeState->isEquivalentTo (expectedRepresentativeState.get(), false),
+                     "live representative APVTS XML must match legacy representative state structurally and value-for-value");
+    }
+}
+
+int captureLegacyFixture (std::string_view mode)
+{
+    MoogMiniAudioProcessor processor;
+    if (mode == "capture-parameters")
+        std::cout << serialiseLegacyParameterInventory (processor).toStdString();
+    else if (mode == "capture-default-state")
+    {
+        const auto state = serialiseProcessorState (processor);
+        if (state != nullptr)
+            std::cout << canonicaliseXmlFixture (*state).toStdString();
+    }
+    else if (mode == "capture-representative-state")
+    {
+        setRepresentativeParameterState (processor);
+        const auto state = serialiseProcessorState (processor);
+        if (state != nullptr)
+            std::cout << canonicaliseXmlFixture (*state).toStdString();
+    }
+    else
+    {
+        return 2;
+    }
+
+    return 0;
 }
 
 void testGeneratedWrapperContract (TestContext& test)
@@ -691,12 +871,18 @@ void testRealtimeSmoke (TestContext& test)
 int runMode (std::string_view mode)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
+
+    if (mode.starts_with ("capture-"))
+        return captureLegacyFixture (mode);
+
     TestContext test;
 
     if (mode == "unit")
         testUnitContract (test);
     else if (mode == "state")
         testStateSmoke (test);
+    else if (mode == "fixtures")
+        testLegacyParameterFixtures (test);
     else if (mode == "dsp")
         testProcessingContract (test);
     else if (mode == "midi")

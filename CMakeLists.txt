@@ -632,6 +632,8 @@ if(SYNTH_BUILD_TESTS)
         PRIVATE
             ModelDPlugin
             SynthProjectOptions)
+    target_compile_definitions(ModelDTests PRIVATE
+        SYNTH_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}")
 
     function(synth_add_model_d_test test_name test_label test_mode)
         add_test(NAME "${test_name}" COMMAND ModelDTests "${test_mode}")
@@ -640,6 +642,7 @@ if(SYNTH_BUILD_TESTS)
 
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)
+    synth_add_model_d_test(ModelDLegacyParameterFixtures state fixtures)
     synth_add_model_d_test(ModelDDspContract dsp dsp)
     synth_add_model_d_test(ModelDMidiSampleZero midi midi)
     synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)
