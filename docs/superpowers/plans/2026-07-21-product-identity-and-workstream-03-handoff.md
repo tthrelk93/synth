@@ -235,7 +235,7 @@ files.each do |file|
 end
 puts "BLD status ledgers: pass"
 '
-test "$(rg -o '^\| [A-Z]{3}-[0-9]{3} \|' docs/remediation/01-traceability-matrix.md | sort -u | wc -l | tr -d ' ')" = "127"
+test "$(rg -o '^\| [A-Z]+-[0-9]{3} \|' docs/remediation/01-traceability-matrix.md | sort -u | wc -l | tr -d ' ')" = "127"
 rg -n 'Workstream 03|BLD-006|BLD-007|BLD-011|BLD-012|pre-release' \
   docs/remediation/00-master-remediation-roadmap.md \
   docs/remediation/18-agent-07-workstream-03-kickoff.md \
