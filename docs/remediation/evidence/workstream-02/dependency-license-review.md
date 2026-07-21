@@ -1,6 +1,7 @@
 # Workstream 02 Dependency and License Review
 
-Captured: 2026-07-19 on `codex/workstream-02-build`.
+Captured: 2026-07-19; owner-decision gate refreshed 2026-07-21 on
+`codex/workstream-02-build`.
 
 ## Resolved dependency
 
@@ -36,6 +37,14 @@ linked into each platform artifact. The project currently has no distribution
 approval and `SYNTH_VALIDATE_DISTRIBUTION_IDENTITY=ON` fails independently on
 the placeholder identity.
 
+Agent 04's [continuation preflight](agent-04-continuation-preflight.md) found no
+licensing selection or approved notice set in the supplied package, live
+repository, remote branch, or draft-PR context. The required owner record must
+select `AGPLv3` or `commercial JUCE`, document the applicable compliance or
+entitlement basis without exposing credentials, and approve the notices for
+the linked JUCE/SDK code in each distributed platform artifact. The decision
+remains not supplied.
+
 pluginval 1.0.4 is a validation-only executable. It is provisioned outside the
 staged product, cryptographically recorded, and is not packaged into MiniMoog.
 CMake, compilers, GitHub Actions, Xvfb, and system libraries are build/runtime
@@ -51,6 +60,7 @@ tools rather than project payloads in the development stage.
 - The development stage contains only declared project products, manifests,
   and hashed reports; pluginval is not a staged product.
 
-BLD-003 remains `in-progress` until supported hosted configurations reproduce
-the dependency result. This report closes the previously missing local licence
-review record; it does not grant or certify distribution rights.
+Supported hosted configurations reproduce the exact dependency result in run
+`29728203657`. BLD-003 remains `in-progress` solely because the reviewed owner
+licensing decision and required notice set are absent. This report records the
+local licence inventory; it does not grant or certify distribution rights.
