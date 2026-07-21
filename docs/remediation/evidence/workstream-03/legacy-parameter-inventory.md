@@ -25,10 +25,14 @@ or state-serialization code was changed to create it.
 | `Tests/fixtures/state/legacy-default-state.xml` | `07d2069f7c3f274b83e31beab503165064d3fcffd346967281eb2e0157844b21` |
 | `Tests/fixtures/state/legacy-representative-state.xml` | `e0d769001dd411425c6dfea6c572b0f9358fdf6cf27b36731eccc3f6526ff0fa` |
 
-## Reproducible capture and verification
+## Historical capture and current verification
 
-From an already configured Release build directory (the command is safe to run
-before changing the legacy production surface):
+The three capture commands below reproduce the immutable v0 artifacts only
+when run from repository capture commit
+`3206baa8e9f31f8f5f7299cf6301e9d3b5ef5992`, whose JUCE dependency is pinned at
+`3af3ce009f6a02f6fa651008fffb5b41743a9fab`. They must not be run from current
+production sources as a v0 recapture recipe: current processor serialization
+emits canonical state v2.
 
 ```sh
 cmake --build . --config Release --target ModelDTests -j 4
@@ -40,6 +44,10 @@ shasum -a 256 /tmp/model-d-legacy-parameter-inventory.json \
   /tmp/model-d-legacy-representative-state.xml
 ctest -R '^ModelDLegacyParameterFixtures$' --output-on-failure
 ```
+
+On current sources, use `ModelDLegacyParameterFixtures` to verify the checked-in
+v0 fixtures and use the `capture-state-v2-*` modes documented in
+`state-v2-migration.md` for current production captures.
 
 `ModelDLegacyParameterFixtures` has the existing `state` CTest label. It
 instantiates the real processor, canonicalizes and compares the host inventory,

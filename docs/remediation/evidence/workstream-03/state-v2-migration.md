@@ -5,11 +5,14 @@
 `Source/StateContract.h/.cpp` is the production host-state contract consumed by
 `MoogMiniAudioProcessor`. It parses and validates host bytes into a temporary
 `PreparedRestore`, constructs a complete canonical tree and a complete APVTS
-tree, and returns a typed `RestoreResult`. The processor calls
-`apvts.replaceState()` only after preparation succeeds, then installs the
-already-built canonical metadata and sets `restoredStateFromHost`. A failed
-attempt returns its own diagnostic directly and does not replace the previous
-successful parameters, metadata, contour marker, or lifecycle flag.
+tree, and returns a typed `RestoreResult`. Parsing and validation happen before
+the publication lock is taken. After preparation succeeds, one common lock
+covers `apvts.replaceState()`, canonical metadata installation, and host-state
+serialization; cached contour metadata and the lifecycle marker are atomics.
+The realtime contour getter reads only that atomic cache and never traverses a
+`ValueTree` or constructs a `String`. A failed attempt returns its own
+diagnostic directly and does not replace the previous successful parameters,
+metadata, contour marker, or lifecycle flag.
 
 `PresetManager` does not own or duplicate this schema. The v0 parser accepts a
 bounded legacy `presetName` property and retains it under extensions so
@@ -40,11 +43,13 @@ modelDState
 ```
 
 `stateVersion` is the strict integer `2`; only this property dispatches the
-schema. `engineVersion` is the product version string. The 48 `PARAM` children
-are always emitted in `ParameterRegistry::descriptors()` order and `value` is
-the physical APVTS value. Native state is `canonicalContours`, source version
-2, migrated-at version 0, empty source hash, `authentic`, recreation disabled,
-empty linked preset, empty extensions/log, and calibration `baseline`.
+schema. Reserved element names, including both roots, `PARAM`, and `ENTRY`, are
+case-sensitive. `engineVersion` is the product version string. The 48 `PARAM`
+children are always emitted in `ParameterRegistry::descriptors()` order and
+`value` is the physical APVTS value. Native state is `canonicalContours`,
+source version 2, migrated-at version 0, empty source hash, `authentic`,
+recreation disabled, empty linked preset, empty extensions/log, and calibration
+`baseline`.
 
 Migrated state is `legacyCrossedContours`, source version 0, migrated-at
 version 2, a lowercase SHA-256 source hash, and retains its extensions and
@@ -151,11 +156,14 @@ enabled 0, and empty linked preset. Their warning codes are
 `legacy.contourRoutingPreserved`.
 
 A safe unknown legacy `PARAM` is sorted by ID and retained as
-`extensions/legacyParameters/legacyParameter { id, value }`; it is never
-applied to APVTS. A present legacy `presetName` is retained as
-`extensions/legacyPreset { presetName }`. Unknown root properties, unsafe IDs,
-extra `PARAM` properties/children, invalid numbers, and non-finite values are
-rejected before migration.
+`extensions/legacyParameters/legacyParameter { id, value }`; its finite value
+is stored as the original bounded XML-decoded string rather than a binary32
+reformat, and it is never applied to APVTS. The constructed extension tree is
+validated against the same depth, node, name, per-value, and total-value limits
+as incoming v2 extensions before migration can succeed. A present legacy
+`presetName` is retained as `extensions/legacyPreset { presetName }`. Unknown
+root properties, unsafe IDs, extra `PARAM` properties/children, invalid
+numbers, and non-finite values are rejected before migration.
 
 ## Source hash canonicalization
 
@@ -173,13 +181,15 @@ The hash input is UTF-8 and is built only after the complete source validates:
 6. Store the lowercase SHA-256 of those bytes.
 
 Thus child order and equivalent number spellings such as `0.5` and `0.500000`
-produce the same source hash and the same canonical v2 state.
+produce the same source hash. Unknown-token extension text may remain distinct
+even though the source hash deliberately normalizes validated numbers to their
+binary32 value.
 
 ## Safe-extension policy
 
 The dedicated `extensions` node itself has no properties. Its contents retain
-attribute and child order through successful v2 parse/serialize when all of
-these limits hold:
+decoded semantics plus attribute and child order through successful v2
+parse/serialize when all of these limits hold:
 
 - maximum descendant depth: 8;
 - maximum descendant element count: 128;
@@ -190,9 +200,10 @@ these limits hold:
 - non-whitespace text and nested reserved schema names are forbidden.
 
 Focused rejection tests cross every numeric limit, the reserved-name rule, and
-the deepest boundary. A non-empty two-level safe vendor subtree is preserved
-byte-for-byte and the full canonical binary remains identical after two v2
-round trips.
+the deepest boundary. XML entity spellings and empty-element syntax are not
+promised byte-for-byte: JUCE performs lexical normalization on parse/serialize.
+After that first normalization, repeated canonical saves are byte-identical;
+decoded values, attribute order, and child order remain intact.
 
 ## Fixtures and immutable hashes
 
@@ -223,22 +234,28 @@ e0d769001dd411425c6dfea6c572b0f9358fdf6cf27b36731eccc3f6526ff0fa  Tests/fixtures
 
 ## Rollback and determinism corpus
 
-One sentinel first completes a successful native restore. Each later rejected
-attempt compares the full canonical binary to the saved sentinel bytes and
-also checks the successful lifecycle and contour metadata remain unchanged.
+One sentinel first completes a successful v0 migration carrying a non-empty
+source hash, migration log, legacy preset extension, unknown-parameter
+extension, legacy contour marker, and successful lifecycle state. Each later
+rejected attempt compares the full canonical binary to the saved sentinel bytes
+and also checks the successful lifecycle and contour metadata remain unchanged.
 The corpus covers malformed and half-truncated binary, wrong root, every
 version category, missing/extra properties and children, duplicate reserved
 children, duplicate/missing/unknown parameters, invalid/trailing/non-finite/
 out-of-range/non-discrete/bool values, invalid compatibility/UI/recreation/log,
-the final parameter, and every safe-extension limit. All rollback comparisons
-are byte-equal.
+the final parameter, case-mismatched roots/`PARAM`/`ENTRY`, huge signed version
+integers, and every safe-extension limit. All rollback comparisons are
+byte-equal.
 
 The migration corpus proves both immutable v0 fixtures map to exact v2
 fixtures, repeated migrations are byte-identical, v2 reload/save is
 byte-identical, missing Tune uses historical index 0, one missing contour alone
 defaults and logs, all four supplied appended IDs survive, safe unknown data
 survives, and a synthetic six-distinct-value contour state retains every value
-under its original ID.
+under its original ID. Additional v0 boundary cases prove maximum node/name/
+value inputs self-reload and one-over or aggregate-over-budget inputs reject
+before success. A concurrent restore/save stress test reparses every published
+snapshot, while source guards enforce the common-lock and atomic-cache boundary.
 
 ## TDD and verification
 
@@ -253,10 +270,18 @@ The executable built; CTest failed 0/1 with 11 assertions identifying the raw
 `Parameters` root and absent canonical properties, children, ordered parameter
 container, and compatibility metadata.
 
+Review remediation also followed RED/GREEN. With only the new regression tests
+present, the focused executable exited `1` and reported the intended failures:
+case-insensitive roots/`PARAM`/`ENTRY`, unknown-token precision loss, v0-created
+extension limit bypasses, huge signed-version misclassification, and missing
+publication synchronization/source guards. The lowercase legacy-root acceptance
+then deliberately cascaded rollback-byte failures by mutating the migrated
+sentinel.
+
 Focused GREEN after the complete corpus:
 
 ```text
-1/1 Test #3: ModelDStateV2Contract ............   Passed    0.37 sec
+1/1 Test #3: ModelDStateV2Contract ............   Passed    0.51 sec
 100% tests passed, 0 tests failed out of 1
 ```
 
@@ -279,15 +304,15 @@ ctest --test-dir '/private/tmp/model-d-agent07-ws03-baseline.oPxqQt/Release buil
 100% tests passed, 0 tests failed out of 13
 
 Label Time Summary:
-artifact    =   5.00 sec*proc (3 tests)
+artifact    =   4.95 sec*proc (3 tests)
 dsp         =   0.03 sec*proc (1 test)
-host        =  29.95 sec*proc (2 tests)
+host        =  29.82 sec*proc (2 tests)
 midi        =   0.01 sec*proc (1 test)
 realtime    =   0.01 sec*proc (1 test)
-state       =   0.10 sec*proc (4 tests)
-unit        =   0.17 sec*proc (1 test)
+state       =   0.25 sec*proc (4 tests)
+unit        =   0.14 sec*proc (1 test)
 
-Total Test time (real) = 35.28 sec
+Total Test time (real) = 35.22 sec
 ```
 
 ## Deferred behavior

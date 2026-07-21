@@ -198,7 +198,11 @@ private:
     std::array<float, stageBufferSize> stageModFilterBuffer{};
     std::atomic<int> stageBufferWriteIndex { 0 };
 
-    bool restoredStateFromHost = false;
+    mutable juce::CriticalSection statePublicationLock;
+    std::atomic<bool> restoredStateFromHost { false };
+    std::atomic<StateContract::ContourContract> contourContractCache {
+        StateContract::ContourContract::canonicalContours
+    };
     juce::ValueTree canonicalState;
     
     juce::MidiBuffer incomingMidi;

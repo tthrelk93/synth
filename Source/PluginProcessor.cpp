@@ -789,6 +789,7 @@ juce::AudioProcessorEditor* MoogMiniAudioProcessor::createEditor()
 //==============================================================================
 void MoogMiniAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
+    const juce::ScopedLock lock { statePublicationLock };
     StateContract::serialiseBinary (
         StateContract::withCurrentParameters (canonicalState, apvts.copyState()),
         destData);
@@ -806,19 +807,22 @@ StateContract::RestoreResult MoogMiniAudioProcessor::restoreState (const void* d
     if (! prepared.result.succeeded())
         return prepared.result;
 
+    const auto preparedContour = StateContract::contourContract (prepared.canonicalState);
+    const juce::ScopedLock lock { statePublicationLock };
     apvts.replaceState (prepared.apvtsState);
     canonicalState = std::move (prepared.canonicalState);
-    restoredStateFromHost = true;
+    contourContractCache.store (preparedContour, std::memory_order_release);
+    restoredStateFromHost.store (true, std::memory_order_release);
     return prepared.result;
 }
 
 StateContract::ContourContract MoogMiniAudioProcessor::getContourContract() const noexcept
 {
-    return StateContract::contourContract (canonicalState);
+    return contourContractCache.load (std::memory_order_acquire);
 }
 
 bool MoogMiniAudioProcessor::shouldAutoLoadLastPreset() const {
-    return !restoredStateFromHost;
+    return ! restoredStateFromHost.load (std::memory_order_acquire);
 }
 
 

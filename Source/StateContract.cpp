@@ -32,6 +32,7 @@ struct ParameterRecord
     std::string id;
     float value = 0.0f;
     bool known = false;
+    juce::String sourceValueToken;
 };
 
 struct ExtensionBudget
@@ -43,6 +44,11 @@ struct ExtensionBudget
 juce::String string (std::string_view text)
 {
     return juce::String { text.data(), text.size() };
+}
+
+bool hasExactTagName (const juce::XmlElement& element, std::string_view expected)
+{
+    return std::string_view { element.getTagName().toRawUTF8() } == expected;
 }
 
 PreparedRestore failure (RestoreCode code)
@@ -208,6 +214,13 @@ IntegerStatus parseNonNegativeIntegerStrict (const juce::String& text, int& resu
     if (bytes.empty())
         return IntegerStatus::invalid;
 
+    const auto digitStart = bytes.front() == '-' ? std::size_t { 1 } : std::size_t { 0 };
+    const auto isIntegerToken = digitStart < bytes.size()
+        && std::all_of (bytes.begin() + static_cast<std::ptrdiff_t> (digitStart), bytes.end(),
+                        [] (char character) { return character >= '0' && character <= '9'; });
+    if (isIntegerToken && digitStart == 1)
+        return IntegerStatus::negative;
+
     long long parsedInteger = 0;
     const auto integerResult = std::from_chars (bytes.data(), bytes.data() + bytes.size(), parsedInteger);
     if (integerResult.ec == std::errc {} && integerResult.ptr == bytes.data() + bytes.size())
@@ -219,6 +232,8 @@ IntegerStatus parseNonNegativeIntegerStrict (const juce::String& text, int& resu
         result = static_cast<int> (parsedInteger);
         return IntegerStatus::success;
     }
+    if (isIntegerToken && integerResult.ec == std::errc::result_out_of_range)
+        return IntegerStatus::overflow;
 
     float parsedNumber = 0.0f;
     if (parseFloatStrict (text, parsedNumber) == NumberStatus::success)
@@ -475,7 +490,7 @@ PreparedRestore parseLegacy (const juce::XmlElement& root)
     {
         if (child->isTextElement())
             continue;
-        if (! child->hasTagName ("PARAM"))
+        if (! hasExactTagName (*child, "PARAM"))
             return failure (RestoreCode::unexpectedChild);
         constexpr std::array attributes { "id"sv, "value"sv };
         if (! hasOnlyAttributes (*child, attributes))
@@ -499,17 +514,20 @@ PreparedRestore parseLegacy (const juce::XmlElement& root)
             if (validation != RestoreCode::success)
                 return failure (validation);
             values.emplace (idString, value);
-            records.push_back ({ idString, value, true });
+            records.push_back ({ idString, value, true, {} });
         }
         else
         {
-            const auto numberStatus = parseFloatStrict (child->getStringAttribute ("value"), value);
+            const auto sourceValueToken = child->getStringAttribute ("value");
+            if (sourceValueToken.getNumBytesAsUTF8() > maxExtensionValueBytes)
+                return failure (RestoreCode::unsafeExtensionStructure);
+            const auto numberStatus = parseFloatStrict (sourceValueToken, value);
             if (numberStatus == NumberStatus::nonFinite)
                 return failure (RestoreCode::nonFiniteValue);
             if (numberStatus != NumberStatus::success || ! isSafeAsciiName (id))
                 return failure (RestoreCode::unsafeExtensionStructure);
-            records.push_back ({ idString, value, false });
-            unknownRecords.push_back ({ idString, value, false });
+            records.push_back ({ idString, value, false, sourceValueToken });
+            unknownRecords.push_back ({ idString, value, false, sourceValueToken });
         }
     }
 
@@ -552,11 +570,16 @@ PreparedRestore parseLegacy (const juce::XmlElement& root)
         {
             juce::ValueTree parameter { "legacyParameter" };
             parameter.setProperty ("id", juce::String { record.id }, nullptr);
-            parameter.setProperty ("value", record.value, nullptr);
+            parameter.setProperty ("value", record.sourceValueToken, nullptr);
             legacyParameters.addChild (parameter, -1, nullptr);
         }
         extensions.addChild (legacyParameters, -1, nullptr);
     }
+
+    const auto extensionsXml = extensions.createXml();
+    if (extensionsXml == nullptr
+        || validateExtensions (*extensionsXml) != RestoreCode::success)
+        return failure (RestoreCode::unsafeExtensionStructure);
 
     const auto canonical = assembleState (
         values,
@@ -578,6 +601,8 @@ RestoreCode classifyVersion (const juce::XmlElement& root, int& version)
         return RestoreCode::negativeStateVersion;
     if (status == IntegerStatus::nonInteger)
         return RestoreCode::nonIntegerStateVersion;
+    if (status == IntegerStatus::overflow)
+        return RestoreCode::futureStateVersion;
     if (status != IntegerStatus::success)
         return RestoreCode::invalidStateVersion;
     if (version > currentVersion)
@@ -642,7 +667,7 @@ PreparedRestore parseV2 (const juce::XmlElement& root)
     {
         if (parameter->isTextElement())
             continue;
-        if (! parameter->hasTagName ("PARAM"))
+        if (! hasExactTagName (*parameter, "PARAM"))
             return failure (RestoreCode::unexpectedChild);
         constexpr std::array attributes { "id"sv, "value"sv };
         if (! hasOnlyAttributes (*parameter, attributes))
@@ -748,7 +773,7 @@ PreparedRestore parseV2 (const juce::XmlElement& root)
         if (entry->isTextElement())
             continue;
         constexpr std::array entryAttributes { "from"sv, "to"sv, "action"sv, "warningCode"sv };
-        if (! entry->hasTagName ("ENTRY") || ! hasOnlyAttributes (*entry, entryAttributes)
+        if (! hasExactTagName (*entry, "ENTRY") || ! hasOnlyAttributes (*entry, entryAttributes)
             || hasElementChildren (*entry) || hasNonWhitespaceText (*entry))
             return failure (RestoreCode::invalidMigrationLog);
         for (const auto attribute : entryAttributes)
@@ -858,9 +883,9 @@ PreparedRestore parseAndPrepare (const void* data, int sizeInBytes)
         juce::AudioProcessor::getXmlFromBinary (data, sizeInBytes));
     if (xml == nullptr)
         return failure (RestoreCode::malformedData);
-    if (xml->hasTagName ("Parameters"))
+    if (hasExactTagName (*xml, "Parameters"))
         return parseLegacy (*xml);
-    if (! xml->hasTagName ("modelDState"))
+    if (! hasExactTagName (*xml, "modelDState"))
         return failure (RestoreCode::wrongRoot);
     return parseV2 (*xml);
 }
