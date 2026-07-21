@@ -20,6 +20,7 @@
 /**
 */
 class MoogMiniAudioProcessor  : public juce::AudioProcessor
+                             , public juce::VST3ClientExtensions
                             #if JucePlugin_Enable_ARA
                              , public juce::AudioProcessorARAExtension
                             #endif
@@ -50,6 +51,8 @@ public:
     bool acceptsMidi() const override;
     bool producesMidi() const override;
     bool isMidiEffect() const override;
+    juce::VST3ClientExtensions* getVST3ClientExtensions() override { return this; }
+    bool getPluginHasMainInput() const override { return false; }
     double getTailLengthSeconds() const override;
 
     //==============================================================================
@@ -91,9 +94,7 @@ public:
     
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
     juce::AudioProcessorValueTreeState apvts;
-    juce::File logFile;
-    std::unique_ptr<juce::FileLogger> fileLogger;
-    
+
     const float* getWaveformData() const;
     int getWaveformSize() const;
     CircularBuffer& getCircularBuffer();

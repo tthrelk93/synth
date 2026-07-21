@@ -65,7 +65,8 @@ void SmokeComponent::timerCallback() {
     
     // Reset smoke when it goes out of bounds
     if (smokePosition.y < 0 || smokePosition.x < 0 || smokePosition.x > getWidth()) {
-        smokePosition = juce::Point<float>(getWidth() / 2.0f, getHeight());
+        smokePosition = juce::Point<float>(getWidth() / 2.0f,
+                                           static_cast<float>(getHeight()));
         smokeSize = 1.0f;
     }
     

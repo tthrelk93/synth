@@ -11,7 +11,7 @@
 PianoKey::PianoKey(bool isBlack, int midiNoteNumber, Listener* listener)
     : isBlackKey(isBlack), midiNoteNumber(midiNoteNumber), listener(listener) {}
 
-void PianoKey::mouseDown(const juce::MouseEvent& event) {
+void PianoKey::mouseDown(const juce::MouseEvent&) {
    
     triggerNoteOn();
 }
@@ -75,4 +75,3 @@ void PianoKey::paint(juce::Graphics& g) {
     g.setColour(juce::Colours::grey);
     g.drawRect(getLocalBounds(), 1); // border
 }
-

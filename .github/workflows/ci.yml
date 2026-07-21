@@ -1,0 +1,251 @@
+name: Model D CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - "codex/**"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      inject_sentinel:
+        description: Run the deliberately failing Linux Debug CTest sentinel proof
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }} / ${{ matrix.config }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64
+            runner: ubuntu-24.04
+            config: Debug
+          - name: Linux x86_64
+            runner: ubuntu-24.04
+            config: Release
+          - name: Windows x86_64
+            runner: windows-2025
+            config: Debug
+          - name: Windows x86_64
+            runner: windows-2025
+            config: Release
+          - name: macOS arm64
+            runner: macos-15
+            config: Debug
+          - name: macOS arm64
+            runner: macos-15
+            config: Release
+          - name: macOS x86_64
+            runner: macos-15-intel
+            config: Debug
+          - name: macOS x86_64
+            runner: macos-15-intel
+            config: Release
+    env:
+      BUILD_DIR: ${{ github.workspace }}/build with spaces/${{ matrix.config }}
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install JUCE Linux build prerequisites
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev \
+            xvfb xauth x11-utils openbox
+
+      - name: Start verified Linux virtual display and window manager
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          display=":99"
+          xvfb_log="$RUNNER_TEMP/model-d-xvfb.log"
+          wm_log="$RUNNER_TEMP/model-d-openbox.log"
+          nohup Xvfb "$display" -screen 0 1920x1080x24 -ac -nolisten tcp > "$xvfb_log" 2>&1 &
+          xvfb_pid=$!
+          xvfb_ready=false
+          for attempt in {1..40}; do
+            if DISPLAY="$display" xdpyinfo >/dev/null 2>&1; then
+              xvfb_ready=true
+              break
+            fi
+            if ! kill -0 "$xvfb_pid" 2>/dev/null; then
+              cat "$xvfb_log"
+              exit 1
+            fi
+            sleep 0.25
+          done
+          if [[ "$xvfb_ready" != true ]]; then
+            cat "$xvfb_log"
+            echo "Xvfb did not become ready on $display" >&2
+            exit 1
+          fi
+
+          nohup env DISPLAY="$display" openbox --sm-disable > "$wm_log" 2>&1 &
+          wm_pid=$!
+          for attempt in {1..40}; do
+            if DISPLAY="$display" xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null \
+                | grep -q 'window id #'; then
+              echo "DISPLAY=$display" >> "$GITHUB_ENV"
+              echo "SYNTH_REUSE_VERIFIED_DISPLAY=1" >> "$GITHUB_ENV"
+              exit 0
+            fi
+            if ! kill -0 "$xvfb_pid" 2>/dev/null; then
+              cat "$xvfb_log"
+              exit 1
+            fi
+            if ! kill -0 "$wm_pid" 2>/dev/null; then
+              cat "$wm_log"
+              exit 1
+            fi
+            sleep 0.25
+          done
+          cat "$xvfb_log"
+          cat "$wm_log"
+          echo "Openbox did not publish _NET_SUPPORTING_WM_CHECK on $display" >&2
+          exit 1
+
+      - name: Configure (CMake 3.24+ and warnings as errors)
+        shell: pwsh
+        run: |
+          cmake --version
+          cmake -S . -B "$env:BUILD_DIR" "-DCMAKE_BUILD_TYPE=${{ matrix.config }}" "-DSYNTH_WARNINGS_AS_ERRORS=ON" "-DSYNTH_BUILD_TESTS=ON" "-DSYNTH_BUILD_VALIDATORS=ON"
+
+      - name: Build all targets
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --parallel 2
+
+      - name: Run full CTest suite
+        shell: pwsh
+        run: ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} --output-on-failure
+
+      - name: Display and run every required CTest label
+        shell: pwsh
+        run: |
+          $labels = 'unit', 'state', 'dsp', 'midi', 'realtime', 'host', 'artifact'
+          foreach ($label in $labels) {
+            Write-Host "Discovering CTest label: $label"
+            ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} -N -L $label
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            Write-Host "Running CTest label: $label"
+            ctest --test-dir "$env:BUILD_DIR" -C ${{ matrix.config }} --no-tests=error -L $label --output-on-failure
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
+      - name: Run actual staged standalone lifecycle gate
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDRunStandaloneLifecycle --parallel 2
+
+      - name: Stage development artifacts before ephemeral AU registration
+        if: runner.os == 'macOS'
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDStageDevelopmentArtifacts --parallel 2
+
+      - name: Install AU only in the ephemeral macOS runner account
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          component_list="$RUNNER_TEMP/model-d-component-list.txt"
+          find "$BUILD_DIR/development-stage" -type d -name '*.component' -path '*/AU/*.component' -prune -print > "$component_list"
+          component_count=$(wc -l < "$component_list" | tr -d ' ')
+          if [[ "$component_count" != "1" ]]; then
+            echo "Expected exactly one staged AU component; found $component_count" >&2
+            exit 1
+          fi
+          source_component=$(sed -n '1p' "$component_list")
+          component_name=$(basename -- "$source_component")
+          if [[ "$component_name" != *.component || "$component_name" == "." || "$component_name" == ".." ]]; then
+            echo "Refusing staged AU with unsafe bundle name: $component_name" >&2
+            exit 1
+          fi
+          destination_root="$HOME/Library/Audio/Plug-Ins/Components"
+          destination_component="$destination_root/$component_name"
+          if [[ -e "$destination_component" ]]; then
+            echo "Refusing to overwrite an existing AU: $destination_component" >&2
+            exit 1
+          fi
+          mkdir -p "$destination_root"
+          printf '%s\n' "$destination_component" > "$RUNNER_TEMP/model-d-au-install-path.txt"
+          cp -R "$source_component" "$destination_component"
+
+      - name: Run actual-wrapper, pinned pluginval, and linked-manifest verification
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config ${{ matrix.config }} --target ModelDVerifyValidationEvidence --parallel 2
+
+      - name: Remove only the AU installed by this ephemeral job
+        if: ${{ always() && runner.os == 'macOS' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          marker="$RUNNER_TEMP/model-d-au-install-path.txt"
+          if [[ ! -f "$marker" ]]; then
+            exit 0
+          fi
+          installed_component=$(sed -n '1p' "$marker")
+          destination_root="$HOME/Library/Audio/Plug-Ins/Components"
+          installed_parent=$(dirname -- "$installed_component")
+          installed_name=$(basename -- "$installed_component")
+          if [[ "$installed_parent" != "$destination_root" || "$installed_name" != *.component || "$installed_name" == "." || "$installed_name" == ".." ]]; then
+            echo "Refusing cleanup for unexpected path: $installed_component" >&2
+            exit 1
+          fi
+          if [[ -e "$installed_component" ]]; then
+            rm -rf -- "$installed_component"
+          fi
+          rm -f "$marker"
+
+      - name: Upload validator logs and linked manifests
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: model-d-validation-${{ matrix.name }}-${{ matrix.config }}
+          if-no-files-found: warn
+          path: |
+            ${{ env.BUILD_DIR }}/validation
+            ${{ env.BUILD_DIR }}/development-stage/*/build-manifest.json
+            ${{ env.BUILD_DIR }}/development-stage/*/validation-manifest.json
+
+  sentinel-proof:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.inject_sentinel }}
+    name: Linux x86_64 / Debug / raw failing sentinel
+    runs-on: ubuntu-24.04
+    env:
+      BUILD_DIR: ${{ github.workspace }}/sentinel build with spaces/Debug
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - name: Install JUCE Linux build prerequisites
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libasound2-dev libjack-jackd2-dev ladspa-sdk \
+            libfreetype-dev libfontconfig1-dev \
+            libx11-dev libxcomposite-dev libxcursor-dev libxext-dev \
+            libxinerama-dev libxrandr-dev libxrender-dev
+
+      - name: Configure sentinel proof
+        shell: pwsh
+        run: |
+          cmake --version
+          cmake -S . -B "$env:BUILD_DIR" "-DCMAKE_BUILD_TYPE=Debug" "-DSYNTH_WARNINGS_AS_ERRORS=ON" "-DSYNTH_BUILD_TESTS=ON" "-DSYNTH_CI_INJECT_FAILING_SENTINEL=ON"
+
+      - name: Build sentinel proof targets
+        shell: pwsh
+        run: cmake --build "$env:BUILD_DIR" --config Debug --parallel 2
+
+      - name: Raw CTest sentinel failure (expected to make this workflow red)
+        shell: pwsh
+        run: ctest --test-dir "$env:BUILD_DIR" -C Debug --output-on-failure

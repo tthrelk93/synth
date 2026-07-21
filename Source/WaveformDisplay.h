@@ -22,7 +22,7 @@ public:
     void timerCallback() override;
     void paint(juce::Graphics& g) override;
     void update();
-    void drawWaveform(juce::Graphics& g, const float* buffer, juce::Colour colour, int section, int bufferSize);
+    void drawWaveform(juce::Graphics& g, const float* buffer, juce::Colour colour, int section, int sampleCount);
     void drawStereoScope(juce::Graphics& g, float* leftWaveform, float* rightWaveform, float width, float height);
 
 private:

@@ -1,0 +1,185 @@
+# Workstream 02 — Build, Packaging, and Host Validation
+
+[Roadmap](00-master-remediation-roadmap.md) · [Traceability](01-traceability-matrix.md) · [Agent 01 kickoff](16-agent-01-workstream-02-kickoff.md) · [Implementation handoff](17-implementation-handoff.md) · Next: [Parameter/state contract](03-parameter-automation-state-contract.md)
+
+## Goal and user-visible outcome
+
+Produce reproducible Debug and Release builds of one Model D MIDI instrument whose VST3/AU/standalone identities, buses, editor, tests, and artifacts behave consistently on supported hosts. Users see the product under Instruments, can play it with MIDI, may connect an auxiliary External Input when the host supports it, and do not receive a separate effect plug-in.
+
+## Requirements and original deficits covered
+
+| ID | Required result |
+|---|---|
+| BLD-001 | Replace the missing CMake build with a checked-in, reproducible CMake project. |
+| BLD-002 | Remove the machine-specific Projucer module-path dependency and stop treating generated projects as authoritative. |
+| BLD-003 | Pin JUCE 8.0.10 at commit `3af3ce009f6a02f6fa651008fffb5b41743a9fab`; document the dependency/license review. |
+| BLD-004 | Make README commands match commands exercised by CI. |
+| BLD-005 | Build one MIDI instrument with an optional auxiliary audio input; do not build an initial effect target. |
+| BLD-006 | Correct VST3/AU categories, bus declarations, MIDI capabilities, and layout negotiation. |
+| BLD-007 | Replace manufacturer/bundle placeholders through a release-blocking product-identity contract. |
+| BLD-008 | Replace removed/deprecated JUCE font calls and reach zero project-owned warnings. |
+| BLD-009 | Diagnose and gate standalone first-window visibility and lifecycle. |
+| BLD-010 | Execute unit tests through CTest on every supported CI platform/configuration. |
+| BLD-011 | Validate artifacts with pluginval, auval, scanning, instantiation, editor, MIDI, state, and bus smoke tests. |
+| BLD-012 | Package deterministic artifacts with version, architecture, dependency, and validation manifests. |
+
+## Implementation progress
+
+Use only `not-started`, `in-progress`, `blocked`, `fail`, or `pass`. A requirement may be `pass` only when its acceptance criterion and verification evidence are linked. Agent 07 carries the deferred pre-release rows while Workstream 03 is active under the owner-approved scheduling exception.
+
+| Requirement | Status | Evidence | Notes |
+|---|---|---|---|
+| BLD-001 | pass | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact implementation run `29728203657` passes fresh configure and strict all-target builds on all eight supported rows; its full logs and uploads are checksum-retained. |
+| BLD-002 | pass | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | The exact-head supported matrix proves CMake is independent of Projucer, generated amalgamations, `JUCE_DIR`, and machine-specific paths across all generators. |
+| BLD-003 | pass | [Dependency/license review and owner decision](evidence/workstream-02/dependency-license-review.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Every hosted configure resolves exact JUCE revision `3af3ce…9fab`; on 2026-07-21 the product owner selected the no-fee commercial JUCE 8 Starter path, approved its individual-owner eligibility/upgrade basis, and approved applicable notice handling. |
+| BLD-004 | pass | [README clean-clone evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | All five committed README commands pass verbatim from a fresh clone and the matching supported hosted workflow is green. |
+| BLD-005 | pass | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact run `29728203657` proves one MIDI instrument, no effect artifact, and passing actual-wrapper/pluginval evidence on every supported row. |
+| BLD-006 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) · [Owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | Generated VST3/AU categories, exhaustive buses, actual-wrapper, pluginval, and ephemeral hosted auval pass; required commercial-host category/menu confirmation is explicitly deferred and remains unrun. |
+| BLD-007 | pass | [Preflight](evidence/workstream-02/preflight.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) · [Owner identity and distribution-history decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | The owner confirmed no prior distribution and approved TTH Audio / TTH Model One, `TTHA` / `TM01`, domain `io.github.tthrelk93`, and bundle `io.github.tthrelk93.TTHModelOne`; the shared guard and negative configure suite reject placeholder, malformed, duplicate, reserved, and unapproved identities. |
+| BLD-008 | pass | [Warning baseline](evidence/workstream-02/warning-baseline.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact run `29728203657` passes strict Debug/Release builds with project warnings as errors on MSVC, GCC, Apple arm64, and Apple x86_64 rows. |
+| BLD-009 | pass | [Standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | All eight exact-head rows pass repeated fresh-process normal/invalid/no-device lifecycle and screenshot verification. |
+| BLD-010 | pass | [CTest and CI enforcement](evidence/workstream-02/ctest-ci-enforcement.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | All eight exact-head rows pass 9/9 CTest and each of seven fail-on-zero labels; the raw injected-failure sentinel remains correctly skipped by default. |
+| BLD-011 | in-progress | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) · [Owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | Every automated hosted validator passes, including ephemeral macOS auval; the authorized designated-account AU, Steinberg VST3 SDK validator, and required commercial-host checks are deferred and remain required before release. |
+| BLD-012 | in-progress | [Artifact staging and build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) · [Owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | All eight exact-head linked manifests deep-verify and upload with bounded inventories; development manifests remain usable, while distribution aggregation waits for BLD-006/011 external evidence. |
+
+## Current-code evidence
+
+- The historical missing-CMake deficit is reproduced in [Preflight](evidence/workstream-02/preflight.md); commit `42d42c2` provides the supported top-level build and the README now mirrors the checked-in CI command/path contract.
+- `MiniMoog.jucer` still contains `../../Downloads/JUCE/modules`, but the supported CMake build does not read it or tracked generated amalgamations.
+- Tracked `JuceLibraryCode/JucePluginDefines.h` remains historical/non-authoritative. JUCE 8 CMake generation now reports synth/MIDI instrument capabilities, VST3 `Instrument|Synth`, and AU `aumu` through generated `Defs.txt`, `moduleinfo.json`, and `Info.plist` evidence.
+- Commits `1d5be04`, `6b8896e`, and `405a704` implement and test exactly one optional `External Input`, required `Main Output`, and optional `Phones/Cue`; all 18 allowed layouts and representative invalid layouts are executable tests.
+- Commits `835b3d4` through `a42ec79` add explicit development staging, actual-wrapper/pluginval/auval/standalone evidence, cryptographically linked build/validation manifests, and hardened ownership/symlink-path contracts.
+- Historical `SignalFlowOverlay::buildFilterVizLayout` and tooltip use of `juce::Font(float)`/`getStringWidthFloat` was removed in commit `5fe79c6`; legacy metrics are explicit and width measurement now uses `GlyphArrangement`.
+- The project-owned standalone shell uses `MoogMiniAudioProcessor::createEditor`; three isolated device modes assert first-window visibility, editor bounds, resizing, shutdown, and screenshots without probing or mutating real user settings.
+- Agent 02's [continuation preflight](evidence/workstream-02/continuation-preflight.md) reconfirmed fresh local Debug/Release 9/9 CTest and linked validation and passed static workflow audit. The later [hosted CI report](evidence/workstream-02/hosted-ci-execution.md) records authorized publication and six jobless outage triggers. Agent 03's [recovery report](evidence/workstream-02/agent-03-hosted-ci-recovery.md) retains every diagnostic and upload through exact implementation run `29728203657`, whose eight supported rows all pass the complete chain.
+- Agent 04's [continuation preflight](evidence/workstream-02/agent-04-continuation-preflight.md) verifies the supplied package and unchanged local/remote handoff commit, then records that no owner licensing/identity decision or unavailable validator/host input has arrived. No requirement changes status.
+- On 2026-07-21, the product owner supplied the missing [JUCE 8 Starter decision and notice approval](evidence/workstream-02/dependency-license-review.md#product-owner-decision). Exact dependency verification was already green, so BLD-003 advances to `pass`; legal identity, distribution history, and unavailable host/tool gates remain separate.
+- Agent 06's [continuation preflight](evidence/workstream-02/agent-06-continuation-preflight.md) verifies the successor package and exact local/remote handoff commit, passes a fresh strict Release all-target build and 9/9 CTest, and confirms that the commercial hosts, designated-account AU, Steinberg validator, and reviewed owner identity/history inputs remain unavailable. No requirement changes status.
+- The later [owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) confirms no prior distribution, approves the exact TTH Model One identity, and authorizes Workstream 03 to begin while BLD-006/011/012 remain visible pre-release gates. It supersedes the current effect of the earlier identity/access blockers without rewriting their historical reports.
+- Independent review then found and corrected a stale literal AU basename in hosted macOS CI and incomplete identity-policy duplication. Commit `a18444e` adds dynamic safe AU install/cleanup contracts and one shared BLD-007 validator; a fresh strict Release build, 10/10 CTest, actual-wrapper/pluginval 3/3, and deep linked-manifest verification pass while local auval and the release aggregate remain truthfully blocked.
+
+## Prerequisites, ownership, and merge conflicts
+
+No code prerequisite. This workstream must land before all others. It owns top-level CMake, dependency pinning, target definitions, CI, packaging, product identity configuration, compile-warning policy, and host-validation scripts. It does not own parameter semantics or DSP behavior.
+
+Likely conflicts: `MiniMoog.jucer`, generated `JuceLibraryCode`, `PluginProcessor` constructor/bus methods, font construction in `SignalFlowOverlay`, and README. The CMake target names, compile definitions, wrapper/bus topology, and approved identity are frozen inputs to Workstream 03.
+
+The owner-approved manufacturer name, four-character codes, reverse-DNS domain, and bundle ID are present in reviewed `cmake/ProductIdentity.cmake`; the [owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) records the no-prior-distribution basis. Distribution configuration and linked identity aggregation use the same validator and reject empty/placeholder values, malformed bundle/domain values, malformed/duplicate/reserved codes, or lost approval.
+
+## In scope
+
+- CMake 3.24+, C++20, Ninja/Xcode/MSVC generators, JUCE 8.0.10 exact commit.
+- Shared-code library, VST3, AU on macOS, standalone, unit-test executable, offline-render executable, and validation helpers.
+- Supported CI baseline: macOS arm64 and x86_64; Windows x86_64; Linux x86_64. AU is macOS-only. VST3/standalone build on all three.
+- Required stereo Main Output; optional stereo External Input bus, disabled by default; optional stereo Phones/Cue output bus, disabled by default. Mono main output may be accepted and rendered dual-mono only if a wrapper requests mono.
+- Artifact scan, instantiate, editor, render, state, MIDI, and bus validation.
+
+## Out of scope
+
+AAX/AUv3/LV2, installers/signing/notarization credentials, a separate effect or music-effect target, mobile, DSP remediation, trademark registration, and forming or incorporating a company.
+
+## Proposed architecture and data flow
+
+```text
+CMakeLists.txt
+  -> cmake/Dependencies.cmake (immutable JUCE commit)
+  -> cmake/ProductIdentity.cmake (reviewed identity; no placeholders)
+  -> ModelDCore (all project code except wrappers/editor shell)
+  -> ModelDPlugin (juce_add_plugin: VST3, AU, Standalone)
+  -> ModelDTests / ModelDOfflineRenderer
+  -> CTest -> host validators -> artifact manifest
+```
+
+Use `FetchContent` for the exact JUCE commit with `SYNTH_JUCE_SOURCE_DIR` as an offline/local override that must resolve to the same commit. Do not regenerate or edit `JuceLibraryCode` as part of normal builds. After the CMake target is accepted, remove generated amalgamation files from compilation; removal from version control is a separately reviewed cleanup within this implementation workstream.
+
+`juce_add_plugin(ModelDPlugin)` contract:
+
+- `IS_SYNTH TRUE`, `NEEDS_MIDI_INPUT TRUE`, `NEEDS_MIDI_OUTPUT FALSE`, `IS_MIDI_EFFECT FALSE`;
+- `FORMATS VST3 AU Standalone` on macOS, `VST3 Standalone` elsewhere;
+- VST3 category `Instrument|Synth`; AU type `aumu`;
+- product name chosen by product identity file; plug-in/manufacturer codes are stable once released;
+- no `COPY_PLUGIN_AFTER_BUILD` in CI; staging is explicit and logged.
+
+The processor exposes Main Out, External Input, and Phones/Cue as named buses. Layout support is table-driven: main output mono/stereo; External Input disabled/mono/stereo (mono duplicated); Phones disabled/mono/stereo; no main input bus. Unsupported combinations return false without assertions.
+
+## Public interfaces and build contracts
+
+- Cache variables: `SYNTH_JUCE_SOURCE_DIR`, `SYNTH_BUILD_TESTS` (default ON for developer/CI), `SYNTH_BUILD_VALIDATORS`, `SYNTH_WARNINGS_AS_ERRORS` (ON in CI for project sources), `SYNTH_ENABLE_SANITIZERS`.
+- Targets: `ModelDCore`, `ModelDPlugin`, `ModelDTests`, `ModelDOfflineRenderer`.
+- CTest labels: `unit`, `state`, `dsp`, `midi`, `realtime`, `host`, `artifact`.
+- `build-manifest.json`: product version, git commit/dirty flag, JUCE commit, compiler/SDK, configuration, architecture, artifact hashes, enabled formats, identity fields, test-report hashes.
+- Release configure rejects empty values, `yourcompany`, example domains, duplicate/reserved four-character codes, and a version without an approved migration note.
+
+## Backward compatibility
+
+Keep the existing plug-in product code only if the product owner confirms shipped sessions exist under it; otherwise assign the reviewed product code before the first remediated release. The decision and evidence go in `ProductIdentity.cmake`. Never change a released product/manufacturer code or bundle ID casually: a change requires an explicit side-by-side migration strategy and host scan test.
+
+Changing category from effect to instrument can make existing effect-slot sessions undiscoverable. If the current binary has been distributed, ship one compatibility release whose old identifier loads state and presents a migration notice, but do not develop an ongoing separate effect product. If there is no distribution evidence, document that fact and change the existing identity in place. This decision is made from release records, not implementer preference.
+
+## Real-time audio constraints
+
+Bus negotiation, identity checks, file-system staging, manifests, logging, and validator orchestration occur off the audio thread. Artifact smoke tests must instrument the render callback and fail on allocation or lock attempts; Workstream 11 provides the complete instrumentation.
+
+## Edge cases and failure modes
+
+- Network unavailable: local JUCE override is accepted only after commit verification.
+- Host enables aux input after prepare: wrapper re-prepares cleanly; no stale pointers.
+- Host supplies zero channels or oversized blocks: no crash; unsupported layout rejected or bounded render performed.
+- Host lacks aux buses: instrument remains fully usable with internal normalled feedback.
+- Standalone has no MIDI device/audio input: window still appears and on-screen keyboard works; clear device status is shown.
+- Duplicate plug-in codes or placeholder identity: Release configure fails.
+- Validator unavailable on a platform: job is `not-run`, never `pass`; release aggregate fails.
+
+## Implementation sequence
+
+1. Record whether any existing binary has shipped and obtain reviewed product identity.
+2. Add pinned dependency and top-level targets; compile the current code without behavior edits.
+3. Replace generated-module compilation and JUCE 8 font APIs; clean project-owned warnings.
+4. Convert wrapper flags/categories and processor bus declarations to the fixed instrument topology.
+5. Add test/offline targets and CTest discovery; make a deliberately failing test prove CI execution.
+6. Add platform CI, artifact staging, manifests, pluginval/auval, and host smoke harnesses.
+7. Reproduce standalone visibility at normal and 0/invalid audio-device states; fix lifecycle and add screenshot/window assertions.
+8. Update README only after commands pass from a clean clone.
+
+## Automated tests and measurable gates
+
+- Clean configure/build from a path containing spaces succeeds with no undeclared local dependency.
+- Dependency check resolves exactly commit `3af3ce009f6a02f6fa651008fffb5b41743a9fab`.
+- Debug and Release compile with zero project-owned warnings; warnings from pinned third-party sources are captured separately and not promoted by blanket suppression.
+- CTest discovers and executes at least one test per required label; injected sentinel failure makes CI fail.
+- Processor reports synth=true, accepts MIDI, produces no MIDI, is not a MIDI effect, and returns the exact accepted/rejected bus-layout table.
+- Note-on at sample 0 yields finite non-silent output under a known test patch; no MIDI yields deterministic silence where the patch has no free-running audible source.
+- pluginval strictness 10 passes the VST3 in isolated process; AU passes `auval -v aumu <subtype> <manufacturer>`.
+- Artifact scan/instantiate/editor-open/editor-close/state-restore is repeated without crash or leaked instance; repeat count is stored in the validator manifest rather than hidden in CI code.
+- Build manifest hashes match staged files and a rebuild from identical inputs produces identical metadata other than explicitly excluded timestamps/signatures.
+
+## Manual and host validation
+
+Test at least one current supported version of Logic Pro, Ableton Live, Reaper, Cubase/Nuendo, and the standalone shell, recording exact version/OS/architecture. Confirm instrument menus, MIDI play, automation enumeration, aux-input discovery, optional Phones/Cue routing, editor visibility/resizing, save/reload, offline bounce, and multiple instances. Listening checks only confirm routing; no fidelity claim closes here.
+
+The product owner temporarily defers the unavailable commercial-host,
+designated-account AU, and Steinberg validator portions of this section. The
+deferral permits Workstream 03 to begin but does not satisfy this manual/host
+gate or authorize release.
+
+## Definition of done
+
+- [ ] BLD-001 through BLD-012 pass in the trace report.
+- [x] No machine-specific path is required or documented.
+- [x] Product identity is reviewed and contains no authoritative placeholder.
+- [x] No separate effect artifact is generated.
+- [ ] CI, CTest, pluginval, auval, host matrix, and standalone-window evidence are attached.
+- [x] README commands were copied into and executed by CI.
+- [x] Generated project files are no longer authoritative.
+
+## Completion-report evidence
+
+Include clean-clone commands and logs; CMake/JUCE/compiler versions; exact dependency commit; product-identity approval; warning report; CTest XML; pluginval and auval logs; bus-layout table output; artifact hashes; screenshots of instrument categorization and the first standalone window; host/version matrix; shipped-identity investigation; and `git diff --check`.
+
+## Primary technical references
+
+- JUCE [CMake API](https://github.com/juce-framework/JUCE/blob/master/docs/CMake%20API.md) and [8.0.10 release](https://github.com/juce-framework/JUCE/releases/tag/8.0.10).
+- JUCE [`AudioProcessor`](https://docs.juce.com/master/classAudioProcessor.html).
+- Steinberg [VST3 categories](https://steinbergmedia.github.io/vst3_dev_portal/pages/FAQ/Miscellaneous.html).
+- Apple [Audio Unit types and auval](https://developer.apple.com/library/archive/documentation/MusicAudio/Conceptual/AudioUnitProgrammingGuide/AudioUnitDevelopmentFundamentals/AudioUnitDevelopmentFundamentals.html).
+- Tracktion [pluginval](https://github.com/Tracktion/pluginval).

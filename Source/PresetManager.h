@@ -6,6 +6,13 @@ class PresetManager {
 public:
     explicit PresetManager(juce::AudioProcessorValueTreeState& state);
 
+    // Validation sets an absolute directory before constructing the plug-in
+    // editor so tests never touch the user's real preset directory. Passing an
+    // empty File clears the override after a scoped test.
+    static bool setStandaloneLifecycleTestDirectory(const juce::File& directory);
+    static juce::File getStandaloneLifecycleTestDirectory();
+    static juce::File getLastConstructedPresetDirectory();
+
     juce::StringArray getPresetNames() const;
     bool savePreset(const juce::String& name);
     bool loadPreset(const juce::String& name);

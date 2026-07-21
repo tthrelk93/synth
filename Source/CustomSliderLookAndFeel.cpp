@@ -33,7 +33,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
     bool isNegativeKnobVal = false;
     // Number of iris blades
     int numBlades = 0;
-    float numBladesFloat = 0.0;
+    float numBladesFloat = 0.0f;
     if(sliderKey == "osc1RangeKnob" || sliderKey == "osc2RangeKnob" || sliderKey == "osc3RangeKnob"){
         const float epsilon = 0.0001f; // A small tolerance value
 
@@ -105,37 +105,37 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
 
         if (std::abs(sliderPosProportional - 0.0f) < epsilon) {
             isNegativeKnobVal = true;
-            numBladesFloat = 2.5;
+            numBladesFloat = 2.5f;
         } else if (std::abs(sliderPosProportional - 0.1f) < epsilon) {
             isNegativeKnobVal = true;
-            numBladesFloat = 2.0;
+            numBladesFloat = 2.0f;
         } else if (std::abs(sliderPosProportional - 0.2f) < epsilon) {
             isNegativeKnobVal = true;
-            numBladesFloat = 1.5;
+            numBladesFloat = 1.5f;
         } else if (std::abs(sliderPosProportional - 0.3f) < epsilon) {
             isNegativeKnobVal = true;
-            numBladesFloat = 1.0;
+            numBladesFloat = 1.0f;
         } else if (std::abs(sliderPosProportional - 0.4f) < epsilon) {
             isNegativeKnobVal = true;
-            numBladesFloat = 0.5;
+            numBladesFloat = 0.5f;
         } else if (std::abs(sliderPosProportional - 0.5f) < epsilon) {
-            numBladesFloat = 0.0;
+            numBladesFloat = 0.0f;
         } else if (std::abs(sliderPosProportional - 0.6f) < epsilon) {
-            numBladesFloat = 0.5;
+            numBladesFloat = 0.5f;
         } else if (std::abs(sliderPosProportional - 0.7f) < epsilon) {
-            numBladesFloat = 1.0;
+            numBladesFloat = 1.0f;
         } else if (std::abs(sliderPosProportional - 0.8f) < epsilon) {
-            numBladesFloat = 1.5;
+            numBladesFloat = 1.5f;
         } else if (std::abs(sliderPosProportional - 0.9f) < epsilon) {
-            numBladesFloat = 2.0;
+            numBladesFloat = 2.0f;
         } else {
-            numBladesFloat = 2.5;
+            numBladesFloat = 2.5f;
         }
       
     } else if( sliderKey == "noiseVolKnob" ){
         numBlades = 0;
     } else {
-        numBlades = sliderPosProportional * 10;
+        numBlades = static_cast<int>(sliderPosProportional * 10.0f);
     }
     // Draw the outer border of the slider
 
@@ -178,7 +178,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
     }
 
     if (isOscWaveformSlider) {
-        float alpha = 0.7;
+        float alpha = 0.7f;
        
         g.setColour(accentColour.withAlpha(alpha)); // Border color
         
@@ -210,10 +210,10 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
     } else {
         float alpha = sliderPosProportional;
         if(sliderKey == "noiseVolKnob"){
-            alpha = 0.4;
+            alpha = 0.4f;
         } else {
-            if(alpha < 0.5){
-                alpha = 0.7;
+            if(alpha < 0.5f){
+                alpha = 0.7f;
             }
         }
         juce::Colour lineColour;
@@ -232,7 +232,7 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
     
         if(sliderKey == "ctrlTuneKnob"){
             // Draw the iris blades with borders
-            for (float i = 0.0; i < numBladesFloat; i = i + 0.5) {
+            for (float i = 0.0f; i < numBladesFloat; i += 0.5f) {
                 float baseAngle = rotaryStartAngle + (float(i) / numBladesFloat) * 2.0f * juce::MathConstants<float>::pi;
                 float rotation = maxRotationAngle * sliderPosProportional; // Rotate based on slider position
                 float bladeAngle = baseAngle + rotation;
@@ -246,15 +246,15 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
                                         bladeAngle + maxRotationAngle - angleOffset,
                                         innerRadius / radius);
                 
-                float alpha = sliderPosProportional;
-                if(alpha < 0.5){
-                    alpha = 0.8;
+                float bladeAlpha = sliderPosProportional;
+                if(bladeAlpha < 0.5f){
+                    bladeAlpha = 0.8f;
                 }
                 juce::Colour pieColor;
                 if(isNegativeKnobVal){
-                    pieColor = juce::Colours::maroon.withAlpha(alpha); // Border color
+                    pieColor = juce::Colours::maroon.withAlpha(bladeAlpha); // Border color
                 } else {
-                    pieColor = accentColour.withAlpha(alpha); // Border color
+                    pieColor = accentColour.withAlpha(bladeAlpha); // Border color
                 }
                 g.setColour(pieColor); // Border color
                 g.strokePath(bladePath, juce::PathStrokeType(0.5f)); // Border thickness
@@ -275,30 +275,33 @@ void CustomSliderLookAndFeel::drawRotarySlider(juce::Graphics& g,
                                         bladeAngle + maxRotationAngle - angleOffset,
                                         innerRadius / radius);
                 
-                float alpha = sliderPosProportional;
+                float bladeAlpha = sliderPosProportional;
                 if(sliderKey == "noiseVolKnob"){
-                    alpha = 0.4;
+                    bladeAlpha = 0.4f;
                 } else {
-                    if(alpha < 0.5){
-                        alpha = 0.8;
+                    if(bladeAlpha < 0.5f){
+                        bladeAlpha = 0.8f;
                     }
                 }
                 juce::Colour pieColor;
                 if(isNegativeKnobVal){
-                    pieColor = juce::Colours::maroon.withAlpha(alpha); // Border color
+                    pieColor = juce::Colours::maroon.withAlpha(bladeAlpha); // Border color
                 } else {
-                    pieColor = accentColour.withAlpha(alpha); // Border color
+                    pieColor = accentColour.withAlpha(bladeAlpha); // Border color
                 }
                 g.setColour(pieColor); // Border color
                 g.strokePath(bladePath, juce::PathStrokeType(0.5f)); // Border thickness
             }
         }
         
-        auto textBounds = juce::Rectangle<float>(x, y, width, height).reduced(10); // Adjust as needed
+        auto textBounds = juce::Rectangle<float>(static_cast<float>(x),
+                                                 static_cast<float>(y),
+                                                 static_cast<float>(width),
+                                                 static_cast<float>(height)).reduced(10.0f); // Adjust as needed
         g.setColour(juce::Colour::fromRGB(210, 220, 245)); // Text color
         auto text = juce::String(slider.getValue(), 2); // 2 decimal places
 
-        g.drawText(createTextLabelForSlider(slider.getValue()), textBounds, juce::Justification::centred, false);
+        g.drawText(createTextLabelForSlider(static_cast<float>(slider.getValue())), textBounds, juce::Justification::centred, false);
         
       
     }
@@ -359,14 +362,14 @@ juce::String CustomSliderLookAndFeel::createTextLabelForSlider(float i){
 }
 
 void CustomSliderLookAndFeel::drawWaveform(juce::Graphics& g, int index, int x, int y, int width, int height) {
-    auto center = juce::Point<float>(x + width / 2, y + height / 2);
-    auto radius = juce::jmin(width / 2, height / 2) - 20; // Margin
+    const auto center = juce::Point<float>(static_cast<float>(x + width / 2),
+                                           static_cast<float>(y + height / 2));
+    const float radius = static_cast<float>(juce::jmin(width / 2, height / 2) - 20); // Margin
 
     g.setColour(juce::Colours::white);
 
     juce::Path waveform;
     //juce::Logger::writeToLog("index: " + juce::String(index));
-    bool highSegment = true;
     switch (index) {
         case 0: // Triangle Waveform
             waveform.startNewSubPath(center.x - radius, center.y);
@@ -442,4 +445,3 @@ void CustomSliderLookAndFeel::drawWaveform(juce::Graphics& g, int index, int x, 
 
     g.strokePath(waveform, juce::PathStrokeType(1.8f));
 }
-

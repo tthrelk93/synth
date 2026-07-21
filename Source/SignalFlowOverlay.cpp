@@ -964,10 +964,10 @@ SignalFlowOverlay::FilterVizLayout SignalFlowOverlay::buildFilterVizLayout() con
                                       layout.topRect.getY() + 6.0f);
     layout.contourHandle = { layout.topRect.getRight() - 4.0f, contourY };
 
-    const juce::Font labelFont(11.0f);
+    const juce::Font labelFont(juce::FontOptions(11.0f).withMetricsKind(juce::TypefaceMetricsKind::legacy));
     const float labelPadding = 12.0f;
-    const float contourLabelInset = labelFont.getStringWidthFloat("Contour Env") + labelPadding;
-    const float loudnessLabelInset = labelFont.getStringWidthFloat("Loudness Env") + labelPadding;
+    const float contourLabelInset = juce::GlyphArrangement::getStringWidth(labelFont, "Contour Env") + labelPadding;
+    const float loudnessLabelInset = juce::GlyphArrangement::getStringWidth(labelFont, "Loudness Env") + labelPadding;
 
     auto buildEnvelope = [&](juce::Rectangle<float> rect,
                              float attackNorm,
@@ -1615,7 +1615,7 @@ void SignalFlowOverlay::drawFilterVizPanels(juce::Graphics& g) const
             const float paddingX = 6.0f;
             const float paddingY = 3.0f;
             g.setFont(11.0f);
-            const float textWidth = g.getCurrentFont().getStringWidthFloat(text);
+            const float textWidth = juce::GlyphArrangement::getStringWidth(g.getCurrentFont(), text);
             const float textHeight = g.getCurrentFont().getHeight();
             juce::Rectangle<float> tipRect(hoverPoint.x + 10.0f,
                                            hoverPoint.y - textHeight - 12.0f,

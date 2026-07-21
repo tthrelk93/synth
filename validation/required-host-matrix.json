@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "snapshot_date": "2026-07-18",
+  "checks": [
+    "instrument-menu-category",
+    "midi",
+    "automation-enumeration",
+    "external-input",
+    "phones-cue",
+    "editor-open-resize-close",
+    "save-reload",
+    "offline-bounce",
+    "multiple-instances"
+  ],
+  "rows": [
+    {
+      "name": "Logic Pro",
+      "required_version": "12.3",
+      "platform": "macOS",
+      "source_url": "https://support.apple.com/en-us/109503",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "Ableton Live",
+      "required_version": "12.4.3",
+      "platform": "macOS",
+      "source_url": "https://www.ableton.com/en/release-notes/live-12/",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "Ableton Live",
+      "required_version": "12.4.3",
+      "platform": "Windows",
+      "source_url": "https://www.ableton.com/en/release-notes/live-12/",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "REAPER",
+      "required_version": "7.78",
+      "platform": "macOS",
+      "source_url": "https://www.reaper.fm/download.php",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "REAPER",
+      "required_version": "7.78",
+      "platform": "Windows",
+      "source_url": "https://www.reaper.fm/download.php",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "REAPER",
+      "required_version": "7.78",
+      "platform": "Linux",
+      "source_url": "https://www.reaper.fm/download.php",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "Cubase Pro",
+      "required_version": "15.0.30",
+      "platform": "macOS",
+      "source_url": "https://www.steinberg.net/cubase/release-notes/15/",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "Cubase Pro",
+      "required_version": "15.0.30",
+      "platform": "Windows",
+      "source_url": "https://www.steinberg.net/cubase/release-notes/15/",
+      "kind": "commercial-host"
+    },
+    {
+      "name": "Model D Standalone",
+      "required_version": "${PROJECT_VERSION}",
+      "platform": "macOS",
+      "source_url": "project-build",
+      "kind": "standalone"
+    },
+    {
+      "name": "Model D Standalone",
+      "required_version": "${PROJECT_VERSION}",
+      "platform": "Windows",
+      "source_url": "project-build",
+      "kind": "standalone"
+    },
+    {
+      "name": "Model D Standalone",
+      "required_version": "${PROJECT_VERSION}",
+      "platform": "Linux",
+      "source_url": "project-build",
+      "kind": "standalone"
+    }
+  ]
+}

@@ -8,7 +8,7 @@
 
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
-#include <fstream>
+#include <algorithm>
 #include <cmath>
 #include "Oscillator.h"
 #include "LadderFilter.h"
@@ -44,15 +44,11 @@ Oscillator::Waveform mapOsc3Waveform(int selection) {
 MoogMiniAudioProcessor::MoogMiniAudioProcessor()
 #ifndef JucePlugin_PreferredChannelConfigurations
 : AudioProcessor (BusesProperties()
-#if ! JucePlugin_IsMidiEffect
-#if ! JucePlugin_IsSynth
-                  .withInput  ("Input",  juce::AudioChannelSet::stereo(), true)
-#endif
-                  .withOutput ("Output", juce::AudioChannelSet::stereo(), true)
-#endif
+                  .withInput  ("External Input", juce::AudioChannelSet::stereo(), false)
+                  .withOutput ("Main Output", juce::AudioChannelSet::stereo(), true)
+                  .withOutput ("Phones/Cue", juce::AudioChannelSet::stereo(), false)
                   ),
 apvts(*this, nullptr, "Parameters", createParameterLayout()),
-logFile(juce::File::getSpecialLocation(juce::File::userDesktopDirectory).getChildFile("my_plugin_log.txt")),
 circularBuffer(1024)
 #endif
 {
@@ -67,19 +63,10 @@ circularBuffer(1024)
     
     currentNoteNumber = -1; // Initialize current note number
     
-    fileLogger = std::make_unique<juce::FileLogger>(logFile, "My Plugin Log");
-    juce::Logger::setCurrentLogger(fileLogger.get());
-    
-    // Now you can use juce::Logger::writeToLog anywhere in your code
-    juce::Logger::writeToLog("Plugin constructed");
 }
 
 MoogMiniAudioProcessor::~MoogMiniAudioProcessor()
 {
-    
-    
-    juce::Logger::setCurrentLogger(nullptr);
-    
 }
 
 //==============================================================================
@@ -168,11 +155,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout MoogMiniAudioProcessor::crea
     params.push_back(std::make_unique<juce::AudioParameterChoice>("outputPhonesVolKnob", "Output Volume",
                                                                   juce::StringArray{"VolZero", "VolOne", "VolTwo", "VolThree", "VolFour", "VolFive", "VolSix", "VolSeven", "VolEight", "VolNine", "VolTen"}, 0));
     
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("feedbackKnob", "Feedback Knob", 0.0, 1.0, 0.0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("feedbackKnob", "Feedback Knob", 0.0f, 1.0f, 0.0f));
     
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("modWheelValue", "Mod Wheel Value", 0.0, 1.0, 0.0));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("modWheelValue", "Mod Wheel Value", 0.0f, 1.0f, 0.0f));
     
-    params.push_back(std::make_unique<juce::AudioParameterFloat>("pitchWheelValue", "Pitch Wheel Value", 0.0, 1.0, 0.5));
+    params.push_back(std::make_unique<juce::AudioParameterFloat>("pitchWheelValue", "Pitch Wheel Value", 0.0f, 1.0f, 0.5f));
     
     
     params.push_back(std::make_unique<juce::AudioParameterBool>("osc1OnOff", "Oscillator 1 On/Off", false));
@@ -325,27 +312,30 @@ int MoogMiniAudioProcessor::getCurrentProgram()
     return 0;
 }
 
-void MoogMiniAudioProcessor::setCurrentProgram (int index)
+void MoogMiniAudioProcessor::setCurrentProgram (int)
 {
 }
 
-const juce::String MoogMiniAudioProcessor::getProgramName (int index)
+const juce::String MoogMiniAudioProcessor::getProgramName (int)
 {
     return {};
 }
 
-void MoogMiniAudioProcessor::changeProgramName (int index, const juce::String& newName)
+void MoogMiniAudioProcessor::changeProgramName (int, const juce::String&)
 {
 }
 
 //==============================================================================
 void MoogMiniAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
-    osc1.setSampleRate(getSampleRate());
-    osc2.setSampleRate(getSampleRate());
-    osc3.setSampleRate(getSampleRate());
+    const auto oscillatorSampleRate = static_cast<float>(sampleRate);
+    osc1.setSampleRate(oscillatorSampleRate);
+    osc2.setSampleRate(oscillatorSampleRate);
+    osc3.setSampleRate(oscillatorSampleRate);
     a440Oscillator.setFrequency(440.0f);
-    a440Oscillator.prepare({ sampleRate, static_cast<juce::uint32>(samplesPerBlock), static_cast<juce::uint32>(getTotalNumInputChannels()) });
+    a440Oscillator.prepare({ sampleRate,
+                             static_cast<juce::uint32>(samplesPerBlock),
+                             static_cast<juce::uint32>(getChannelCountOfBus(false, 0)) });
     
 }
 
@@ -358,22 +348,25 @@ void MoogMiniAudioProcessor::releaseResources()
 #ifndef JucePlugin_PreferredChannelConfigurations
 bool MoogMiniAudioProcessor::isBusesLayoutSupported (const BusesLayout& layouts) const
 {
-#if JucePlugin_IsMidiEffect
-    juce::ignoreUnused (layouts);
-    return true;
-#else
-    if (layouts.getMainOutputChannelSet() != juce::AudioChannelSet::mono()
-        && layouts.getMainOutputChannelSet() != juce::AudioChannelSet::stereo())
+    if (layouts.inputBuses.size() != 1 || layouts.outputBuses.size() != 2)
         return false;
-    
-    // This checks if the input layout matches the output layout
-#if ! JucePlugin_IsSynth
-    if (layouts.getMainOutputChannelSet() != layouts.getMainInputChannelSet())
-        return false;
-#endif
-    
-    return true;
-#endif
+
+    const std::array mainLayouts {
+        juce::AudioChannelSet::mono(), juce::AudioChannelSet::stereo()
+    };
+    const std::array optionalLayouts {
+        juce::AudioChannelSet::disabled(),
+        juce::AudioChannelSet::mono(),
+        juce::AudioChannelSet::stereo()
+    };
+    const auto matches = [] (const juce::AudioChannelSet& layout, const auto& table)
+    {
+        return std::find (table.begin(), table.end(), layout) != table.end();
+    };
+
+    return matches (layouts.outputBuses[0], mainLayouts)
+        && matches (layouts.inputBuses[0], optionalLayouts)
+        && matches (layouts.outputBuses[1], optionalLayouts);
 }
 #endif
 
@@ -409,19 +402,19 @@ float MoogMiniAudioProcessor::generateRedNoise() {
 }
 
 float MoogMiniAudioProcessor::normalizedToMilliseconds(float normalizedValue) {
-    float milliseconds;
     if(normalizedValue == 0){
-        return 0.01 * 10000;
+        return 0.01f * 10000.0f;
     } else {
-        return normalizedValue * 10000;
+        return normalizedValue * 10000.0f;
     }
     
 }
 void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
-    auto totalNumInputChannels = getTotalNumInputChannels();
-    auto totalNumOutputChannels = getTotalNumOutputChannels();
+    auto externalInput = getBusBuffer (buffer, true, 0);
+    auto mainOutput = getBusBuffer (buffer, false, 0);
+    auto phonesOutput = getBusBuffer (buffer, false, 1);
     
     // Merge incoming MIDI messages at the beginning of the processing block
     {
@@ -431,22 +424,23 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     }
     
     // Calculate elapsed time in seconds for this block
-    float elapsedTime = buffer.getNumSamples() / getSampleRate();
+    const float elapsedTime = static_cast<float>(
+        static_cast<double>(buffer.getNumSamples()) / getSampleRate());
     logTimer += elapsedTime;
     
     // Retrieve parameter values
-    int waveformSelectionOsc1 = *apvts.getRawParameterValue("osc1Waveform");
-    int waveformSelectionOsc2 = *apvts.getRawParameterValue("osc2Waveform");
-    int waveformSelectionOsc3 = *apvts.getRawParameterValue("osc3Waveform");
-    int rangeSelectionOsc1 = *apvts.getRawParameterValue("osc1Range");
-    int rangeSelectionOsc2 = *apvts.getRawParameterValue("osc2Range");
-    int rangeSelectionOsc3 = *apvts.getRawParameterValue("osc3Range");
-    int freqSelectionOsc2 = *apvts.getRawParameterValue("osc2Freq");
-    int freqSelectionOsc3 = *apvts.getRawParameterValue("osc3Freq");
-    int volSelectionOsc1 = *apvts.getRawParameterValue("osc1Vol");
-    int volSelectionOsc2 = *apvts.getRawParameterValue("osc2Vol");
-    int volSelectionOsc3 = *apvts.getRawParameterValue("osc3Vol");
-    int tuneSelectionOsc1 = *apvts.getRawParameterValue("tune");
+    const int waveformSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("osc1Waveform")->load());
+    const int waveformSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Waveform")->load());
+    const int waveformSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Waveform")->load());
+    const int rangeSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("osc1Range")->load());
+    const int rangeSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Range")->load());
+    const int rangeSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Range")->load());
+    const int freqSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Freq")->load());
+    const int freqSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Freq")->load());
+    const int volSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("osc1Vol")->load());
+    const int volSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Vol")->load());
+    const int volSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Vol")->load());
+    const int tuneSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("tune")->load());
     
     bool osc1OnOff = *apvts.getRawParameterValue("osc1OnOff");
     bool osc2OnOff = *apvts.getRawParameterValue("osc2OnOff");
@@ -455,13 +449,13 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     
     bool whitePink = *apvts.getRawParameterValue("whitePinkSwitch");
     bool noiseOnOff = *apvts.getRawParameterValue("noiseOnOffSwitch");
-    int noiseVolume = *apvts.getRawParameterValue("noiseVolKnob");
+    const int noiseVolume = static_cast<int>(apvts.getRawParameterValue("noiseVolKnob")->load());
     bool extInputOn = *apvts.getRawParameterValue("extInputVolSwitch");
-    int extInputVolLevel = *apvts.getRawParameterValue("extInputVolKnob");
+    const int extInputVolLevel = static_cast<int>(apvts.getRawParameterValue("extInputVolKnob")->load());
     
     float filterCutoffValue = mapFilterCutoffValueToFrequency(*apvts.getRawParameterValue("filterCutoff"));
-    int filterEmphasisValue = *apvts.getRawParameterValue("filterEmphasis");
-    int filterContourValue = *apvts.getRawParameterValue("filterContour");
+    const int filterEmphasisValue = static_cast<int>(apvts.getRawParameterValue("filterEmphasis")->load());
+    const int filterContourValue = static_cast<int>(apvts.getRawParameterValue("filterContour")->load());
     float filterAttackTimeValue = *apvts.getRawParameterValue("filterAttackTimeKnob");
     float filterAttackTimeMilliseconds = normalizedToMilliseconds(filterAttackTimeValue);
     float filterDecayTimeValue = *apvts.getRawParameterValue("filterDecayTimeKnob");
@@ -483,11 +477,11 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     float osc3ModulationValue = *apvts.getRawParameterValue("modWheelValue");
     bool oscModSwitchValue = *apvts.getRawParameterValue("oscModSwitch");
     
-    int modulationMixLevel = *apvts.getRawParameterValue("ctrlModMixKnob");
-    int outputVolLevel = *apvts.getRawParameterValue("outputVolKnob");
+    const int modulationMixLevel = static_cast<int>(apvts.getRawParameterValue("ctrlModMixKnob")->load());
+    const int outputVolLevel = static_cast<int>(apvts.getRawParameterValue("outputVolKnob")->load());
     
     bool glideSwitchValue = *apvts.getRawParameterValue("glideSwitch");
-    int glideValue = *apvts.getRawParameterValue("ctrlGlideKnob");
+    const int glideValue = static_cast<int>(apvts.getRawParameterValue("ctrlGlideKnob")->load());
     
     float pitchWheelValue = *apvts.getRawParameterValue("pitchWheelValue");
     
@@ -498,7 +492,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     ladderFilter.setCutoffFrequency(filterCutoffValue);
     ladderFilter.setResonance(static_cast<float>(filterEmphasisValue) / 10.0f); // Assuming range 0-10
     ladderFilter.setEnvelopeAmount(static_cast<float>(filterContourValue) / 10.0f); // Assuming range 0-10
-    ladderFilter.setSampleRate(getSampleRate());
+    ladderFilter.setSampleRate(static_cast<float>(getSampleRate()));
     ladderFilter.setFeedback(feedbackValue);
     const float contourSustainLevel = decaySwitchValue ? (loudnessSustainTimeValue / 10.0f) : 1.0f;
     const float loudnessSustainLevel = decaySwitchValue ? (filterSustainTimeValue / 10.0f) : 1.0f;
@@ -535,7 +529,8 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     const float keyTrackingAmount =
         (keyboardCtrlSwitch1Value ? (1.0f / 3.0f) : 0.0f)
         + (keyboardCtrlSwitch2Value ? (2.0f / 3.0f) : 0.0f);
-    const float referenceFrequency = juce::MidiMessage::getMidiNoteInHertz(referenceNote);
+    const float referenceFrequency = static_cast<float>(
+        juce::MidiMessage::getMidiNoteInHertz(referenceNote));
     
     
     for (const auto midiMessage : midiMessages)
@@ -547,9 +542,11 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             // Handle note on
             currentNoteNumber = message.getNoteNumber(); // Update current note number
             
-            float frequency = juce::MidiMessage::getMidiNoteInHertz(currentNoteNumber);
+            const float frequency = static_cast<float>(
+                juce::MidiMessage::getMidiNoteInHertz(currentNoteNumber));
             
-            float newFrequency = juce::MidiMessage::getMidiNoteInHertz(message.getNoteNumber());
+            const float newFrequency = static_cast<float>(
+                juce::MidiMessage::getMidiNoteInHertz(message.getNoteNumber()));
             if (glideSwitchValue && newFrequency != currentGlideFrequency) {
                 targetFrequency = newFrequency;
                 isGlideActive = true;
@@ -626,8 +623,10 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     const float noiseScale = 1.0f / (noiseVolumeScalingFactor * 10.0f);
 
     int stageWriteIndex = stageBufferWriteIndex.load(std::memory_order_relaxed);
-    const float* inputLeft = totalNumInputChannels > 0 ? buffer.getReadPointer(0) : nullptr;
-    const float* inputRight = totalNumInputChannels > 1 ? buffer.getReadPointer(1) : inputLeft;
+    const float* inputLeft = externalInput.getNumChannels() > 0
+                           ? externalInput.getReadPointer(0) : nullptr;
+    const float* inputRight = externalInput.getNumChannels() > 1
+                            ? externalInput.getReadPointer(1) : inputLeft;
 
     for (int sampleIndex = 0; sampleIndex < buffer.getNumSamples(); ++sampleIndex)
     {
@@ -669,7 +668,8 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                 currentGlideFrequency = targetFrequency;
                 isGlideActive = false;
             } else {
-                float glideStep = (targetFrequency - currentGlideFrequency) / (glideRate * getSampleRate());
+                const float glideStep = (targetFrequency - currentGlideFrequency)
+                    / (glideRate * static_cast<float>(getSampleRate()));
                 currentGlideFrequency += glideStep;
                 
                 if ((glideStep > 0 && currentGlideFrequency >= targetFrequency) ||
@@ -780,11 +780,12 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         sampleRight *= outputVolLevel;
         outputPeak = juce::jmax(outputPeak, std::abs(sampleLeft) * mixScale);
         
-        // Write the processed samples to each channel in the buffer
-        buffer.getWritePointer(0)[sampleIndex] = sampleLeft;
-        if (totalNumOutputChannels > 1) {
-            buffer.getWritePointer(1)[sampleIndex] = sampleRight;
-        }
+        // The engine is mono. Render it as mono or dual mono to the named output buses.
+        for (int channel = 0; channel < mainOutput.getNumChannels(); ++channel)
+            mainOutput.getWritePointer(channel)[sampleIndex] = sampleLeft;
+
+        for (int channel = 0; channel < phonesOutput.getNumChannels(); ++channel)
+            phonesOutput.getWritePointer(channel)[sampleIndex] = sampleLeft;
         
         // Write to circular buffer for oscilloscope display
         circularBuffer.write(sampleLeft, sampleRight); // Assuming circularBuffer.write() is modified for stereo

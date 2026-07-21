@@ -41,7 +41,7 @@ private:
     bool isBlackKey;
        int midiNoteNumber;
        Listener* listener;
-    bool isKeyPressed;
+    bool isKeyPressed = false;
 };
 
 
