@@ -1,6 +1,6 @@
 # Workstream 02 Dependency and License Review
 
-Captured: 2026-07-19; owner-decision gate refreshed 2026-07-21 on
+Captured: 2026-07-19; product-owner decision approved 2026-07-21 on
 `codex/workstream-02-build`.
 
 ## Resolved dependency
@@ -29,21 +29,44 @@ including the AudioUnit SDK (Apache 2.0), VST3 SDK (Steinberg proprietary or
 GPLv3 terms), image/font/codec libraries under permissive licences, and other
 SDKs that are not enabled by this project.
 
-This record does not select a licence on the product owner's behalf. Before any
-binary distribution, the owner must either document AGPLv3 compliance for the
-whole combined work or confirm an applicable commercial JUCE licence, and must
-review the notices/terms for the JUCE modules and embedded SDK code actually
-linked into each platform artifact. The project currently has no distribution
-approval and `SYNTH_VALIDATE_DISTRIBUTION_IDENTITY=ON` fails independently on
-the placeholder identity.
+### Product-owner decision
 
-Agent 04's [continuation preflight](agent-04-continuation-preflight.md) found no
-licensing selection or approved notice set in the supplied package, live
-repository, remote branch, or draft-PR context. The required owner record must
-select `AGPLv3` or `commercial JUCE`, document the applicable compliance or
-entitlement basis without exposing credentials, and approve the notices for
-the linked JUCE/SDK code in each distributed platform artifact. The decision
-remains not supplied.
+On 2026-07-21, the product owner selected and approved the **commercial JUCE 8
+Starter** path rather than AGPLv3. The approved entitlement basis is the
+owner's attestation that:
+
+- the owner is an individual product owner;
+- JUCE-related revenue or funding during the previous 12 months is below the
+  Starter threshold of USD 20,000;
+- the project may use the no-fee Starter tier while that basis remains true;
+- the owner will upgrade to the appropriate JUCE tier if the threshold is
+  exceeded; and
+- the applicable JUCE and linked-dependency notices may be retained and
+  distributed with the product.
+
+This records the owner's licensing-path decision without storing account
+credentials or claiming that the repository itself grants a JUCE licence.
+Eligibility must be rechecked before a distribution and whenever the owner's
+revenue/funding basis changes.
+
+The controlling references reviewed for this record are the official
+[JUCE 8 EULA](https://juce.com/legal/juce-8-licence/) and the exact pinned
+[JUCE dependency/licence inventory](https://raw.githubusercontent.com/juce-framework/JUCE/3af3ce009f6a02f6fa651008fffb5b41743a9fab/LICENSE.md),
+both accessed 2026-07-21.
+
+### Required notice handling
+
+For every distributed platform artifact, preserve applicable JUCE copyright,
+trademark, and other proprietary notices, and include the notices or licence
+texts required for third-party code actually linked or redistributed in that
+artifact. Determine that platform-specific set from the pinned JUCE
+`LICENSE.md` inventory and the final linked payload; do not represent SDKs that
+are disabled or validation-only tools as shipped dependencies. Keep the notice
+bundle with the corresponding release evidence.
+
+This decision closes the BLD-003 dependency/licensing review. It does not
+approve a legal product identity, establish distribution history, or override
+the independent BLD-007, BLD-011, and BLD-012 release gates.
 
 pluginval 1.0.4 is a validation-only executable. It is provisioned outside the
 staged product, cryptographically recorded, and is not packaged into MiniMoog.
@@ -61,6 +84,6 @@ tools rather than project payloads in the development stage.
   and hashed reports; pluginval is not a staged product.
 
 Supported hosted configurations reproduce the exact dependency result in run
-`29728203657`. BLD-003 remains `in-progress` solely because the reviewed owner
-licensing decision and required notice set are absent. This report records the
-local licence inventory; it does not grant or certify distribution rights.
+`29728203657`. With the product-owner decision and notice policy recorded above,
+BLD-003 is `pass`. This report records the dependency review and approved path;
+it does not independently grant or certify distribution rights.

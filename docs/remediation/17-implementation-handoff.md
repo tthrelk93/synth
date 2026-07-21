@@ -11,16 +11,16 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 | Field | Current value |
 |---|---|
 | Prepared | 2026-07-21 |
-| Current owner | Agent 04 |
+| Current owner | Agent 05 |
 | Roadmap phase | F0 — reproducible baseline |
 | Workstream | 02 — Build, Packaging, and Host Validation |
-| Overall status | in-progress; exact implementation run `29728203657` passes all eight supported rows; the Agent 04 refresh found no new owner decision or external-host input, so BLD-001/002/004/005/008/009/010 pass, BLD-003/006/012 remain in progress, and BLD-007/011 are externally blocked |
+| Overall status | in-progress; exact implementation run `29728203657` passes all eight supported rows, and the 2026-07-21 owner approval promotes BLD-003, so BLD-001–005/008–010 pass, BLD-006/012 remain in progress, and BLD-007/011 are externally blocked |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
-| Source prompt | Agent 04 continuation package; durable current results are in the [Agent 03 recovery report](evidence/workstream-02/agent-03-hosted-ci-recovery.md) and [Agent 04 continuation preflight](evidence/workstream-02/agent-04-continuation-preflight.md). |
-| Successor package | Planned untracked artifact `Agent-05-Workstream-02-Continuation-Context.zip`; build it from the final Agent 04 ledger commit and report its outer SHA-256 after construction. |
-| First action | Obtain and record the product owner's BLD-003 JUCE distribution-licensing decision and required notices; do not alter legal identity or claim distribution approval without the separately reviewed BLD-007 inputs. |
-| First unmet gate | BLD-003 — documented product-owner JUCE distribution-licensing decision |
+| Source prompt | Agent 05 continuation package plus the product owner's direct 2026-07-21 JUCE Starter approval; durable current results are in the [Agent 03 recovery report](evidence/workstream-02/agent-03-hosted-ci-recovery.md), [Agent 04 continuation preflight](evidence/workstream-02/agent-04-continuation-preflight.md), and [dependency/license decision](evidence/workstream-02/dependency-license-review.md#product-owner-decision). |
+| Successor package | Planned untracked artifact `Agent-06-Workstream-02-Continuation-Context.zip`; build it from the final Agent 05 ledger commit and report its outer SHA-256 after construction. |
+| First action | Obtain the required commercial-host access and record BLD-006 category/menu-placement evidence; do not alter legal identity or claim distribution approval without the separately reviewed BLD-007 inputs. |
+| First unmet gate | BLD-006 — commercial-host category/menu-placement confirmation |
 | Next owner if incomplete | Workstream 02 / F0 continuation at the first dependency-ordered non-passing BLD requirement |
 | Next owner if complete | Workstream 03 / F0 successor; verify Workstream 02 seams, then begin the parameter/state contract. |
 
@@ -32,7 +32,7 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 |---|---|---|---|
 | BLD-001 | pass | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact run `29728203657` passes fresh configure and strict all-target builds on all eight supported rows; full logs/uploads are checksum-retained. |
 | BLD-002 | pass | [Build foundation](evidence/workstream-02/build-foundation.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | The all-green matrix proves supported CMake is independent of Projucer, generated paths, `JUCE_DIR`, and machine-specific dependencies. |
-| BLD-003 | in-progress | [Dependency/license review](evidence/workstream-02/dependency-license-review.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 04 preflight](evidence/workstream-02/agent-04-continuation-preflight.md) | Exact JUCE resolution passes everywhere; the current refresh found no product-owner distribution-licensing decision or approved notice set. |
+| BLD-003 | pass | [Dependency/license review and owner decision](evidence/workstream-02/dependency-license-review.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Exact JUCE resolution passes everywhere; the owner selected the no-fee commercial JUCE 8 Starter path, attested to the applicable individual-owner revenue/funding basis, accepted the upgrade obligation, and approved applicable notices. |
 | BLD-004 | pass | [README clean-clone evidence](evidence/workstream-02/ctest-ci-enforcement.md#readme-clean-clone-proof) | All five committed commands pass verbatim from a fresh clone and the matching supported hosted workflow is green. |
 | BLD-005 | pass | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 02 continuation](evidence/workstream-02/continuation-preflight.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | Every exact-head row proves the one-instrument/no-effect artifact and passing actual-wrapper/pluginval contract. |
 | BLD-006 | in-progress | [Wrapper and bus contract](evidence/workstream-02/wrapper-bus-contract.md) · [Validation](evidence/workstream-02/validation-evidence.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 04 preflight](evidence/workstream-02/agent-04-continuation-preflight.md) | Generated categories, buses, actual-wrapper, pluginval, and ephemeral hosted auval pass; required commercial-host category/menu confirmation remains. |
@@ -47,13 +47,13 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 
 | Category | Details |
 |---|---|
-| Starting branch/commit | Overall baseline `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; Agent 04 resumed `codex/workstream-02-build` at `6e5289d774826a73222700d234e5303e40957223`. |
-| Ending commit/working tree | Final hosted-verified implementation tip remains `ff7b3693c2b92e139d3f6d544f35f254e787fcf9`; the Agent 04 ending ledger is the commit containing its history entry. Only preserved predecessor context inputs, the supplied Agent 04 ZIP, and the verified Agent 05 successor ZIP remain untracked after cleanup. |
-| Pre-existing changes | Agent 04 preserves the Agent 01 through Agent 04 continuation ZIPs and predecessor extracted orientation copies without staging or modification. |
+| Starting branch/commit | Overall baseline `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; Agent 05 resumed `codex/workstream-02-build` at `1a567673fd62eb60380aea50c8b5085577a1cad3`. |
+| Ending commit/working tree | Final hosted-verified implementation tip remains `ff7b3693c2b92e139d3f6d544f35f254e787fcf9`; the Agent 05 ending ledger is the commit containing its history entry. Only preserved predecessor context inputs and the verified Agent 06 successor ZIP remain untracked after cleanup. |
+| Pre-existing changes | Agent 05 preserves the Agent 01 through Agent 05 continuation ZIPs and predecessor extracted orientation copies without staging or modification. |
 | Implementation files changed | Earlier implementation remains `42d42c2`–`a42ec79`. Agent 03 commits `ddbb50e`–`ff7b369` fix MSVC/GCC warning portability, arm64 parameter initialization, Windows/Linux/macOS lifecycle determinism, verified Linux display/WM ownership, safe validator provisioning/editor teardown, and bounded cross-generator format/report/evidence inventories. |
-| Planning files changed | Agent 04 adds a continuation preflight and synchronizes the roadmap owner, BLD traceability evidence, Workstream 02 status/evidence, dependency-license decision gate, and this canonical handoff without changing implementation. |
+| Planning files changed | Agent 05 records the approved JUCE 8 Starter entitlement basis and notice policy, promotes BLD-003 to `pass`, and synchronizes roadmap ownership, traceability, Workstream 02, and this canonical handoff without changing implementation. |
 | Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md); [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md); [hosted CI execution](evidence/workstream-02/hosted-ci-execution.md); [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md); [Agent 04 continuation preflight](evidence/workstream-02/agent-04-continuation-preflight.md). |
-| Temporary scaffolding | Agent 04 extracted the supplied package into a bounded `/tmp/synth-agent04.*` directory for manifest verification and uses bounded successor construction/extraction directories. Predecessor context copies remain orientation inputs, not implementation sources; Agent 03's retained hosted evidence and recovery paths remain untouched. |
+| Temporary scaffolding | Agent 05 uses bounded successor construction/extraction directories only. Predecessor context copies remain orientation inputs, not implementation sources; Agent 03's retained hosted evidence and recovery paths remain untouched. |
 
 ## Verification ledger
 
@@ -77,18 +77,19 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-19 20:35 PDT; GitHub-hosted recovery plus Agent 03 macOS arm64 | Reopen draft PR after official Actions recovery; retain run `29714998121` logs/uploads; diagnose MSVC/GCC/curl/lifecycle failures; add editor parameter-preservation regression; fresh strict build/CTest/labels/lifecycle/linked validation | All eight hosted rows execute: Intel macOS passes; Windows/Linux portability and arm64 startup-state failures are root-caused. Standard π/narrowing, warning hygiene, propagated JUCE definitions, and authoritative pre-listener slider initialization are locally green; corrective hosted matrix remains. | [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | BLD-001–003, BLD-005–006, BLD-008–012 |
 | 2026-07-20 01:44 PDT; exact implementation `ff7b369`; hosted eight-row matrix plus macOS arm64 Debug/Release | Run strict all-target builds; 9/9 CTest; every fail-on-zero label; standalone gate; actual-wrapper/pluginval/auval; linked-manifest verification; retain all logs/uploads; `shasum -c`; locally exercise two cache-provided report paths and restore empty cache | Run `29728203657` passes every platform-applicable required step in all eight rows; the raw sentinel alone skips. Eight uploads, eight job logs, combined log, metadata, and 354-file checksum index verify. Local ordinary and linked staging pass with explicit report paths and after restoration. | [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) | BLD-001–003, BLD-005–006, BLD-008–012 |
 | 2026-07-21 10:49 PDT; Agent 04; unchanged exact handoff commit `6e5289d` | Verify Agent 04 package manifest; fetch and compare local/remote branch; inspect draft PR comments/reviews; refresh product identity, tags/releases, AU registration, SDK-validator commands, and standard host locations | Package and repository preflight pass; no new owner licensing/identity/distribution input or external validator/host access exists. No BLD status changes and no implementation rerun is warranted at unchanged head. | [Agent 04 continuation preflight](evidence/workstream-02/agent-04-continuation-preflight.md) | BLD-003, BLD-006–007, BLD-011–012 |
+| 2026-07-21 12:04 PDT; Agent 05; product-owner attestation | Record the owner's selected JUCE path, eligibility basis, upgrade obligation, and approved notice handling; reconcile the BLD-003 evidence/status across the planning ledgers | Owner selected the no-fee commercial JUCE 8 Starter path as an individual below USD 20,000 JUCE-related prior-12-month revenue/funding. Exact dependency verification was already green, so BLD-003 advances to `pass`; no identity or distribution claim is inferred. | [Dependency/license review and owner decision](evidence/workstream-02/dependency-license-review.md#product-owner-decision) | BLD-003 |
 
 ## Decisions, assumptions, and blockers
 
 - No repository, reachable-history, GitHub release/tag, local artifact, or installed plug-in evidence indicates that a binary shipped, but absence of that evidence is not proof of no historical distribution. Product-owner confirmation is still required.
 - No approved legal manufacturer name, four-character manufacturer code, product code, or reverse-DNS domain exists in the supplied evidence. BLD-007 and distribution manifests are blocked until those inputs are reviewed; current generated values are unsupported placeholders and will not be treated as product identity.
 - `pluginval` 1.0.4 was provisioned/verified and passes locally. `auval` 1.10.0 is available but the AU is not registered; the non-mutating local helper intentionally did not install it. Logic Pro, Ableton Live, REAPER, Cubase/Nuendo, and a Steinberg VST3 SDK validator are unavailable, so those gates are blocked or `not-run`.
-- JUCE's exact pinned licence inventory was reviewed locally. The product owner must select/document the applicable AGPLv3 or commercial JUCE licensing path and required linked-dependency notices before distribution.
+- JUCE's exact pinned licence inventory was reviewed locally. On 2026-07-21, the product owner selected the no-fee commercial JUCE 8 Starter path, attested to the individual-owner eligibility basis below USD 20,000 in prior-12-month JUCE-related revenue/funding, accepted the upgrade obligation, and approved applicable JUCE/linked-dependency notice handling.
 - The fixed product, compatibility, phase, and evidence policies remain those in the roadmap and Workstream 02.
 - A missing reviewed legal identity blocks BLD-007 and any distribution artifact that depends on it; it is not permission to invent values.
 - Early lifecycle diagnostics exposed two pre-existing unconditional user writes. The newly created real settings file and Desktop log were moved recoverably to `/tmp/model-d-task7-settings-recovery.q2FbjJ/MiniMoog.settings` and `/tmp/model-d-task7-desktop-log-recovery.mRiFyV/my_plugin_log.txt`; the original user locations are absent. No pre-existing file was overwritten or deleted.
-- The product owner supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. The Actions incident recovered; the complete diagnostic chain is retained, and exact implementation run `29728203657` passes all eight supported rows. This does not supply legal identity, distribution history, a JUCE licensing choice, SDK-validator access, or commercial-host access.
-- Agent 04's package/repository/PR refresh found no later owner or access input. The licensing path and notice set remain owner decisions; the agent does not infer them from the green build or choose them as a legal conclusion.
+- The product owner supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. The Actions incident recovered; the complete diagnostic chain is retained, and exact implementation run `29728203657` passes all eight supported rows. That authority does not supply legal identity, distribution history, SDK-validator access, or commercial-host access.
+- The JUCE licensing approval closes BLD-003 only. BLD-007 still requires separate owner identity/distribution-history input, and BLD-011/012 remain gated by designated external tools, hosts, and release evidence.
 
 ## Successor handoff package protocol
 
@@ -124,14 +125,14 @@ assistant response reports the outer ZIP SHA-256. The successor's
 All independent implementation and supported hosted verification through
 BLD-012 is complete. The branch and draft PR are published, exact implementation
 run `29728203657` passes all eight rows, and its complete evidence is retained.
-Resume with the first dependency-ordered non-passing requirement, BLD-003:
-obtain and record the product owner's JUCE distribution-licensing decision and
-required notices.
+Resume with the first dependency-ordered non-passing requirement, BLD-006:
+obtain required commercial-host access and retain category/menu-placement
+confirmation for the fixed VST3 `Instrument|Synth` and AU `aumu` identities.
 Do not install anything into a real user account without separate appropriate
 authority.
 
 In parallel, obtain the product owner's distribution-history and legal identity
-decision for `cmake/ProductIdentity.cmake`, plus the JUCE licensing decision.
+decision for `cmake/ProductIdentity.cmake`.
 For BLD-011, supply an ephemeral AU-registered macOS account, the Steinberg VST3
 SDK validator executable, and the required commercial hosts, then execute the
 fixed `validation/required-host-matrix.json` checks and regenerate
@@ -249,6 +250,25 @@ targets, wrapper/bus contract, and CTest seams.
 - **Successor package:** `Agent-05-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct from this exact ending ledger commit and verify integrity, safe paths, symlink absence, fresh extraction, internal hashes, and source equality before reporting its outer SHA-256.
 - **First unmet gate:** BLD-003 — obtain and document the product owner's applicable AGPLv3 or commercial JUCE distribution path and approved notice set.
 - **Exact resumption point:** after receiving the owner record, update `docs/remediation/evidence/workstream-02/dependency-license-review.md` and synchronize the BLD-003 rows. Do not edit `cmake/ProductIdentity.cmake` unless the separate BLD-007 legal identity/history inputs are also reviewed.
+- **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
+
+### 2026-07-21 12:04 PDT — Agent 05 JUCE Starter decision handoff
+
+- **From / to:** Agent 05 / Agent 06 Workstream 02 continuation plus product owner.
+- **Branch and commits:** resumed `codex/workstream-02-build` at `1a567673fd62eb60380aea50c8b5085577a1cad3`; no implementation code changed; the ending documentation/evidence ledger is the commit containing this entry.
+- **Pre-existing changes preserved:** the Agent 01 through Agent 05 continuation ZIPs and predecessor extracted orientation copies remain untracked, unstaged, and unmodified.
+- **Phase/workstream/status:** F0 / Workstream 02 / incomplete on external owner identity/history and unavailable validator/host access. BLD-001–005/008–010 pass; BLD-006/012 remain in progress; BLD-007/011 remain blocked.
+- **Requirements:** BLD-003 advances to `pass` because exact JUCE pin/mismatch evidence was already green and the owner supplied the missing commercial JUCE 8 Starter path, individual-owner eligibility basis, upgrade obligation, and notice approval. BLD-006 still requires commercial-host category/menu confirmation; BLD-007 still requires distribution history and approved legal identity; BLD-011 still requires the designated-account AU, SDK validator, and commercial hosts; BLD-012 still depends on BLD-007/011.
+- **Implementation changes:** none; the hosted-verified implementation remains `ff7b3693c2b92e139d3f6d544f35f254e787fcf9`, and all frozen build/wrapper/bus/validation seams remain unchanged.
+- **Planning changes:** recorded the approved JUCE 8 Starter entitlement basis and required notice handling; promoted BLD-003 to `pass`; synchronized roadmap ownership, traceability evidence, Workstream 02 status, the current snapshot, verification ledger, blockers, resumption point, and this history entry.
+- **Commands and results:** `git diff --check`, the local Markdown-link audit, 12-row Workstream/handoff status comparison, 127-ID traceability cardinality check, and documentation-scope check pass. Implementation tests are not rerun because this is an owner-decision/documentation-only change and exact implementation run `29728203657` remains authoritative.
+- **Artifacts:** durable updated evidence is the [dependency/license review and product-owner decision](evidence/workstream-02/dependency-license-review.md#product-owner-decision). Exact run `29728203657` and Agent 03's retained 354-file checksum proof remain authoritative for dependency resolution and supported builds/validators.
+- **Decisions and assumptions:** the owner selected the no-fee commercial JUCE 8 Starter path as an individual whose JUCE-related revenue/funding during the previous 12 months is below USD 20,000, agreed to upgrade if the threshold is exceeded, and approved applicable notice retention/distribution. This does not supply legal identity, distribution history, host results, validator results, or general release approval.
+- **Blockers and known defects:** no known supported-build defect remains. The first gate is BLD-006 commercial-host category/menu placement. BLD-007 still requires reviewed owner identity/history, BLD-011 requires designated external account/tool/host access, and BLD-012 cannot become a distribution pass while BLD-007/011 remain non-passing.
+- **Temporary work/cleanup:** only bounded Agent 06 successor construction/extraction directories are agent-owned and are removed after verification. No build, validator, credential, user-setting, or recovery data is staged or packaged.
+- **Successor package:** `Agent-06-Workstream-02-Continuation-Context.zip`, intentionally untracked; construct from this exact ending ledger commit and verify integrity, safe paths, symlink absence, fresh extraction, internal hashes, and source equality before reporting its outer SHA-256.
+- **First unmet gate:** BLD-006 — obtain and retain required commercial-host category/menu-placement confirmation.
+- **Exact resumption point:** provide the required commercial hosts, execute the fixed `validation/required-host-matrix.json` category/menu checks for VST3 `Instrument|Synth` and AU `aumu`, retain the evidence, and reconcile BLD-006 without weakening the green matrix. Do not edit `cmake/ProductIdentity.cmake` without separate reviewed BLD-007 legal identity/history inputs.
 - **Next phase/workstream:** remain in Workstream 02 / F0. Do not begin Workstream 03 until every BLD requirement and Definition-of-Done item passes.
 
 ## Required template for every later handoff entry
