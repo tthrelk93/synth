@@ -319,5 +319,11 @@ Total Test time (real) = 35.22 sec
 
 Migration never swaps v0 contour values. Runtime crossed routing, the explicit
 static-value conversion command/undo, and automation warning UX remain Task
-3B. This task makes no contour DSP/UI routing change and introduces no preset
-schema, prepared snapshot, MIDI, wrapper, bus, identity, or DSP behavior.
+3B. Task 3B must also introduce a generation-bracketed prepared snapshot so
+audio processing cannot observe new APVTS parameter values paired with the old
+atomic contour contract during a restore publication. Task 3A's lock makes
+save/restore/canonical publication coherent, but audio parameter readers do not
+take that lock; this cross-generation DSP handoff is therefore explicitly not
+claimed here. This task makes no contour DSP/UI routing change and introduces
+no preset schema, prepared snapshot, MIDI, wrapper, bus, identity, or DSP
+behavior.

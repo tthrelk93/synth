@@ -45,15 +45,17 @@ shasum -a 256 /tmp/model-d-legacy-parameter-inventory.json \
 ctest -R '^ModelDLegacyParameterFixtures$' --output-on-failure
 ```
 
-On current sources, use `ModelDLegacyParameterFixtures` to verify the checked-in
-v0 fixtures and use the `capture-state-v2-*` modes documented in
-`state-v2-migration.md` for current production captures.
+On current sources, `ModelDLegacyParameterFixtures` validates the immutable file
+hashes, inventory schema and IDs, and static legacy XML shape/order. It does not
+instantiate the processor or serialize a legacy APVTS tree. The historical Task
+1 capture at repository commit `3206baa8e9f31f8f5f7299cf6301e9d3b5ef5992`
+provides the live-processor/raw-serializer evidence for those v0 artifacts.
 
-`ModelDLegacyParameterFixtures` has the existing `state` CTest label. It
-instantiates the real processor, canonicalizes and compares the host inventory,
-and compares both serialized XML trees with attribute and child order intact.
-Consequently any ID, host order, type, name, label, range, default, choice,
-flag, APVTS root, child order, or serialized value drift fails the test.
+Current `ModelDParameterRegistry` tests separately validate the live registry,
+host order, metadata, defaults, and flags. Current `ModelDStateV2Contract` tests
+validate v0-to-v2 migration through the production restore seam. Use the
+`capture-state-v2-*` modes documented in `state-v2-migration.md` for current
+production captures.
 
 ## Current ID use-site audit
 
