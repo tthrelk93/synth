@@ -55,7 +55,8 @@ fixtures, and migration record are changed together with explicit evidence:
 - every existing host parameter ID and the explicit legacy crossed-contour
   compatibility policy;
 - the seven required CTest labels and all currently passing build, lifecycle,
-  wrapper, manifest, and validator contracts.
+  wrapper, manifest, validator, product-identity, and dynamic AU workflow
+  contracts.
 
 ## Deferred Workstream 02 obligations
 

@@ -58,6 +58,45 @@ No commercial DAW, designated-user AU registration, local designated-account
 `auval`, or Steinberg SDK validator was run in this baseline. Their statuses
 remain deferred and non-passing.
 
+## Independent-review correction and final local verification
+
+An independent code review found two handoff defects after the initial identity
+baseline: hosted macOS CI still named `MiniMoog.component` literally, and the
+BLD-007 guard validated only approval, manufacturer name, and domain. Commit
+`a18444e8336626ecf5c627558454264f55d823ea` fixes both without changing DSP,
+parameters, state, buses, or wrapper topology.
+
+The CI workflow now discovers exactly one staged `AU/*.component`, derives its
+basename, refuses an overwrite, and permits cleanup only for a direct
+`*.component` child of the expected account-local Components directory. Its
+static lifecycle contract rejects the former literal name and requires the
+dynamic install/cleanup safety checks. `actionlint` 1.7.12 reports zero errors,
+and a bounded local simulation resolves and removes `TTH Model One.component`.
+
+Identity validation is now shared by distribution configure, staged-artifact
+verification, validation-manifest generation, and linked-manifest verification.
+The new negative configure suite proves rejection of empty/placeholder product
+and bundle values, a malformed domain, short or non-ASCII-alphanumeric codes,
+duplicate codes, reserved codes, and an unapproved identity.
+
+At 14:08 PDT, a fresh space-path macOS arm64 Release configure at the exact
+implementation commit above resolved the pinned JUCE revision and passed a
+warnings-as-errors all-target build. CTest passed 10/10 with label counts
+`unit=1`, `state=1`, `dsp=1`, `midi=1`, `realtime=1`, `host=2`, and
+`artifact=3`. Actual-wrapper and pluginval each passed 3/3; the linked manifest
+deep-verifier passed with identity aggregate `pass` and release aggregate
+`blocked`. Non-mutating local `auval` remained `blocked`, and the Steinberg SDK
+validator and commercial-host rows remained unrun.
+
+The resulting build-manifest SHA-256 is
+`722666e6c9faa46f9a29707d4a27218927f90cabeb9bf89286e93764c379cf2d`;
+the validation-manifest SHA-256 is
+`d18db83780b4fbd94e2d59dedafe42e99aff6aa7c4c00e15198a692791166ad0`;
+and the standalone-lifecycle report SHA-256 is
+`eff02934322455bc9020c75ad60ebdafdba44bf93f50a1333adbdba12c258e7b`.
+These reports are build-tree evidence; this document retains their reproducible
+commands, exact commit, outcomes, and hashes.
+
 ## Temporary external-validation deferral
 
 The owner authorized Workstream 03 to begin while commercial-host checks,
