@@ -83,6 +83,27 @@ file(READ "${SYNTH_SOURCE_ROOT}/cmake/RunPluginval.cmake" _pluginval_runner_sour
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/GenerateValidationManifest.cmake" _manifest_generator_source)
 file(READ "${SYNTH_SOURCE_ROOT}/cmake/VerifyValidationManifest.cmake" _manifest_verifier_source)
 file(READ "${SYNTH_SOURCE_ROOT}/.github/workflows/ci.yml" _ci_workflow_source)
+if(_ci_workflow_source MATCHES "MiniMoog[.]component")
+    message(FATAL_ERROR
+        "Hosted CI still hard-codes the superseded AU bundle name")
+endif()
+foreach(_au_install_contract IN ITEMS
+        "-name '*.component'"
+        "-path '*/AU/*.component'"
+        "component_name=$(basename -- \"$source_component\")"
+        "destination_component=\"$destination_root/$component_name\""
+        "installed_parent=$(dirname -- \"$installed_component\")"
+        "installed_name=$(basename -- \"$installed_component\")"
+        "\"$installed_parent\" != \"$destination_root\""
+        "\"$installed_name\" != *.component"
+        "rm -rf -- \"$installed_component\"")
+    string(FIND "${_ci_workflow_source}"
+           "${_au_install_contract}" _contract_position)
+    if(_contract_position LESS 0)
+        message(FATAL_ERROR
+            "Hosted CI is missing its dynamic AU install/cleanup contract: ${_au_install_contract}")
+    endif()
+endforeach()
 foreach(_virtual_display_contract IN ITEMS
         "Start verified Linux virtual display and window manager"
         "x11-utils"

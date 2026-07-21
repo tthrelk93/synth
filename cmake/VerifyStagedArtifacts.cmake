@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
+include("${CMAKE_CURRENT_LIST_DIR}/ValidateProductIdentity.cmake")
+
 if(DEFINED SYNTH_EXPECTED_FORMATS_FILE)
     if("${SYNTH_EXPECTED_FORMATS_FILE}" STREQUAL ""
        OR NOT EXISTS "${SYNTH_EXPECTED_FORMATS_FILE}")
@@ -98,18 +100,24 @@ if(NOT _schema_version STREQUAL "1")
     message(FATAL_ERROR "Unsupported staged artifact manifest schema: ${_schema_version}")
 endif()
 
-string(JSON _identity_approved GET "${_manifest}" identity identity_approved)
+string(JSON SYNTH_IDENTITY_APPROVED GET "${_manifest}" identity identity_approved)
 string(JSON _distribution_eligible GET "${_manifest}" identity distribution_eligible)
-string(JSON _manufacturer_name GET "${_manifest}" identity manufacturer_name)
-string(JSON _manufacturer_domain GET "${_manifest}" identity manufacturer_domain)
+string(JSON SYNTH_PRODUCT_NAME GET "${_manifest}" identity product_name)
+string(JSON SYNTH_MANUFACTURER_NAME GET "${_manifest}" identity manufacturer_name)
+string(JSON SYNTH_MANUFACTURER_DOMAIN GET "${_manifest}" identity manufacturer_domain)
+string(JSON SYNTH_BUNDLE_ID GET "${_manifest}" identity bundle_id)
+string(JSON SYNTH_MANUFACTURER_CODE GET "${_manifest}" identity manufacturer_code)
+string(JSON SYNTH_PRODUCT_CODE GET "${_manifest}" identity product_code)
 if(_distribution_eligible)
     message(FATAL_ERROR "Development staging manifest must remain non-distributable")
 endif()
-if((_manufacturer_name STREQUAL "" OR _manufacturer_name STREQUAL "yourcompany"
-    OR _manufacturer_domain STREQUAL "" OR _manufacturer_domain MATCHES "(^|\\.)yourcompany($|\\.)"
-    OR _manufacturer_domain MATCHES "(^|\\.)example\\.(com|net|org)$")
-   AND _identity_approved)
-    message(FATAL_ERROR "Placeholder identity cannot be recorded as approved")
+if(SYNTH_IDENTITY_APPROVED)
+    synth_collect_product_identity_errors(_identity_errors)
+    if(_identity_errors)
+        list(JOIN _identity_errors "; " _identity_error_text)
+        message(FATAL_ERROR
+            "Invalid identity cannot be recorded as approved: ${_identity_error_text}")
+    endif()
 endif()
 
 string(JSON _enabled_format_count LENGTH "${_manifest}" enabled_formats)

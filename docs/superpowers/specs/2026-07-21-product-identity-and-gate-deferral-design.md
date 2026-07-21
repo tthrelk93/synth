@@ -1,6 +1,6 @@
 # Product Identity and Temporary External-Gate Deferral Design
 
-Date: 2026-07-21  
+Date: 2026-07-21
 Owner approval: approved in the Agent 06 continuation conversation on 2026-07-21
 
 ## Purpose

@@ -64,5 +64,6 @@ relative paths and SHA-256 hashes.
 JUCE modules are dual-licensed under AGPLv3 and the commercial JUCE licence.
 The build pin and dependency inventory are recorded in
 `docs/remediation/evidence/workstream-02/dependency-license-review.md`; the
-project owner must confirm the applicable JUCE licensing path before
-distribution.
+owner selected the JUCE Starter plan for the current pre-revenue phase. That
+eligibility must be rechecked before distribution if the owner, funding, or
+revenue circumstances change.

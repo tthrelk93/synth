@@ -28,24 +28,18 @@ set(SYNTH_STAGE_ROOT "${CMAKE_BINARY_DIR}/development-stage" CACHE PATH
     "Root for non-distribution development artifact staging")
 set(SYNTH_TEST_REPORTS "" CACHE STRING
     "Semicolon-separated test reports beneath this build tree to declare in the development manifest")
+set(SYNTH_PRODUCT_IDENTITY_FILE
+    "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ProductIdentity.cmake" CACHE FILEPATH
+    "CMake file defining the product identity validated by the BLD-007 guard")
 
-include(cmake/ProductIdentity.cmake)
-
-set(_synth_identity_errors "")
-if(SYNTH_MANUFACTURER_NAME STREQUAL ""
-   OR SYNTH_MANUFACTURER_NAME STREQUAL "yourcompany")
-    list(APPEND _synth_identity_errors "manufacturer name is empty or placeholder")
+if(NOT EXISTS "${SYNTH_PRODUCT_IDENTITY_FILE}")
+    message(FATAL_ERROR
+        "SYNTH_PRODUCT_IDENTITY_FILE does not exist: ${SYNTH_PRODUCT_IDENTITY_FILE}")
 endif()
+include("${SYNTH_PRODUCT_IDENTITY_FILE}")
+include(cmake/ValidateProductIdentity.cmake)
 
-if(SYNTH_MANUFACTURER_DOMAIN STREQUAL ""
-   OR SYNTH_MANUFACTURER_DOMAIN MATCHES "(^|\\.)yourcompany($|\\.)"
-   OR SYNTH_MANUFACTURER_DOMAIN MATCHES "(^|\\.)example\\.(com|net|org)$")
-    list(APPEND _synth_identity_errors "reverse-DNS domain is empty or placeholder")
-endif()
-
-if(NOT SYNTH_IDENTITY_APPROVED)
-    list(APPEND _synth_identity_errors "identity is not approved")
-endif()
+synth_collect_product_identity_errors(_synth_identity_errors)
 
 if(SYNTH_VALIDATE_DISTRIBUTION_IDENTITY AND _synth_identity_errors)
     list(JOIN _synth_identity_errors "; " _synth_identity_error_text)
@@ -650,6 +644,15 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDMidiSampleZero midi midi)
     synth_add_model_d_test(ModelDRealtimeSmoke realtime realtime)
     synth_add_model_d_test(ModelDHostContract host host)
+
+    add_test(NAME ModelDProductIdentityContracts
+        COMMAND "${CMAKE_COMMAND}"
+                "-DSYNTH_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DSYNTH_CONTRACT_ROOT=${CMAKE_BINARY_DIR}/product-identity-contracts/$<CONFIG>"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/Tests/ProductIdentityContracts.cmake")
+    set_tests_properties(ModelDProductIdentityContracts PROPERTIES
+        LABELS artifact
+        TIMEOUT 120)
 
     if(SYNTH_BUILD_VALIDATORS)
         add_test(NAME ModelDStandaloneLifecycle

@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.24)
 
+include("${CMAKE_CURRENT_LIST_DIR}/ValidateProductIdentity.cmake")
+
 if(DEFINED SYNTH_EXPECTED_EVIDENCE_FILE)
     if("${SYNTH_EXPECTED_EVIDENCE_FILE}" STREQUAL ""
        OR NOT EXISTS "${SYNTH_EXPECTED_EVIDENCE_FILE}")
@@ -405,17 +407,21 @@ _synth_json_set_string(_validation_aggregate status "blocked")
 string(JSON _validation_aggregate SET "${_validation_aggregate}" reasons "${_validation_reasons}")
 set(_identity_aggregate "{}")
 set(_identity_reasons "[]")
-string(JSON _identity_approved GET "${_build_manifest}" identity identity_approved)
-string(JSON _identity_manufacturer GET "${_build_manifest}" identity manufacturer_name)
-string(JSON _identity_domain GET "${_build_manifest}" identity manufacturer_domain)
-if(_identity_approved
-   AND NOT _identity_manufacturer STREQUAL ""
-   AND NOT _identity_manufacturer STREQUAL "yourcompany"
-   AND NOT _identity_domain MATCHES "(^|\\.)yourcompany($|\\.)")
+string(JSON SYNTH_PRODUCT_NAME GET "${_build_manifest}" identity product_name)
+string(JSON SYNTH_MANUFACTURER_NAME GET "${_build_manifest}" identity manufacturer_name)
+string(JSON SYNTH_MANUFACTURER_DOMAIN GET "${_build_manifest}" identity manufacturer_domain)
+string(JSON SYNTH_BUNDLE_ID GET "${_build_manifest}" identity bundle_id)
+string(JSON SYNTH_MANUFACTURER_CODE GET "${_build_manifest}" identity manufacturer_code)
+string(JSON SYNTH_PRODUCT_CODE GET "${_build_manifest}" identity product_code)
+string(JSON SYNTH_IDENTITY_APPROVED GET "${_build_manifest}" identity identity_approved)
+synth_collect_product_identity_errors(_identity_errors)
+if(NOT _identity_errors)
     _synth_json_set_string(_identity_aggregate status "pass")
 else()
     _synth_json_set_string(_identity_aggregate status "blocked")
-    _synth_json_quote(_identity_reason "Product identity is unapproved/placeholder (BLD-007)")
+    list(JOIN _identity_errors "; " _identity_error_text)
+    _synth_json_quote(_identity_reason
+        "Product identity is invalid (BLD-007): ${_identity_error_text}")
     string(JSON _identity_reasons SET "${_identity_reasons}" 0 "${_identity_reason}")
 endif()
 string(JSON _identity_aggregate SET "${_identity_aggregate}" reasons "${_identity_reasons}")
