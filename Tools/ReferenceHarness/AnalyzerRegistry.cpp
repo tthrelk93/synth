@@ -29,10 +29,48 @@ MetricResult metric (const AnalyzerIdentity& analyzer,
     return { analyzer, std::move (name), std::move (unit), value, allowance, finite, settings };
 }
 
+bool safeDifference (const double left, const double right, double& result)
+{
+    const auto oppositeSigns = (left >= 0.0 && right < 0.0)
+                            || (left < 0.0 && right >= 0.0);
+    if (! oppositeSigns) {
+        result = left - right;
+        return std::isfinite (result);
+    }
+
+    const auto leftMagnitude = std::abs (left);
+    const auto rightMagnitude = std::abs (right);
+    if (leftMagnitude > std::numeric_limits<double>::max() - rightMagnitude)
+        return false;
+    const auto magnitude = leftMagnitude + rightMagnitude;
+    result = left >= 0.0 ? magnitude : -magnitude;
+    return true;
+}
+
+bool sanitizeMetrics (Metrics& metrics)
+{
+    const auto invalid = std::any_of (metrics.begin(), metrics.end(), [] (const auto& result) {
+        return ! std::isfinite (result.value) || ! std::isfinite (result.allowance);
+    });
+    if (! invalid)
+        return false;
+    for (auto& result : metrics) {
+        if (! std::isfinite (result.value))
+            result.value = 0.0;
+        if (! std::isfinite (result.allowance))
+            result.allowance = 0.0;
+        result.finite = false;
+    }
+    return true;
+}
+
 LoadResult<Metrics> selectMetric (Metrics metrics,
                                   const std::string_view requested,
                                   std::vector<Diagnostic> diagnostics = {})
 {
+    if (sanitizeMetrics (metrics) && diagnostics.empty())
+        diagnostics.push_back (
+            { "analyzer.overflow", "analyzer arithmetic exceeded the finite metric domain" });
     if (! requested.empty()) {
         const auto selected = std::find_if (metrics.begin(), metrics.end(), [&] (const auto& result) {
             return result.metric == requested;
@@ -75,32 +113,47 @@ LoadResult<Metrics> analyzeSignalStats (const AnalysisRequest& request)
     double mean = 0.0;
     double rms = 0.0;
     double maximumDifference = 0.0;
+    auto arithmeticOverflow = false;
     if (valid) {
         const auto bounds = std::minmax_element (samples.begin(), samples.end());
         minimum = *bounds.first;
         maximum = *bounds.second;
+        for (const auto sample : samples)
+            peak = std::max (peak, std::abs (sample));
+        double normalizedSum = 0.0;
+        double normalizedSquares = 0.0;
         for (size_t index = 0; index < samples.size(); ++index) {
-            peak = std::max (peak, std::abs (samples[index]));
-            mean += samples[index];
-            rms += samples[index] * samples[index];
-            if (index != 0)
-                maximumDifference = std::max (
-                    maximumDifference, std::abs (samples[index] - samples[index - 1]));
+            const auto normalized = peak == 0.0 ? 0.0 : samples[index] / peak;
+            normalizedSum += normalized;
+            normalizedSquares += normalized * normalized;
+            if (index != 0) {
+                double difference = 0.0;
+                if (! safeDifference (samples[index], samples[index - 1], difference)) {
+                    arithmeticOverflow = true;
+                } else {
+                    maximumDifference = std::max (maximumDifference, std::abs (difference));
+                }
+            }
         }
-        mean /= sampleCount;
-        rms = std::sqrt (rms / sampleCount);
+        const auto normalizedMean = std::clamp (normalizedSum / sampleCount, -1.0, 1.0);
+        const auto normalizedRms = std::sqrt (
+            std::clamp (normalizedSquares / sampleCount, 0.0, 1.0));
+        mean = peak * normalizedMean;
+        rms = peak * normalizedRms;
     }
+
+    const auto metricsValid = valid && ! arithmeticOverflow;
 
     Metrics metrics {
         metric (identity, "sample-count", "count", sampleCount, 0.0, true, settings),
         metric (identity, "finite-count", "count", finiteCount, 0.0, true, settings),
-        metric (identity, "minimum", "amplitude", minimum, 0.0, valid, settings),
-        metric (identity, "maximum", "amplitude", maximum, 0.0, valid, settings),
-        metric (identity, "peak-absolute", "amplitude", peak, 0.0, valid, settings),
-        metric (identity, "mean", "amplitude", mean, 0.0, valid, settings),
-        metric (identity, "rms", "amplitude", rms, 0.0, valid, settings),
+        metric (identity, "minimum", "amplitude", minimum, 0.0, metricsValid, settings),
+        metric (identity, "maximum", "amplitude", maximum, 0.0, metricsValid, settings),
+        metric (identity, "peak-absolute", "amplitude", peak, 0.0, metricsValid, settings),
+        metric (identity, "mean", "amplitude", mean, 0.0, metricsValid, settings),
+        metric (identity, "rms", "amplitude", rms, 0.0, metricsValid, settings),
         metric (identity, "maximum-first-difference", "amplitude/sample", maximumDifference,
-                0.0, valid, settings),
+                0.0, metricsValid, settings),
     };
     if (samples.empty())
         return selectMetric (std::move (metrics), request.metric,
@@ -108,6 +161,13 @@ LoadResult<Metrics> analyzeSignalStats (const AnalysisRequest& request)
     if (! valid)
         return selectMetric (std::move (metrics), request.metric,
                              { { "analyzer.non-finite", "signal input must contain only finite samples" } });
+    if (arithmeticOverflow) {
+        for (auto& result : metrics)
+            result.finite = false;
+        return selectMetric (
+            std::move (metrics), request.metric,
+            { { "analyzer.overflow", "signal differences exceed the finite metric domain" } });
+    }
     return selectMetric (std::move (metrics), request.metric);
 }
 
@@ -117,11 +177,14 @@ LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
     const auto finiteEndpoints = std::isfinite (request.start) && std::isfinite (request.target);
     double travel = 0.0;
     auto finiteTravel = false;
+    auto arithmeticOverflow = false;
     if (finiteEndpoints) {
-        const auto signedTravel = request.target - request.start;
-        finiteTravel = std::isfinite (signedTravel);
+        double signedTravel = 0.0;
+        finiteTravel = safeDifference (request.target, request.start, signedTravel);
         if (finiteTravel)
             travel = std::abs (signedTravel);
+        else
+            arithmeticOverflow = true;
     }
     const auto epsilonAllowance = 8.0 * std::numeric_limits<double>::epsilon()
                                 * std::max (1.0, travel);
@@ -135,51 +198,86 @@ LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
         { "settled", "first sample whose suffix remains within target allowance" },
     };
 
-    const auto valid = ! request.control.empty()
-                    && request.eventSample < request.control.size()
-                    && finiteEndpoints && finiteTravel
-                    && std::all_of (request.control.begin(), request.control.end(), [] (const auto value) {
-                           return std::isfinite (value);
-                       });
+    const auto inputValid = ! request.control.empty()
+                         && request.eventSample < request.control.size()
+                         && finiteEndpoints
+                         && std::all_of (request.control.begin(), request.control.end(), [] (const auto value) {
+                                return std::isfinite (value);
+                            });
     std::uint64_t firstChange = request.control.size();
     std::uint64_t settled = request.control.size();
     double monotonic = 0.0;
     double overshoot = 0.0;
     double maximumMovement = 0.0;
-    if (valid) {
+    if (inputValid && finiteTravel) {
         for (std::uint64_t sample = request.eventSample; sample < request.control.size(); ++sample) {
-            if (std::abs (request.control[static_cast<size_t> (sample)] - request.start)
-                > epsilonAllowance) {
+            double difference = 0.0;
+            if (! safeDifference (request.control[static_cast<size_t> (sample)],
+                                  request.start, difference)) {
+                arithmeticOverflow = true;
+                break;
+            }
+            if (std::abs (difference) > epsilonAllowance) {
                 firstChange = sample;
                 break;
             }
         }
-        for (std::uint64_t sample = request.eventSample; sample < request.control.size(); ++sample) {
-            const auto suffixSettled = std::all_of (
-                request.control.begin() + static_cast<std::ptrdiff_t> (sample),
-                request.control.end(), [&] (const auto value) {
-                    return std::abs (value - request.target) <= epsilonAllowance;
-                });
-            if (suffixSettled) {
-                settled = sample;
-                break;
+        if (! arithmeticOverflow) {
+            for (std::uint64_t sample = request.eventSample;
+                 sample < request.control.size(); ++sample) {
+                auto suffixSettled = true;
+                for (auto suffix = sample; suffix < request.control.size(); ++suffix) {
+                    double difference = 0.0;
+                    if (! safeDifference (request.control[static_cast<size_t> (suffix)],
+                                          request.target, difference)) {
+                        arithmeticOverflow = true;
+                        suffixSettled = false;
+                        break;
+                    }
+                    if (std::abs (difference) > epsilonAllowance) {
+                        suffixSettled = false;
+                        break;
+                    }
+                }
+                if (arithmeticOverflow)
+                    break;
+                if (suffixSettled) {
+                    settled = sample;
+                    break;
+                }
             }
         }
 
         const auto direction = request.target >= request.start ? 1.0 : -1.0;
         monotonic = 1.0;
-        for (size_t sample = 1; sample < request.control.size(); ++sample) {
-            const auto movement = request.control[sample] - request.control[sample - 1];
-            maximumMovement = std::max (maximumMovement, std::abs (movement));
-            if (sample >= request.eventSample && movement * direction < -epsilonAllowance)
-                monotonic = 0.0;
+        if (! arithmeticOverflow) {
+            for (size_t sample = 1; sample < request.control.size(); ++sample) {
+                double movement = 0.0;
+                if (! safeDifference (request.control[sample], request.control[sample - 1],
+                                      movement)) {
+                    arithmeticOverflow = true;
+                    break;
+                }
+                maximumMovement = std::max (maximumMovement, std::abs (movement));
+                if (sample >= request.eventSample && movement * direction < -epsilonAllowance)
+                    monotonic = 0.0;
+            }
         }
-        for (size_t sample = static_cast<size_t> (request.eventSample);
-             sample < request.control.size(); ++sample)
-            overshoot = std::max (overshoot,
-                                  (request.control[sample] - request.target) * direction);
-        overshoot = std::max (0.0, overshoot);
+        if (! arithmeticOverflow) {
+            for (size_t sample = static_cast<size_t> (request.eventSample);
+                 sample < request.control.size(); ++sample) {
+                double difference = 0.0;
+                if (! safeDifference (request.control[sample], request.target, difference)) {
+                    arithmeticOverflow = true;
+                    break;
+                }
+                overshoot = std::max (overshoot, difference * direction);
+            }
+            overshoot = std::max (0.0, overshoot);
+        }
     }
+
+    const auto valid = inputValid && finiteTravel && ! arithmeticOverflow;
 
     Metrics metrics {
         metric (identity, "first-change-sample", "samples", static_cast<double> (firstChange),
@@ -196,9 +294,16 @@ LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
     if (request.control.empty())
         return selectMetric (std::move (metrics), request.metric,
                              { { "analyzer.empty-input", "control input must not be empty" } });
-    if (! valid)
+    if (! inputValid)
         return selectMetric (std::move (metrics), request.metric,
                              { { "analyzer.non-finite", "control request and samples must be finite and in range" } });
+    if (arithmeticOverflow) {
+        for (auto& result : metrics)
+            result.finite = false;
+        return selectMetric (
+            std::move (metrics), request.metric,
+            { { "analyzer.overflow", "control differences exceed the finite metric domain" } });
+    }
     return selectMetric (std::move (metrics), request.metric);
 }
 
@@ -206,10 +311,19 @@ double rmsOf (const std::span<const float> audio, const size_t begin, const size
 {
     if (begin >= end)
         return 0.0;
-    double sumSquares = 0.0;
+    double scale = 0.0;
     for (size_t index = begin; index < end; ++index)
-        sumSquares += static_cast<double> (audio[index]) * static_cast<double> (audio[index]);
-    return std::sqrt (sumSquares / static_cast<double> (end - begin));
+        scale = std::max (scale, std::abs (static_cast<double> (audio[index])));
+    if (scale == 0.0)
+        return 0.0;
+    double normalizedSquares = 0.0;
+    for (size_t index = begin; index < end; ++index) {
+        const auto normalized = static_cast<double> (audio[index]) / scale;
+        normalizedSquares += normalized * normalized;
+    }
+    const auto normalizedRms = std::sqrt (std::clamp (
+        normalizedSquares / static_cast<double> (end - begin), 0.0, 1.0));
+    return scale * normalizedRms;
 }
 
 LoadResult<Metrics> analyzeAudioClick (const AnalysisRequest& request)
@@ -233,18 +347,22 @@ LoadResult<Metrics> analyzeAudioClick (const AnalysisRequest& request)
     double peakOverSteady = 0.0;
     if (valid) {
         const auto first = std::max<std::uint64_t> (1, request.eventSample);
-        const auto last = std::min<std::uint64_t> (
-            request.audio.size() - 1, request.eventSample + request.durationSamples);
+        const auto lastLimit = static_cast<std::uint64_t> (request.audio.size() - 1);
+        const auto last = request.eventSample
+                        + std::min (request.durationSamples,
+                                    lastLimit - request.eventSample);
         for (auto sample = first; sample <= last; ++sample)
             maximumDifference = std::max (
                 maximumDifference,
                 std::abs (static_cast<double> (request.audio[static_cast<size_t> (sample)])
                           - static_cast<double> (request.audio[static_cast<size_t> (sample - 1)])));
         preRms = rmsOf (request.audio, 0, static_cast<size_t> (request.eventSample));
-        const auto postStart = std::min<std::uint64_t> (
-            request.audio.size(), request.eventSample + request.durationSamples);
+        const auto postLimit = static_cast<std::uint64_t> (request.audio.size());
+        const auto postStart = request.eventSample
+                             + std::min (request.durationSamples,
+                                         postLimit - request.eventSample);
         postRms = rmsOf (request.audio, static_cast<size_t> (postStart), request.audio.size());
-        const auto steady = (preRms + postRms) * 0.5;
+        const auto steady = preRms * 0.5 + postRms * 0.5;
         if (maximumDifference > 0.0 && steady > 0.0)
             peakOverSteady = 20.0 * std::log10 (maximumDifference / steady);
     }
@@ -307,11 +425,13 @@ juce::String metricResultsJson (const std::span<const MetricResult> metrics)
 {
     juce::Array<juce::var> array;
     for (const auto& result : metrics) {
+        const auto numericFinite = std::isfinite (result.value)
+                                && std::isfinite (result.allowance);
         auto object = std::make_unique<juce::DynamicObject>();
-        object->setProperty ("allowance", result.allowance);
+        object->setProperty ("allowance", numericFinite ? result.allowance : 0.0);
         object->setProperty ("analyzer", juce::String { result.analyzer.id });
         object->setProperty ("analyzerVersion", result.analyzer.version);
-        object->setProperty ("finite", result.finite);
+        object->setProperty ("finite", result.finite && numericFinite);
         object->setProperty ("metric", juce::String { result.metric });
         auto settings = std::make_unique<juce::DynamicObject>();
         for (const auto& [name, value] : result.settings)
@@ -319,7 +439,7 @@ juce::String metricResultsJson (const std::span<const MetricResult> metrics)
                                    juce::String { value });
         object->setProperty ("settings", juce::var { settings.release() });
         object->setProperty ("unit", juce::String { result.unit });
-        object->setProperty ("value", result.value);
+        object->setProperty ("value", numericFinite ? result.value : 0.0);
         array.add (juce::var { object.release() });
     }
     return canonicalJson (juce::var { array });

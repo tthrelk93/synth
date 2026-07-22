@@ -380,6 +380,125 @@ public:
                     },
                     "audio-click settings must be exact and explicit");
 
+        beginTest ("finite extreme analyzer inputs never produce non-finite metrics");
+        const auto maximumDouble = std::numeric_limits<double>::max();
+        const std::array<double, 4> maximumConstant {
+            maximumDouble, maximumDouble, maximumDouble, maximumDouble,
+        };
+        const auto maximumStats = registry.analyze (
+            "signal.stats.v1", AnalysisRequest { .control = maximumConstant });
+        expect (maximumStats.ok(), "a finite DBL_MAX constant has representable statistics");
+        expectMetric (maximumStats, "mean", "amplitude", maximumDouble);
+        expectMetric (maximumStats, "rms", "amplitude", maximumDouble);
+        if (maximumStats.value.has_value()) {
+            const auto maximumJson = metricResultsJson (*maximumStats.value);
+            expect (! maximumJson.containsIgnoreCase ("nan")
+                        && ! maximumJson.containsIgnoreCase ("infinity")
+                        && ! maximumJson.containsIgnoreCase ("null"),
+                    "representable DBL_MAX statistics must serialize as finite numbers");
+        }
+
+        const auto expectOverflowFailure = [&] (
+            const LoadResult<std::vector<MetricResult>>& result,
+            const juce::String& context) {
+            expectDiagnostic (result, "analyzer.overflow");
+            expect (result.value.has_value(), context + " must retain deterministic failure metrics");
+            if (! result.value.has_value())
+                return;
+            for (const auto& resultMetric : *result.value)
+                expect (std::isfinite (resultMetric.value)
+                            && std::isfinite (resultMetric.allowance)
+                            && ! resultMetric.finite,
+                        context + " failure metrics must be finite-valued and marked invalid");
+            const auto firstJson = metricResultsJson (*result.value);
+            const auto secondJson = metricResultsJson (*result.value);
+            expectEquals (firstJson, secondJson, context + " JSON must be deterministic");
+            expect (! firstJson.containsIgnoreCase ("nan")
+                        && ! firstJson.containsIgnoreCase ("infinity")
+                        && ! firstJson.containsIgnoreCase ("null"),
+                    context + " JSON must contain no non-finite placeholder");
+        };
+
+        const std::array<double, 2> mixedExtremes { maximumDouble, -maximumDouble };
+        expectOverflowFailure (
+            registry.analyze ("signal.stats.v1",
+                              AnalysisRequest { .control = mixedExtremes }),
+            "mixed DBL_MAX signal");
+
+        const auto adjacentMaximum = std::nextafter (maximumDouble, 0.0);
+        const std::array<double, 4> adjacentControl {
+            maximumDouble, maximumDouble, adjacentMaximum, adjacentMaximum,
+        };
+        const auto adjacentStep = registry.analyze (
+            "control.step.v1",
+            AnalysisRequest { .eventSample = 2,
+                              .start = maximumDouble,
+                              .target = adjacentMaximum,
+                              .control = adjacentControl });
+        expect (adjacentStep.ok(),
+                "adjacent finite extreme endpoints have representable control metrics");
+        if (adjacentStep.value.has_value())
+            for (const auto& resultMetric : *adjacentStep.value)
+                expect (std::isfinite (resultMetric.value)
+                            && std::isfinite (resultMetric.allowance)
+                            && resultMetric.finite,
+                        "representable extreme control metrics must remain finite and valid");
+
+        const std::array<double, 2> oppositeEndpointControl {
+            -maximumDouble, maximumDouble,
+        };
+        expectOverflowFailure (
+            registry.analyze (
+                "control.step.v1",
+                AnalysisRequest { .eventSample = 1,
+                                  .start = -maximumDouble,
+                                  .target = maximumDouble,
+                                  .control = oppositeEndpointControl }),
+            "opposite extreme control endpoints");
+        const std::array<double, 3> extremeMovementControl {
+            0.0, maximumDouble, -maximumDouble,
+        };
+        expectOverflowFailure (
+            registry.analyze (
+                "control.step.v1",
+                AnalysisRequest { .eventSample = 1,
+                                  .start = 0.0,
+                                  .target = 0.0,
+                                  .control = extremeMovementControl }),
+            "extreme adjacent control samples");
+
+        const auto maximumFloat = std::numeric_limits<float>::max();
+        const std::array<float, 3> extremeAudio {
+            maximumFloat, -maximumFloat, maximumFloat,
+        };
+        const auto extremeClick = registry.analyze (
+            "audio.click.v1",
+            AnalysisRequest { .eventSample = 1,
+                              .durationSamples = std::numeric_limits<std::uint64_t>::max(),
+                              .audio = extremeAudio });
+        expect (extremeClick.ok(),
+                "finite float extremes and a saturated click window have representable metrics");
+        if (extremeClick.value.has_value())
+            for (const auto& resultMetric : *extremeClick.value)
+                expect (std::isfinite (resultMetric.value)
+                            && std::isfinite (resultMetric.allowance)
+                            && resultMetric.finite,
+                        "extreme audio metrics must remain finite and valid");
+        expectMetric (extremeClick, "maximum-first-difference", "amplitude/sample",
+                      2.0 * static_cast<double> (maximumFloat));
+
+        const std::vector<MetricResult> forgedNonFinite {
+            { { "signal.stats.v1", 1 }, "rms", "amplitude",
+              std::numeric_limits<double>::infinity(),
+              std::numeric_limits<double>::quiet_NaN(), true, {} },
+        };
+        const auto sanitizedJson = metricResultsJson (forgedNonFinite);
+        expect (! sanitizedJson.containsIgnoreCase ("nan")
+                    && ! sanitizedJson.containsIgnoreCase ("infinity")
+                    && ! sanitizedJson.containsIgnoreCase ("null")
+                    && sanitizedJson.contains (R"("finite":false)"),
+                "serialization must enforce finite numeric fields and invalidate bad metrics");
+
         beginTest ("empty, non-finite, and unknown metric analysis fails stably without NaN JSON");
         const auto empty = registry.analyze ("signal.stats.v1", {});
         expectDiagnostic (empty, "analyzer.empty-input");
