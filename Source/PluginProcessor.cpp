@@ -9,6 +9,7 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "ParameterRegistry.h"
+#include "ParameterSnapshotCapture.h"
 #include "StateContract.h"
 #include <algorithm>
 #include <cmath>
@@ -935,23 +936,29 @@ MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::buildTypedSnap
 MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::captureParameterSnapshot (
     const ParameterSnapshot& fallback) const noexcept
 {
-    constexpr int maximumSnapshotAttempts = 3;
-    for (int attempt = 0; attempt < maximumSnapshotAttempts; ++attempt)
-    {
-        const auto before = stateGeneration.load (std::memory_order_acquire);
-        if ((before & 1u) != 0u)
-            continue;
-        std::array<float, ParameterRegistry::parameterCount> values {};
-        for (std::size_t index = 0; index < values.size(); ++index)
-            values[index] = preparedParameterHandles[index]->load (std::memory_order_relaxed);
-        const auto contract = contourContractCache.load (std::memory_order_acquire);
-        const auto after = stateGeneration.load (std::memory_order_acquire);
-        if (before == after && (after & 1u) == 0u)
-            return buildTypedSnapshot (values, contract, after);
-    }
-    auto result = fallback.coherent ? fallback : initialCoherentParameterSnapshot;
-    result.usedFallback = true;
-    return result;
+    return ParameterSnapshotCapture::capture (
+        fallback, initialCoherentParameterSnapshot,
+        [this]() noexcept
+        {
+            return stateGeneration.load (std::memory_order_acquire);
+        },
+        [this]() noexcept
+        {
+            std::array<float, ParameterRegistry::parameterCount> values {};
+            for (std::size_t index = 0; index < values.size(); ++index)
+                values[index] = preparedParameterHandles[index]->load (
+                    std::memory_order_relaxed);
+            return values;
+        },
+        [this]() noexcept
+        {
+            return contourContractCache.load (std::memory_order_acquire);
+        },
+        [this](const auto& values, StateContract::ContourContract contract,
+               std::uint64_t generation) noexcept
+        {
+            return buildTypedSnapshot (values, contract, generation);
+        });
 }
 
 juce::RangedAudioParameter* MoogMiniAudioProcessor::getPreparedParameter (

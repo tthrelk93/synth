@@ -27,7 +27,9 @@ performing a competing raw-load pass.
 
 ## Publication, memory ordering, and sanitization
 
-The reader makes exactly three attempts. Each attempt acquire-loads the
+The exact reader algorithm lives in the header-only, templated,
+allocation-free/noexcept `ParameterSnapshotCapture::capture` utility used by
+production. The reader makes exactly three attempts. Each attempt acquire-loads the
 generation, rejects odd publication, relaxed-loads all 48 prepared atomics,
 acquire-loads the contour marker, then acquire-loads the generation again. It
 accepts only equal even generations. Otherwise it returns the caller's prior
@@ -40,8 +42,14 @@ host automation remains an ordinary atomic value change. Concurrent coverage
 alternates distinct native and legacy whole-state vectors and rejects every
 mixed field/marker generation. Any fallback observed by that stress must equal
 the prior snapshot field-for-field with the same generation and contract; the
-exact three-attempt and fallback branches are also source guarded without
-depending on scheduler timing.
+exact three-attempt and fallback branches are also tested deterministically by
+injecting mismatched generation sequences into that same production utility.
+Those tests prove six generation reads across three failed even attempts,
+three value/contract reads, no builder call, coherent-prior payload/generation/
+contract retention with `usedFallback=true`, constructor-initial selection for
+an incoherent caller, and equal-even success. Concurrency remains a zero-mixed
+whole-vector check and does not require scheduler-dependent fallback
+observation.
 
 After an accepted generation, the builder sanitizes without writing APVTS.
 Non-finite values use the descriptor default and increment one relaxed atomic
@@ -52,10 +60,14 @@ domains. Tests cover every field at native default, a distinct vector,
 exact 48-count diagnostic increment. A real render with non-finite cutoff
 proves `processBlock` consumes the sanitized snapshot and remains finite.
 
-Source guards cover both builder and reader plus the complete `processBlock`.
-The capture/builder contain no ID lookup, `juce::String`, ValueTree/XML access,
-allocation, notification, lock, or unbounded loop. `processBlock` contains one
-complete capture and no `getRawParameterValue`, `getParameter`, or string use.
+Source guards cover the builder, reader utility, production reader lambdas, and
+the `processBlock` parameter-read/render boundary. Snapshot capture/builder
+contain no ID lookup, `juce::String`, ValueTree/XML access, allocation,
+notification, lock, `std::function`, or unbounded loop. `processBlock` contains
+one complete capture and no parameter getter or string use. Its pre-existing
+`midiCriticalSection` queue `ScopedLock` is deliberately unchanged,
+Workstream 05-owned, and outside the PAR-009 parameter-snapshot boundary; this
+evidence does not claim that the complete `processBlock` is lock-free.
 
 ## TDD chronology and verification
 
@@ -76,15 +88,22 @@ tests passed 2/2. The complete Release build produced Core, Assets, shared
 plug-in code, Standalone, AU, VST3, actual-wrapper smoke, offline renderer, and
 tests. Full Release CTest passed 15/15 with all seven labels retained:
 
+Review remediation also followed RED/GREEN. With only the new test/source
+contract present, `ModelDPreparedSnapshotContract` built and failed 0/1 solely
+because production did not delegate to the deterministic header-only utility.
+After adding the utility, making its injected-sequence tests unconditional,
+and correcting the written MIDI-lock scope, focused prepared/contour/state-v2
+coverage passed 3/3.
+
 ```text
-artifact = 4.87 sec*proc (3 tests)
+artifact = 4.89 sec*proc (3 tests)
 dsp = 0.03 sec*proc (1 test)
-host = 19.28 sec*proc (2 tests)
+host = 29.91 sec*proc (2 tests)
 midi = 0.01 sec*proc (1 test)
 realtime = 0.10 sec*proc (2 tests)
 state = 0.40 sec*proc (6 tests)
 unit = 0.08 sec*proc (1 test)
-Total Test time (real) = 24.70 sec
+Total Test time (real) = 35.35 sec
 ```
 
 ## Production capture and immutable hashes

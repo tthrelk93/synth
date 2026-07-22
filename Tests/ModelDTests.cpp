@@ -2,6 +2,7 @@
 #include "PresetManager.h"
 
 #include "ParameterRegistry.h"
+#include "ParameterSnapshotCapture.h"
 
 #include <juce_cryptography/juce_cryptography.h>
 
@@ -3335,12 +3336,18 @@ void testContourTask3BContract (TestContext& test)
 void testPreparedSnapshotContract (TestContext& test)
 {
     const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+    const auto captureUtility = sourceRoot.getChildFile (
+        "Source/ParameterSnapshotCapture.h");
+    const auto captureUtilitySource = captureUtility.loadFileAsString();
     const auto registryHeader = sourceRoot.getChildFile ("Source/ParameterRegistry.h")
                                     .loadFileAsString();
     const auto processorHeader = sourceRoot.getChildFile ("Source/PluginProcessor.h")
                                      .loadFileAsString();
     const auto processorSource = sourceRoot.getChildFile ("Source/PluginProcessor.cpp")
                                      .loadFileAsString();
+    const auto planSource = sourceRoot.getChildFile (
+        "docs/superpowers/plans/2026-07-21-workstream-03-par-009.md")
+                                .loadFileAsString();
 
     test.expect (registryHeader.contains ("enum class Key")
                      && registryHeader.contains ("Key::count")
@@ -3351,10 +3358,13 @@ void testPreparedSnapshotContract (TestContext& test)
                      && processorHeader.contains ("preparedParameterHandles")
                      && processorHeader.contains ("invalidParameterValueCount"),
                  "processor must expose one complete typed prepared snapshot and diagnostic");
-    test.expect (processorSource.contains ("maximumSnapshotAttempts = 3")
+    test.expect (captureUtilitySource.contains ("maximumAttempts = 3")
                      && processorSource.contains ("buildTypedSnapshot")
                      && processorSource.contains ("captureParameterSnapshot"),
                  "complete snapshot capture must use three bounded generation-bracketed attempts");
+    test.expect (captureUtility.existsAsFile()
+                     && processorSource.contains ("ParameterSnapshotCapture::capture"),
+                 "production capture must delegate to the deterministic header-only three-attempt utility");
 
     const auto processStart = processorSource.indexOf (
         "void MoogMiniAudioProcessor::processBlock");
@@ -3370,6 +3380,10 @@ void testPreparedSnapshotContract (TestContext& test)
                      && ! processBlockSource.contains ("getParameter")
                      && ! processBlockSource.contains ("juce::String"),
                  "processBlock must capture once and contain no render-time parameter lookup/string");
+    test.expect (processBlockSource.contains ("const juce::ScopedLock lock(midiCriticalSection)")
+                     && planSource.contains ("Workstream 05-owned")
+                     && planSource.contains ("does not claim that the complete function is lock-free"),
+                 "PAR-009 must preserve and accurately scope the inherited Workstream 05 MIDI queue lock");
 
     const auto fixture = sourceRoot.getChildFile (
         "Tests/fixtures/parameters/parameter-snapshot-v2.json");
@@ -3498,18 +3512,21 @@ void testPreparedSnapshotContract (TestContext& test)
         "MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::buildTypedSnapshot");
     const auto builderSource = processorSource.substring (builderStart, captureStart);
     test.expect (captureStart >= 0 && captureEnd > captureStart
-                     && captureSource.contains ("maximumSnapshotAttempts = 3")
+                     && captureSource.contains ("ParameterSnapshotCapture::capture")
                      && captureSource.contains ("std::memory_order_acquire")
                      && captureSource.contains ("std::memory_order_relaxed")
-                     && captureSource.contains ("fallback.coherent ? fallback")
-                     && captureSource.contains ("result.usedFallback = true")
+                     && captureUtilitySource.contains ("fallback.coherent ? fallback")
+                     && captureUtilitySource.contains ("result.usedFallback = true")
                      && ! captureSource.contains ("getRawParameterValue")
                      && ! captureSource.contains ("getParameter (")
                      && ! captureSource.contains ("juce::String")
                      && ! captureSource.contains ("ValueTree")
                      && ! captureSource.contains ("ScopedLock")
                      && ! captureSource.contains ("while")
-                     && ! captureSource.contains ("new "),
+                     && ! captureSource.contains ("new ")
+                     && ! captureUtilitySource.contains ("std::function")
+                     && ! captureUtilitySource.contains ("while")
+                     && ! captureUtilitySource.contains ("new "),
                  "snapshot capture must be exactly-three-attempt, prepared, bounded and realtime-safe");
     test.expect (builderStart >= 0 && captureStart > builderStart
                      && processorHeader.contains ("std::uint64_t generation) const noexcept")
@@ -3526,6 +3543,109 @@ void testPreparedSnapshotContract (TestContext& test)
     test.expect (std::abs (contour.controls.filterAttack - sanitized.contours.filterAttack) < 1.0e-6f
                      && contour.contract == sanitized.contourContract,
                  "Task 3B contour snapshot must delegate to complete capture semantics");
+
+    {
+        auto coherentPrior = distinct;
+        coherentPrior.generation = 42;
+        coherentPrior.contourContract = StateContract::ContourContract::legacyCrossedContours;
+        coherentPrior.usedFallback = false;
+        auto constructorInitial = fallback;
+        constructorInitial.generation = 0;
+        constructorInitial.contourContract = StateContract::ContourContract::canonicalContours;
+        constructorInitial.usedFallback = false;
+        int generationReads = 0;
+        int valueReads = 0;
+        int contractReads = 0;
+        int builderCalls = 0;
+        const std::array<std::uint64_t, 6> generations { 0, 2, 4, 6, 8, 10 };
+        auto failed = ParameterSnapshotCapture::capture (
+            coherentPrior, constructorInitial,
+            [&]() noexcept { return generations[static_cast<std::size_t> (generationReads++)]; },
+            [&]() noexcept {
+                ++valueReads;
+                return std::array<float, ParameterRegistry::parameterCount> {};
+            },
+            [&]() noexcept {
+                ++contractReads;
+                return StateContract::ContourContract::canonicalContours;
+            },
+            [&](const auto&, StateContract::ContourContract, std::uint64_t) noexcept {
+                ++builderCalls;
+                return constructorInitial;
+            });
+        const auto failedValues = snapshotPhysicalValues (failed);
+        const auto priorValues = snapshotPhysicalValues (coherentPrior);
+        bool priorRetained = failed.generation == coherentPrior.generation
+                          && failed.contourContract == coherentPrior.contourContract
+                          && failed.coherent && failed.usedFallback
+                          && failedValues == priorValues;
+        test.expect (generationReads == 6 && valueReads == 3 && contractReads == 3
+                         && builderCalls == 0 && priorRetained,
+                     "three failed equal-even attempts must return the coherent prior with payload/generation/contract retained and fallback flagged");
+
+        auto incoherentCaller = coherentPrior;
+        incoherentCaller.coherent = false;
+        generationReads = 0;
+        valueReads = 0;
+        contractReads = 0;
+        auto initialFallback = ParameterSnapshotCapture::capture (
+            incoherentCaller, constructorInitial,
+            [&]() noexcept { return generations[static_cast<std::size_t> (generationReads++)]; },
+            [&]() noexcept {
+                ++valueReads;
+                return std::array<float, ParameterRegistry::parameterCount> {};
+            },
+            [&]() noexcept {
+                ++contractReads;
+                return StateContract::ContourContract::legacyCrossedContours;
+            },
+            [&](const auto&, StateContract::ContourContract, std::uint64_t) noexcept {
+                ++builderCalls;
+                return coherentPrior;
+            });
+        const auto initialValues = snapshotPhysicalValues (constructorInitial);
+        const auto initialFallbackValues = snapshotPhysicalValues (initialFallback);
+        bool initialRetained = initialFallback.generation == constructorInitial.generation
+                            && initialFallback.contourContract
+                                   == constructorInitial.contourContract
+                            && initialFallback.coherent && initialFallback.usedFallback
+                            && initialValues == initialFallbackValues;
+        test.expect (generationReads == 6 && valueReads == 3 && contractReads == 3
+                         && initialRetained,
+                     "an incoherent caller fallback must select the coherent constructor initial after exactly three failures");
+
+        generationReads = 0;
+        valueReads = 0;
+        contractReads = 0;
+        builderCalls = 0;
+        const std::array<std::uint64_t, 2> stableGeneration { 12, 12 };
+        const auto success = ParameterSnapshotCapture::capture (
+            coherentPrior, constructorInitial,
+            [&]() noexcept { return stableGeneration[static_cast<std::size_t> (generationReads++)]; },
+            [&]() noexcept {
+                ++valueReads;
+                return distinctInput;
+            },
+            [&]() noexcept {
+                ++contractReads;
+                return StateContract::ContourContract::canonicalContours;
+            },
+            [&](const auto&, StateContract::ContourContract contract,
+                std::uint64_t generation) noexcept {
+                ++builderCalls;
+                auto result = distinct;
+                result.generation = generation;
+                result.contourContract = contract;
+                result.usedFallback = false;
+                return result;
+            });
+        test.expect (generationReads == 2 && valueReads == 1 && contractReads == 1
+                         && builderCalls == 1 && success.generation == 12
+                         && success.contourContract
+                                == StateContract::ContourContract::canonicalContours
+                         && ! success.usedFallback,
+                     "equal-even utility capture must build and return the accepted generation once");
+    }
 
     const auto setPhysical = [] (MoogMiniAudioProcessor& target,
                                  ParameterRegistry::Key key,
