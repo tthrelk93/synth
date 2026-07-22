@@ -540,7 +540,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 - Modify: `Tools/ModelDOfflineRenderer.cpp`
 - Modify: `Tests/ReferenceHarnessTests.cpp`
 - Create: `Tests/reference/requirement-map.json`
-- Create: `Tests/reference/expected-f0-requirements-report.json`
+- Create: `Tests/reference/expected-f0-requirement-statuses.json`
 - Modify: `CMakeLists.txt`
 
 **Interfaces:**
@@ -559,7 +559,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Parse requirement tokens from matrix data rows and require exact set equality with `requirement-map.json`: 127 unique IDs, one owner each, nonempty verification list, valid status, and no unknown/duplicate/missing row. Require stable failures for `waived`, `pass` without existing hashed artifact, unknown verification code, missing gate mapping, duplicate owner, and a changed matrix ID.
 
-  Require two generated reports to be byte-identical; `run` must exit 0 after producing an honest mixed-status report; `verify-release` must exit nonzero and identify the first non-pass requirement while any required row is open.
+  Require two same-commit generated reports to be byte-identical; `run` must exit 0 after producing an honest mixed-status report; `verify-release` must exit nonzero and identify the first non-pass requirement while any required row is open. Compare the report's stable ID/status/reason/gate projection with the checked-in expected-status fixture; do not freeze the run's source commit or artifact hashes into a self-referential tracked report.
 
 - [ ] **Step 2: Run RED**
 
@@ -615,7 +615,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   `verify-release --report PATH` validates the canonical report and artifacts, exits 0 only for all-pass, otherwise exits 3 and prints stable `release-not-ready: ID STATUS REASON` to stderr.
 
-- [ ] **Step 7: Capture and freeze the expected F0 report**
+- [ ] **Step 7: Capture and freeze the expected F0 status projection**
 
   Run `validate`, then `run` into a fresh bounded candidate directory. Review that:
 
@@ -626,7 +626,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
   - hardware cases are `awaiting-approved-reference` only when the plans require hardware; and
   - `releaseReady` is false.
 
-  Copy the reviewed canonical report to `Tests/reference/expected-f0-requirements-report.json`; rerun capture and require `cmp` byte equality.
+  Rerun the full capture at the same commit and require `cmp` byte equality for the complete candidate reports. Then write only the stable ordered projection `{id,status,reasons,gateIds}` to `Tests/reference/expected-f0-requirement-statuses.json` and compare that projection in CTest. The projection intentionally omits source commit, build provenance, timestamps, candidate paths, and artifact hashes so committing the oracle cannot invalidate itself.
 
 - [ ] **Step 8: Run GREEN and negative enforcement**
 
