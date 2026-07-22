@@ -10,18 +10,32 @@ constexpr auto sourceRootPath = SYNTH_SOURCE_ROOT;
 class TemporaryDirectory final {
 public:
     explicit TemporaryDirectory (const juce::String& prefix)
-        : directory (juce::File::getSpecialLocation (juce::File::tempDirectory)
-                         .getNonexistentChildFile (prefix, {}, false))
     {
-        directory.createDirectory();
+        const auto temporaryRoot = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        for (int attempt = 0; attempt < 32; ++attempt) {
+            const auto candidate = temporaryRoot.getChildFile (
+                prefix + "-" + juce::Uuid {}.toString());
+            std::error_code error;
+            if (std::filesystem::create_directory (candidate.getFullPathName().toStdString(), error)) {
+                directory = candidate;
+                ownsDirectory = true;
+                return;
+            }
+        }
     }
 
     ~TemporaryDirectory()
     {
-        directory.deleteRecursively();
+        if (ownsDirectory)
+            directory.deleteRecursively();
     }
 
-    const juce::File directory;
+    bool isOwned() const noexcept { return ownsDirectory; }
+
+    juce::File directory;
+
+private:
+    bool ownsDirectory = false;
 };
 
 constexpr std::array frozenFixturePaths {
@@ -60,8 +74,19 @@ public:
         expectEquals (ReferenceHarness::canonicalJson (unorderedJson),
                       juce::String { R"({"a":{"x":1,"z":2},"b":[{"a":1,"b":2}]})" } + "\n");
 
+        beginTest ("same-prefix temporary roots are atomically owned and distinct");
+        const TemporaryDirectory firstTemporaryRoot { "model-d-reference-harness-collision" };
+        const TemporaryDirectory secondTemporaryRoot { "model-d-reference-harness-collision" };
+        expect (firstTemporaryRoot.isOwned(), "first temporary root must be created atomically");
+        expect (secondTemporaryRoot.isOwned(), "second temporary root must be created atomically");
+        expect (firstTemporaryRoot.directory != secondTemporaryRoot.directory,
+                "same-prefix temporary roots must never share a cleanup target");
+
         beginTest ("bounded paths report stable negative diagnostics");
         const TemporaryDirectory temporaryRoot { "model-d-reference-harness-contract" };
+        expect (temporaryRoot.isOwned(), "bounded-path temporary root must be created atomically");
+        if (! temporaryRoot.isOwned())
+            return;
         const auto& temporaryDirectory = temporaryRoot.directory;
         const auto safeFile = temporaryDirectory.getChildFile ("safe.txt");
         safeFile.replaceWithText ("safe");
@@ -83,6 +108,9 @@ public:
                           "path.non-regular");
 
         const TemporaryDirectory outsideRoot { "model-d-reference-harness-outside" };
+        expect (outsideRoot.isOwned(), "symlink target root must be created atomically");
+        if (! outsideRoot.isOwned())
+            return;
         const auto outside = outsideRoot.directory.getChildFile ("outside.txt");
         outside.replaceWithText ("outside");
         const auto link = temporaryDirectory.getChildFile ("escape-link");
@@ -183,6 +211,9 @@ private:
                               const std::string_view code)
     {
         const TemporaryDirectory probeRoot { "model-d-reference-harness-probe" };
+        expect (probeRoot.isOwned(), "semantic probe root must be created atomically");
+        if (! probeRoot.isOwned())
+            return;
         for (const auto fixturePath : frozenFixturePaths) {
             const auto source = sourceRoot.getChildFile (fixturePath);
             const auto destination = probeRoot.directory.getChildFile (fixturePath);
