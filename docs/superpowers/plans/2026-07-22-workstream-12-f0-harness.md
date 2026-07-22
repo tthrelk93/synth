@@ -58,7 +58,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 - Produces: `ReferenceHarness::Status`, `Diagnostic`, `LoadResult<T>`, `IndexedArtifact`, `FixtureIndex`, `sha256File`, `resolveBoundedRegularFile`, `canonicalJson`, and `loadFixtureIndex`.
 - Task 2 consumes the same `LoadResult<T>` and bounded path/hash functions for render fixtures.
 
-- [ ] **Step 1: Register the focused RED contract before implementation**
+- [x] **Step 1: Register the focused RED contract before implementation**
 
   Initially add only a `ModelDReferenceTests` executable containing
   `Tests/ReferenceHarnessTests.cpp`, give it the future
@@ -85,7 +85,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Add negative cases that create bounded temporary copies and require stable codes for absolute path, `..`, backslash, missing file, symlink escape, SHA mismatch, duplicate ID/path, unknown schema, and non-regular input.
 
-- [ ] **Step 2: Run the RED build**
+- [x] **Step 2: Run the RED build**
 
   Run:
 
@@ -95,7 +95,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Expected: build fails because `ReferenceData.h` and the registered implementation do not yet exist. Record the exact compiler failure in the Workstream 12 evidence draft.
 
-- [ ] **Step 3: Define the shared immutable types**
+- [x] **Step 3: Define the shared immutable types**
 
   Implement these exact public shapes in `ReferenceTypes.h`:
 
@@ -134,7 +134,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Keep all harness types value-owned. Do not retain `juce::var`, `DynamicObject*`, APVTS objects, or file streams inside validated results.
 
-- [ ] **Step 4: Implement bounded paths, hashing, canonical JSON, and index validation**
+- [x] **Step 4: Implement bounded paths, hashing, canonical JSON, and index validation**
 
   Declare in `ReferenceData.h`:
 
@@ -159,7 +159,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   `canonicalJson` recursively sorts object properties lexicographically, retains array order, uses JUCE JSON compact spacing, and appends exactly one newline.
 
-- [ ] **Step 5: Add the exact frozen artifact index**
+- [x] **Step 5: Add the exact frozen artifact index**
 
   `Tests/reference/fixture-index-v1.json` must use the nine hashes from the Workstream 03 verification summary:
 
@@ -177,7 +177,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Use the existing repository-relative fixture paths and the owning PAR IDs. Do not copy or regenerate any frozen artifact.
 
-- [ ] **Step 6: Run GREEN and negative contracts**
+- [x] **Step 6: Run GREEN and negative contracts**
 
   Run:
 
@@ -188,7 +188,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Expected: focused test passes; every negative mutation reports its exact stable diagnostic; the live nine-file index validates byte-for-byte.
 
-- [ ] **Step 7: Verify and commit Task 1**
+- [x] **Step 7: Verify and commit Task 1**
 
   Run `git diff --check`, rerun `ModelDParameterRegistry`, `ModelDStateV2Contract`, and the focused test, then commit only Task 1 paths:
 
@@ -219,7 +219,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 - Produces: `RenderFixture`, `AutomationEvent`, `MidiEvent`, `RenderResult`, `loadRenderFixture`, `renderFixture`, and `writeCandidateArtifacts`.
 - Task 3 consumes `RenderResult::main`, `RenderResult::controlTraces`, and reproducibility metadata.
 
-- [ ] **Step 1: Add the focused renderer RED contract**
+- [x] **Step 1: Add the focused renderer RED contract**
 
   Register:
 
@@ -232,11 +232,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Add negative fixtures for unsupported `preset` source, sample rate outside `{44100,48000,96000}`, zero/negative render length, empty/zero block size, event beyond render length, duplicate sequence, invalid MIDI bytes, unknown parameter ID, non-finite normalized value, input hash mismatch, and existing candidate output directory.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Run the reference-test build and focused CTest. Expected: compile/test failure because `OfflineRenderer` and `model-d.render-fixture.v1` parsing do not exist.
 
-- [ ] **Step 3: Add exact render and trace types**
+- [x] **Step 3: Add exact render and trace types**
 
   Extend `ReferenceTypes.h` with:
 
@@ -317,7 +317,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Store interleaved audio with exact channel counts. `ReproducibilityInfo` records source commit passed from CMake, exact JUCE revision, build type, platform, architecture, fixture/input hashes, sample rate, block pattern, seed, and output hashes.
 
-- [ ] **Step 4: Implement render-fixture parsing and validation**
+- [x] **Step 4: Implement render-fixture parsing and validation**
 
   Add:
 
@@ -328,7 +328,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Require schema `model-d.render-fixture.v1`, state source kind `hostState`, exact state path/hash/version/contour expectation, supported sample rate, positive bounded sample count, nonempty positive block pattern, stable sequence ordering, normalized values in `[0,1]`, MIDI messages of 1–3 bytes accepted by JUCE, and input kind `silence`, `dc`, `sine`, or hash-verified `wav`. Resolve parameter IDs by walking `ParameterRegistry::descriptors()` and storing only typed keys.
 
-- [ ] **Step 5: Implement exact-event rendering**
+- [x] **Step 5: Implement exact-event rendering**
 
   Declare:
 
@@ -352,7 +352,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Reject a candidate directory that already exists. Write canonical `render.json`, `control-trace.json`, `event-trace.json`, and deterministic float WAV artifacts with SHA-256 recorded in `render.json`.
 
-- [ ] **Step 6: Convert the CLI without growing business logic in `main`**
+- [x] **Step 6: Convert the CLI without growing business logic in `main`**
 
   Preserve the current no-argument output `Rendered 480 ModelDCore samples`. Add exact dispatch:
 
@@ -364,15 +364,15 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Task 2 implements fixture-index and render-fixture validation plus render execution. Until Tasks 3–4 land, `validate` must report stable `missing-acceptance-implementation` or `missing-requirement-implementation`, and `run` must refuse partial reporting rather than silently skip those stages.
 
-- [ ] **Step 7: Add the three F0 fixtures**
+- [x] **Step 7: Add the three F0 fixtures**
 
   Use native default v2, migrated default v2, and migrated representative v2/legacy-contour inputs with their frozen hashes. Each fixture renders 2048 samples at 48 kHz, declares all three block patterns, sets `outputVolKnob` and `a440HzOnOff` at sample zero, performs one valid parameter transition at sample 512, and requests exact control/event trace capture. The legacy fixture requires `legacyCrossedContours`; no static value swap is permitted.
 
-- [ ] **Step 8: Run GREEN and determinism checks**
+- [x] **Step 8: Run GREEN and determinism checks**
 
   Build and run `ModelDReferenceRendererContract` serially. Run the no-argument CLI and compare its exact stdout. Run a fixture twice to two new `/private/tmp` candidate directories and use `cmp` on canonical JSON and SHA-256 on WAV outputs. Expected: focused test and repeats pass; unsupported preset source and every negative fixture fail with stable codes.
 
-- [ ] **Step 9: Verify and commit Task 2**
+- [x] **Step 9: Verify and commit Task 2**
 
   Run focused manifest/renderer tests, existing `state`, `dsp`, and `midi` labels, `git diff --check`, then commit:
 
@@ -409,7 +409,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 - Produces: `AnalyzerIdentity`, `MetricResult`, `AnalysisRequest`, `AnalyzerRegistry`, `AcceptanceManifest`, `GateDefinition`, `GateResult`, `loadAcceptanceManifest`, `expandSmoothingFixtures`, and `evaluateAcceptance`.
 - Task 4 consumes gate results and artifact hashes without reinterpreting analyzer values.
 
-- [ ] **Step 1: Add analyzer/acceptance RED contracts**
+- [x] **Step 1: Add analyzer/acceptance RED contracts**
 
   Register:
 
@@ -424,11 +424,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Require exactly seven smoothing templates, runtime coverage of all 48 descriptors by registry class, exact 5 ms/10 ms policies, `none` exact-step behavior, and delegated classes reported `not-run` without generic-ramp substitution.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Build and run the new focused test. Expected: failure because analyzers, acceptance validation, and PAR-006 templates are absent.
 
-- [ ] **Step 3: Define analyzer and gate types**
+- [x] **Step 3: Define analyzer and gate types**
 
   Add exact types:
 
@@ -474,7 +474,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   `AnalyzerRegistry::find(id)` returns a stable diagnostic for unknown IDs. Analyzer changes require a new ID/version; never mutate `*.v1` semantics silently.
 
-- [ ] **Step 4: Implement synthetic-calibrated analyzers**
+- [x] **Step 4: Implement synthetic-calibrated analyzers**
 
   `signal.stats.v1` reports sample count, finite count, min, max, peak absolute value, mean, RMS, and maximum first difference.
 
@@ -491,7 +491,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   `audio.click.v1` reports maximum absolute first difference in the declared event window, pre/post RMS, peak-over-steady-state dB, and finite count. Empty/non-finite inputs return `fail` metrics with stable codes, never NaN JSON.
 
-- [ ] **Step 5: Implement the seven registry-expanded PAR-006 templates**
+- [x] **Step 5: Implement the seven registry-expanded PAR-006 templates**
 
   Each template uses schema `model-d.smoothing-fixture.v1`, names one exact registry class, declares normalized start/end, sample rate matrix `{44100,48000,96000}`, event sample, analysis window, required analyzer, required control/audio tap, and owner workstream.
 
@@ -505,7 +505,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
   - dedicated pitch/cutoff/glide/contour: required future owner tap and `not-run`;
   - hardware taper/shape: `awaiting-approved-reference`.
 
-- [ ] **Step 6: Implement and seed `acceptance-v1.json`**
+- [x] **Step 6: Implement and seed `acceptance-v1.json`**
 
   Use schema `model-d.acceptance.v1`, manifest version 1, global status `draft`, and separate arrays for hard software, published, derived software, measured hardware, and performance gates. In F0, measured-hardware and performance arrays are empty, published entries are not promoted beyond sourced fields already present in the planning suite, and the approved derived entries record:
 
@@ -518,11 +518,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Record review status `approved`, review basis `2026-07-22 user-approved design`, and date `2026-07-22`. State explicitly that these are software safety policies, not hardware measurements.
 
-- [ ] **Step 7: Run GREEN, synthetic calibration, and honest live evaluation**
+- [x] **Step 7: Run GREEN, synthetic calibration, and honest live evaluation**
 
   Run `ModelDReferenceAnalyzerContract` and the prior focused tests. Generate an F0 candidate result. Expected: all synthetic analyzer calibrations pass; manifest validation passes; every registry descriptor is covered; only available `none` control-trace gates can pass; missing owner-DSP taps are `not-run`; missing hardware references are `awaiting-approved-reference`; no open gate is converted to pass.
 
-- [ ] **Step 8: Verify and commit Task 3**
+- [x] **Step 8: Verify and commit Task 3**
 
   Run unit/dsp/state labels serially, canonical capture repeat/`cmp`, all reference hashes, and `git diff --check`, then commit:
 
@@ -548,7 +548,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 - Produces: `RequirementDefinition`, `RequirementResult`, `RequirementReport`, `loadRequirementMap`, `validateRequirementSet`, `buildRequirementReport`, `writeRequirementReport`, and `verifyReleaseReady`.
 - Task 5 consumes the exact canonical report and command log as durable planning evidence.
 
-- [ ] **Step 1: Add the requirement/report RED contract**
+- [x] **Step 1: Add the requirement/report RED contract**
 
   Register:
 
@@ -561,11 +561,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Require two same-commit generated reports to be byte-identical; `run` must exit 0 after producing an honest mixed-status report; `verify-release` must exit nonzero and identify the first non-pass requirement while any required row is open. Compare the report's stable ID/status/reason/gate projection with the checked-in expected-status fixture; do not freeze the run's source commit or artifact hashes into a self-referential tracked report.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Build and run the focused requirement test. Expected: failure because the complete map, reporter, and CLI enforcement are absent.
 
-- [ ] **Step 3: Define the reporting types and status reduction**
+- [x] **Step 3: Define the reporting types and status reduction**
 
   Add:
 
@@ -595,19 +595,19 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Reduction rules are exact: any executed failing required gate makes the row `fail`; otherwise any missing measured-hardware gate makes it `awaitingApprovedReference`; otherwise any unrun required gate makes it `notRun`; only all required gates/artifacts passing makes it `pass`. Listening never participates.
 
-- [ ] **Step 4: Create and validate the complete checked-in map**
+- [x] **Step 4: Create and validate the complete checked-in map**
 
   Extract every matrix data-row ID, owner-plan link, and verification code into `model-d.requirement-map.v1`. Seed existing BLD/PAR pass rows with their committed evidence paths/hashes; translate still-open in-progress/external rows to `not-run`; seed future rows as `not-run` or `awaiting-approved-reference` only where the owner plan explicitly requires missing hardware data.
 
   The validator must independently parse the Markdown matrix ID set at test time and compare it with JSON. Do not maintain a second C++ array of 127 IDs. The checked-in JSON is the data source; the matrix parser is the drift oracle.
 
-- [ ] **Step 5: Implement canonical aggregate reporting**
+- [x] **Step 5: Implement canonical aggregate reporting**
 
   `buildRequirementReport` merges definitions with gate results, verifies every referenced artifact exists beneath the source or candidate root and matches its hash, applies the reduction rules, sorts rows by matrix order, and sets `releaseReady` only when all 127 rows pass.
 
   `writeRequirementReport` writes canonical JSON only into a new candidate directory. Include manifest/fixture/analyzer versions, source/build provenance, per-status counts, every requirement row, gate/artifact links, and explicit open-gate reason codes.
 
-- [ ] **Step 6: Complete CLI modes**
+- [x] **Step 6: Complete CLI modes**
 
   `validate` validates the artifact index, all render/smoothing fixtures, acceptance manifest, requirement map, analyzer registry, and set equality without rendering.
 
@@ -615,7 +615,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   `verify-release --report PATH` validates the canonical report and artifacts, exits 0 only for all-pass, otherwise exits 3 and prints stable `release-not-ready: ID STATUS REASON` to stderr.
 
-- [ ] **Step 7: Capture and freeze the expected F0 status projection**
+- [x] **Step 7: Capture and freeze the expected F0 status projection**
 
   Run `validate`, then `run` into a fresh bounded candidate directory. Review that:
 
@@ -628,11 +628,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Rerun the full capture at the same commit and require `cmp` byte equality for the complete candidate reports. Then write only the stable ordered projection `{id,status,reasons,gateIds}` to `Tests/reference/expected-f0-requirement-statuses.json` and compare that projection in CTest. The projection intentionally omits source commit, build provenance, timestamps, candidate paths, and artifact hashes so committing the oracle cannot invalidate itself.
 
-- [ ] **Step 8: Run GREEN and negative enforcement**
+- [x] **Step 8: Run GREEN and negative enforcement**
 
   Run all four reference contracts. Run `validate` expecting exit 0, `run` expecting exit 0, and `verify-release` expecting exit 3. Mutate a candidate report to false pass and require rejection. Expected: reference tests pass and release remains truthfully non-ready.
 
-- [ ] **Step 9: Verify and commit Task 4**
+- [x] **Step 9: Verify and commit Task 4**
 
   Run all unit/state/dsp/artifact labels serially, old CLI smoke, canonical report repeat, `git diff --check`, and immutable fixture hashes, then commit:
 
@@ -658,11 +658,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 - Consumes: Tasks 1–4 commits, reference candidate artifacts, complete requirement report, and existing Workstream 03/02 evidence.
 - Produces: an honest F0-complete ledger, durable verification report, exact final commit, and verified one-root successor package whose next action is Workstream 04 pitch/glide implementation.
 
-- [ ] **Step 1: Audit requirement statuses against artifacts**
+- [x] **Step 1: Audit requirement statuses against artifacts**
 
   Reconcile TST-001–009 without claiming full Workstream 12 completion. Record the F0 skeleton as complete while individual final requirements remain `in-progress`/non-pass as their owner plan requires. PAR-006 advances from no executable measurement seam to approved executable policy, but remains `in-progress` because non-`none` DSP trajectories and hardware-dependent cases are open. Preserve PAR-002/004/007 and BLD-006/011/012 as non-passing.
 
-- [ ] **Step 2: Write the durable evidence report**
+- [x] **Step 2: Write the durable evidence report**
 
   Record:
 
@@ -675,11 +675,11 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
   - explicit no-DSP/no-hardware/no-host claims; and
   - exact commands to reproduce validation, rendering, reporting, and release-enforcement failure.
 
-- [ ] **Step 3: Synchronize roadmap, matrix, owner plans, and handoff**
+- [x] **Step 3: Synchronize roadmap, matrix, owner plans, and handoff**
 
   Update the F0 phase table, PAR-006 and TST rows, Workstream 03/12 status and definition-of-done text, current handoff snapshot, change inventory, verification ledger, blockers, exact resumption point, and append-only history. Historical entries remain byte-for-byte unchanged. Set the next engineering action to Workstream 04's PIT-001/PIT-002 semitone-domain foundation using the new fixture/analyzer contracts.
 
-- [ ] **Step 4: Run fresh final serial verification**
+- [x] **Step 4: Run fresh final serial verification**
 
   Configure a new path-with-spaces Release tree against exact JUCE with tests, validators, warnings-as-errors, and distribution identity validation enabled. Run:
 
@@ -700,7 +700,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Expected: build and every CTest pass; validate/run exit 0; release verify exits 3 for the first honest open requirement; repeated candidate canonical outputs compare byte-equal; all frozen/new hashes, source guards, `git diff --check`, Markdown links, and repository status checks pass.
 
-- [ ] **Step 5: Commit the synchronized F0 closeout**
+- [x] **Step 5: Commit the synchronized F0 closeout**
 
   Commit every tracked implementation-plan completion mark, planning/evidence update, and no unrelated path:
 

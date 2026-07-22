@@ -1,6 +1,6 @@
 # Synthesizer Remediation Roadmap
 
-Status: Workstream 03 automated parameter/state contract freeze landed; Workstream 12 harness coordination is next, while Workstream 02 and Workstream 03 external/manual validation remain pre-release gates.
+Status: The Workstream 12 F0 harness skeleton is accepted; Workstream 04 pitch/glide implementation is next, while full Workstream 12 completion and Workstream 02/03 external, hardware, host, and later-DSP validation remain open pre-release gates.
 Repository baseline inspected: `main` at `c30038d` (`Update README.md`).
 Audit corpus: the attached **Synthesizer Remediation Planning Suite** specification. It is the only supplied original-audit text, so every sentence-level deficit and proposed product improvement in that specification is treated as a finding. The line-by-line ownership audit is in the [traceability matrix](01-traceability-matrix.md).
 
@@ -12,7 +12,7 @@ The core planning baseline is this roadmap, the traceability matrix, and Workstr
 |---|---|---|---|---|
 | F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress as a pre-release validation track; exact run `29728203657` passes all eight supported rows, BLD-007 now passes through the [owner identity/deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md), and BLD-006/011/012 remain in progress pending external host/account/tool evidence | Approved planning baseline | Retain BLD-006/011/012 as visible pre-release gates; accept owner-supplied external evidence later without invalidating the Workstream 03 automated freeze or Workstream 12 coordination. |
 | F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | Automated contract freeze complete; PAR-001/003/005/008/009 pass, while PAR-002/004/006/007 remain in progress for designated-host or later DSP/harness evidence | Workstream 02 automated build/test seams pass; owner-approved exception carries BLD-006/011/012 as pre-release gates | Preserve the frozen contracts; close the named manual/pre-release obligations through Workstream 12 and designated-host validation. |
-| F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Next — coordinate the manifest and executable evidence that consume the frozen Workstream 03 registry/state contracts | Workstream 02 test/offline targets and Workstream 03 automated contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4, then Workstream 04 proceeds in roadmap order. |
+| F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | F0 skeleton complete: deterministic renderer, versioned core analyzers, draft acceptance policy, immutable fixtures, exact 127-requirement map, canonical report, and release enforcement are committed and verified. TST-001–009 remain individually `in-progress` until their full owner-plan gates pass. | Workstream 02 test/offline targets and Workstream 03 automated contracts are stable | Proceed to Workstream 04 PIT-001/PIT-002 in semitone space using the fixture/analyzer contracts; full Workstream 12 completion continues through F4. |
 | F1–F6 | Workstreams 04–15 | Not started | The phase gates below | Follow the fixed roadmap order; no agent skips an unmet gate. |
 
 ## Successor handoff package policy
@@ -185,7 +185,7 @@ flowchart LR
   I --> J["15 Photo import - gated"]
 ```
 
-1. **F0 — reproducible baseline:** Workstream 02 builds and runs unit tests; 03 freezes parameter/state contracts; 12 supplies an offline-render skeleton and manifest schema.
+1. **F0 — reproducible baseline:** Workstream 02 builds and runs unit tests; 03 freezes parameter/state contracts; 12 supplies an offline-render skeleton and manifest schema. The skeleton is accepted; retained BLD/PAR/TST release gates remain visibly non-passing and continue in their owner tracks.
 2. **F1 — processor seam freeze:** `ModelDEngine`, event, pitch, contour, ladder, and signal-path interfaces compile behind test doubles. Oscillator, contour, and filter work may then proceed in parallel, but no workstream independently edits parameter meanings.
 3. **F2 — correctness integration:** 04 lands before 05. MIDI fixtures prove sample boundaries, priority, triggering, glide, and release behavior.
 4. **F3 — DSP integration:** Merge 06, then 07, then 08 into the processor-facing engine; 09 lands after all three. Each stage must pass hard software gates even if hardware capture gates remain marked `awaiting-approved-reference`.

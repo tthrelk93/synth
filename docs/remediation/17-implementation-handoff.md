@@ -1,6 +1,6 @@
 # Synthesizer Remediation Implementation Handoff
 
-[Roadmap](00-master-remediation-roadmap.md) · [Traceability matrix](01-traceability-matrix.md) · [Workstream 02](02-build-packaging-host-validation.md) · [Workstream 03](03-parameter-automation-state-contract.md) · [Agent 07 kickoff](18-agent-07-workstream-03-kickoff.md)
+[Roadmap](00-master-remediation-roadmap.md) · [Traceability matrix](01-traceability-matrix.md) · [Workstream 02](02-build-packaging-host-validation.md) · [Workstream 03](03-parameter-automation-state-contract.md) · [Workstream 12](12-hardware-reference-regression-system.md)
 
 This is the canonical cross-agent implementation record. The active agent updates the current snapshot in place after each material milestone and before any pause. Before relinquishing ownership, the agent appends a dated work entry under **Handoff history**. Existing history is never deleted or rewritten; corrections are new entries that identify what they supersede.
 
@@ -10,19 +10,19 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 
 | Field | Current value |
 |---|---|
-| Prepared | 2026-07-21 |
-| Current owner | Workstream 12 successor |
+| Prepared | 2026-07-22 |
+| Current owner | Workstream 04 successor |
 | Roadmap phase | F0 — reproducible baseline |
-| Workstream | 12 — Reference/Test harness coordination next; Workstream 03 automated contract freeze landed, with PAR-002/004/006/007 and Workstream 02 BLD-006/011/012 retained as pre-release validation obligations |
-| Overall status | Workstream 03 implementation is frozen through `f79faa1`: PAR-001/003/005/008/009 pass committed automated acceptance, while PAR-002/004/006/007 remain `in-progress` for explicitly `not-run` host or later-DSP/harness evidence. BLD-006/011/012 remain `in-progress`; no release-complete claim is made. |
+| Workstream | 04 — Pitch, Tuning, Glide, and Modulation next; the Workstream 12 F0 harness skeleton is accepted while TST-001–009, PAR-002/004/006/007, and BLD-006/011/012 remain open owner/pre-release tracks. |
+| Overall status | F0 harness infrastructure is complete through the closeout commit containing this ledger: three deterministic renderer fixtures, three versioned core analyzers, seven registry-derived PAR-006 templates, a globally draft manifest, exact 127-row mapping, canonical report, and authoritative release enforcement. The honest report is 14 pass / 94 not-run / 19 awaiting / 0 fail and not release-ready; no full Workstream 12 or release claim is made. |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
-| Source prompt | Agent 07 Workstream 03 continuation context plus the completed [kickoff](18-agent-07-workstream-03-kickoff.md); the authoritative closeout is the [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md). |
-| Successor package | Planned untracked artifact `Agent-07-Workstream-03-Complete-Context.zip`; it must be built from the final committed ledger state and supersedes without deleting any predecessor archive. |
-| First action | Coordinate Workstream 12's acceptance manifest and executable harness with the frozen 48-parameter registry, smoothing-class declarations, v2 state fixtures, and contour compatibility traces. |
-| First unmet gate | PAR-006 — approved-manifest click/step fixtures and measured acceptance bounds; PAR-002/004/007 also retain designated-host validation. |
-| Next owner if incomplete | Workstream 12 / F0 harness continuation; carry PAR-002/004/006/007 and BLD-006/011/012 as visible pre-release obligations. |
-| Next owner if complete | Workstream 04 in roadmap order after Workstream 12 accepts the F0 harness/manifest seam. |
+| Source prompt | The reviewed Workstream 12 F0 design/implementation plan and Tasks 1–4 reports; the authoritative closeout is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness-foundation.md). |
+| Successor package | Planned untracked artifact `Agent-08-Workstream-12-F0-Complete-Context.zip`; build it from the exact final committed ledger state and supersede without deleting any predecessor archive. |
+| First action | Begin Workstream 04 PIT-001/PIT-002: introduce the semitone-domain pitch foundation and exact coarse-range plus −8…+8 semitone oscillator-offset mapping, binding new fixtures to the accepted renderer/analyzer/report seam. |
+| First unmet gate | PIT-001/PIT-002 implementation. PAR-006 remains `in-progress` for non-`none` DSP trajectories and hardware-owned response evidence; PAR-002/004/007 retain designated-host validation. |
+| Next owner if incomplete | Workstream 04 continuation; preserve all open BLD/PAR/TST release obligations and the draft acceptance status. |
+| Next owner if complete | Workstream 05 in roadmap order only after Workstream 04 owner-plan requirements pass. |
 
 ## Workstream 02 requirement ledger
 
@@ -54,22 +54,40 @@ The [verification summary](evidence/workstream-03/workstream-03-verification-sum
 | PAR-003 | pass | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) · [state v2 migration](evidence/workstream-03/state-v2-migration.md) | Preserve Tune `Zero` for new state and saved legacy values during migration. |
 | PAR-004 | in-progress | [Contour compatibility/conversion](evidence/workstream-03/contour-compatibility-conversion.md) proves canonical/legacy routing, explicit acknowledged conversion, and exact undo. | Run designated-DAW legacy contour automation plus warning/cancel evidence; currently `not-run`. |
 | PAR-005 | pass | [State v2 migration](evidence/workstream-03/state-v2-migration.md) | Preserve strict parse/validate/migrate/commit, deterministic bytes, and rollback. |
-| PAR-006 | in-progress | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) freezes and audits smoothing classes. | Workstream 12/later DSP must define and pass approved-manifest click/step fixtures; currently `not-run`. |
+| PAR-006 | in-progress | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) freezes the classes; [F0 evidence](evidence/workstream-12/f0-harness-foundation.md) proves seven-template expansion, four approved derived policies, and evidence-authoritative evaluation. | Supply and pass non-`none` owner-DSP trajectories and approved hardware-dependent response evidence; designated `none` evidence does not close the whole row. |
 | PAR-007 | in-progress | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) · [state v2 migration](evidence/workstream-03/state-v2-migration.md) · [typed bindings](evidence/workstream-03/typed-editor-bindings.md) prove typed contracts/defaults/restore/UI gestures. | Run designated-host enumeration, automation, save, and reload; currently `not-run`. |
 | PAR-008 | pass | [State v2 migration](evidence/workstream-03/state-v2-migration.md) proves the fault corpus and safe-extension round trip. | Preserve atomic failure and bounded extension policy. |
 | PAR-009 | pass | [Prepared snapshot](evidence/workstream-03/prepared-parameter-snapshot.md) · [typed bindings](evidence/workstream-03/typed-editor-bindings.md) | Preserve the prepared 48-value snapshot and attachment-only editor boundary. |
+
+## Workstream 12 requirement ledger
+
+The [F0 harness foundation evidence](evidence/workstream-12/f0-harness-foundation.md)
+records the implementation series, schemas, immutable hashes, RED/GREEN history,
+fresh serial verification, honest report, and exact reproduction commands.
+
+| Requirement | Status | Durable F0 evidence | Blocker or next action |
+|---|---|---|---|
+| TST-001 | in-progress | Three fixtures produce 15 deterministic hashed render artifacts. | Add preset/audio-input and owner-workstream fixtures; expand clean-machine policy evidence. |
+| TST-002 | in-progress | Three v1 core analyzers pass synthetic and finite-extreme contracts. | Add the pitch/spectrum/contour/filter/saturation/latency owner analyzers. |
+| TST-003 | in-progress | Immutable index, candidate-only generation, exact hashing, and overwrite rejection pass. | Exercise the approved golden regeneration and independent-review workflow. |
+| TST-004 | in-progress | Classification and authority rules are executable; listening cannot waive numerical gates. | Populate and review all later evidence classes without changing authority boundaries. |
+| TST-005 | in-progress | Hardware absence remains explicitly awaiting approved reference. | Run an approved, fully provenance-bound hardware campaign. |
+| TST-006 | in-progress | Draft machine-readable manifest and exactly four approved PAR-006 derived policies validate. | Populate approved published/measured/performance gates and owner-DSP evidence; keep the global manifest draft until complete. |
+| TST-007 | in-progress | Exact 127-row map, 101-gate canonical report, and authoritative release verifier pass their contracts. | Close the 113 honest non-pass requirements through their primary owners. |
+| TST-008 | in-progress | Three block partitions, state variants, deterministic repeats, and Darwin arm64 provenance pass. | Complete sample-rate/reset/platform/architecture/host coverage. |
+| TST-009 | in-progress | Report semantics prevent subjective waiver. | Execute the blinded, randomized, level-matched protocol and retain its separate log/statistics. |
 
 ## Current change inventory
 
 | Category | Details |
 |---|---|
-| Starting branch/commit | Workstream 03 resumed `codex/workstream-02-build` at `b28db12`, the exact retained Workstream 02 identity ledger. |
-| Ending commit/working tree | Implementation commits `3206baa` through `f79faa1` freeze Workstream 03 behavior. The final planning/evidence commit contains this ledger; the successor package's `GIT-STATE.md` records its exact full hash without creating a self-referential tracked document. Only preserved predecessor inputs and the verified complete-context ZIP remain untracked. |
-| Pre-existing changes | Agent 07 preserves every predecessor ZIP and extracted orientation copy without staging, deletion, or modification. |
-| Implementation files changed | `ParameterRegistry.*`, `StateContract.*`, `ContourRouting.*`, `ParameterSnapshotCapture.h`, processor/editor sources, new `ParameterBinding.*`, CMake test registration, `ModelDTests.cpp`, and nine frozen parameter/state fixtures. The series centralizes 48 descriptors, adds state v2 and contour compatibility, publishes coherent prepared snapshots, and replaces editor string maps/polling with typed attachments. |
-| Planning files changed | Workstream 03 evidence reports, roadmap, traceability matrix, owner plan, kickoff, PAR-009 plan, and this handoff distinguish the completed automated freeze from the four remaining manual/later-DSP acceptance rows. |
-| Artifacts/evidence produced | [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md) and the seven task reports under [evidence/workstream-03](evidence/workstream-03/), plus immutable JSON/XML fixtures under `Tests/fixtures/parameters` and `Tests/fixtures/state`. |
-| Temporary scaffolding | Bounded pre-change, identity, final baseline, successor construction, and extraction trees are created only under `/private/tmp` and removed after their verification purpose. Predecessor context copies remain orientation inputs, not implementation sources; retained predecessor evidence and recovery paths remain untouched. |
+| Starting branch/commit | Task 5 resumed `codex/workstream-12-f0-harness` at reviewed base `f67f4f74c31550194c699a8249ff141fc1e616d8`. |
+| Ending commit/working tree | The exact final closeout hash is recorded in the successor package's `repository-context/GIT-STATE.md` without creating a self-referential tracked document. The final verified ZIP is intentionally outside Git; no push was performed. |
+| Pre-existing changes | Every predecessor ZIP and extracted orientation copy remains unstaged, unmodified, and excluded from the successor archive. |
+| Implementation files changed | Workstream 12 commits `e0bc0c4` through `f67f4f7` add the reference harness types/data, offline renderer, analyzers, acceptance evaluation, requirement reporter, CLI modes, 20-test registration, three render fixtures, seven PAR-006 templates, draft acceptance manifest, exact map, and expected status projection. No production `Source/` file changed in the Workstream 12 series. |
+| Planning files changed | The roadmap, matrix, Workstream 03/12 plans, Workstream 12 implementation plan, this handoff, and the F0 evidence distinguish accepted infrastructure from non-passing final requirements. Historical handoff entries remain byte-for-byte unchanged. |
+| Artifacts/evidence produced | [F0 harness foundation evidence](evidence/workstream-12/f0-harness-foundation.md), 19 indexed source fixtures, repeat-equal 16-file candidate directories, and the untracked successor context ZIP. |
+| Temporary scaffolding | Fresh build, candidate, package-construction, and extraction trees are bounded under `/private/tmp`; they contain no credentials/settings/recovery inputs and are not packaged. |
 
 ## Verification ledger
 
@@ -100,6 +118,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-21 14:29 PDT; exact-head GitHub Actions push run `29869102847`; eight supported rows | Strict build; full and per-label CTest; standalone lifecycle; actual-wrapper/pluginval/auval; dynamic AU install/cleanup on four macOS rows; linked-manifest verification and upload | All eight platform/configuration rows pass at exact source `7177557`; each passes 10/10 CTest and every required label. All four macOS dynamic AU install/cleanup steps pass. The sentinel skips by design. Designated-account AU, Steinberg SDK, and commercial-host gates remain separate and unrun. | [Owner identity and deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md#exact-head-hosted-confirmation) | BLD-007, BLD-010–012 |
 | 2026-07-21 19:10 PDT; Agent 07; fresh macOS arm64 Release path with spaces | Configure against exact JUCE `3af3ce…9fab` with validators, warnings-as-errors, and distribution identity validation; build all targets; serial `ctest -C Release -j1`; six production captures/`cmp`; nine immutable SHA-256 checks; source guards; `git diff --check`; local Markdown-link audit | Configure/build pass; CTest passes 16/16 in 36.95 seconds with all seven labels; all six captures compare byte-equal; all nine hashes match; source guards, diff check, and seven-file local-link audit pass. Designated-host and PAR-006 measurement procedures remain `not-run`. | [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md) | PAR-001–009 |
 | 2026-07-21 19:28 PDT; fresh combined review-only agent | Generate the exact `b28db12..12f5cbc` 16-commit review package; verify SHA-256 `7b5b7478359de0a525bbd3fdb1a15d647cccdc9ae78f2ea6f8fa220a892e3fbd`; audit implementation, compatibility, real-time boundaries, tests, planning, and evidence without editing or rerunning tests | Approved with no Critical, Important, or Minor findings. The reviewer confirmed that PAR-002/004/006/007 and BLD-006/011/012 are truthful external/manual/later-workstream deferrals, not code defects or passing gates. | [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md) | PAR-001–009 |
+| 2026-07-22 14:46 PDT; Workstream 12 F0 closeout; macOS Darwin arm64 Release | Fresh path-with-spaces exact-JUCE configure with tests, validators, warnings-as-errors, and distribution identity; all-target build; serial full and seven labeled CTests; CLI validate/two runs/release verify; 16-file repeat comparison; 19 indexed hashes; source/history/link/status guards | Default-generator configure resolves exact JUCE `3af3ce…9fab`; build exits 0; full CTest passes 20/20 in 38.75 seconds; labels pass unit 4/4, state 10/10, DSP 3/3, MIDI 1/1, realtime 2/2, host 2/2, artifact 4/4. Validate/runs exit 0; all candidate bytes repeat; release verify truthfully exits 3 at BLD-006; report is 14/94/19/0 with 127 rows and 101 gates. | [F0 harness foundation evidence](evidence/workstream-12/f0-harness-foundation.md) | PAR-006, TST-001–009 |
 
 ## Decisions, assumptions, and blockers
 
@@ -114,7 +133,8 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 - The product owner supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. The Actions incident recovered; the complete diagnostic chain is retained, and exact implementation run `29728203657` passes all eight supported rows. That authority does not supply legal identity, distribution history, SDK-validator access, or commercial-host access.
 - The JUCE licensing approval closes BLD-003, and the later owner identity/history decision closes BLD-007. BLD-006/011/012 remain gated by designated external tools, hosts, and release evidence, but the owner-approved scheduling exception permits Workstream 03 to proceed in parallel.
 - Workstream 03's automated contract freeze is committed through `f79faa1`. The frozen seam is 48 stable typed registry keys, `modelDState` v2 with explicit v0 migration, canonical/legacy contour adapters with opt-in conversion, one coherent prepared render snapshot, and attachment-driven editor bindings.
-- PAR-002/004/007 remain `in-progress` because their designated-host checks are `not-run`; PAR-006 remains `in-progress` because Workstream 12/later DSP owns measured click/step acceptance. These are evidence obligations, not known automated contract failures.
+- PAR-002/004/007 remain `in-progress` because their designated-host checks are `not-run`. PAR-006 advances from a declaration-only seam to an approved executable F0 policy: seven templates cover all 48 descriptors and the four derived-software policies are validated. It remains `in-progress` because gain/control and dedicated pitch/cutoff/glide/contour DSP trajectories plus hardware-owned responses are unavailable/non-pass.
+- The Workstream 12 F0 skeleton is accepted, but TST-001–009 remain individually `in-progress`. No hardware, host, listening, owner-DSP, full platform matrix, or approved-global-manifest result was inferred; the canonical report remains not release-ready.
 - A shared mutable build directory cannot safely host concurrent full CTest runs because standalone lifecycle/identity tests intentionally manipulate common staged output. All final acceptance is serial; the earlier overlap collision was reproduced and serial reruns passed without a production-code workaround.
 
 ## Successor handoff package protocol
@@ -148,15 +168,17 @@ assistant response reports the outer ZIP SHA-256. The successor's
 
 ## Exact resumption point
 
-Workstream 03's automated contract freeze is complete through `f79faa1`; begin
-with Workstream 12's harness and acceptance-manifest coordination. Consume the
-frozen 48-key registry export, parameter snapshot, native/migrated v2 state
-fixtures, and contour conversion trace without inventing alternate IDs,
-normalization, state roots, or compatibility semantics. The first open
-acceptance is PAR-006's approved-manifest click/step evidence. After Workstream
-12 accepts the F0 seam, continue to Workstream 04 in roadmap order.
+The Workstream 12 F0 renderer/analyzer/manifest/report seam is accepted. Begin
+Workstream 04 at PIT-001/PIT-002 in `04-pitch-tuning-glide-modulation.md`: add a
+single semitone-domain pitch representation and correct the coarse oscillator
+range plus `Frequency` selector to an exact −8…+8 semitone offset. Add failing
+owner fixtures first, then render/analyze/report them through the existing F0
+contracts. Preserve all parameter IDs, normalization, v2 state roots, contour
+compatibility semantics, candidate-only output rules, and authority boundaries.
 
-In parallel, designated-host validation may close PAR-002/004/007 by recording
+In parallel, later DSP owners must supply PAR-006's non-`none` trajectories and
+approved hardware-dependent response evidence. Designated-host validation may
+close PAR-002/004/007 by recording
 generic UI enumeration, legacy contour automation and warning/cancel behavior,
 and priority/trigger/Main/Phones automation/save/reload. These procedures are
 currently `not-run` and must not be represented as passing.
@@ -349,6 +371,25 @@ without additional owner action and the required passing evidence.
 - **First unmet gate:** PAR-006 — approved-manifest click/step fixtures and measured acceptance bounds; PAR-002/004/007 and BLD-006/011/012 remain parallel pre-release obligations.
 - **Exact resumption point:** coordinate Workstream 12's manifest and executable harness with the frozen registry export, parameter snapshot, native/migrated v2 state fixtures, and contour compatibility trace, beginning with PAR-006. Do not invent alternate IDs, normalization, state, or compatibility mappings.
 - **Next phase/workstream:** Workstream 12 / F0 harness coordination; Workstream 04 follows after the harness/manifest seam is accepted.
+
+### 2026-07-22 14:46 PDT — Agent 08 Workstream 12 F0 harness closeout
+
+- **From / to:** Agent 08 Workstream 12 F0 harness / Workstream 04 pitch/glide successor.
+- **Branch and commits:** resumed `codex/workstream-12-f0-harness` at reviewed exact base `f67f4f74c31550194c699a8249ff141fc1e616d8`; Tasks 1–4 are commits `e0bc0c4` through `f67f4f7`; the synchronized closeout is the commit containing this entry, whose exact full hash is generated into the successor package.
+- **Pre-existing changes preserved:** all predecessor ZIPs and extracted orientation copies remain unstaged, unmodified, and excluded from the successor package; no predecessor archive was deleted or overwritten.
+- **Phase/workstream/status:** F0 / Workstream 12 harness skeleton complete; Workstream 12 final acceptance remains incomplete. TST-001–009 remain individually `in-progress`, the global acceptance manifest remains `draft`, and the release report remains non-ready.
+- **Requirements:** PAR-006 advances from a declaration-only seam to approved executable F0 policy but remains `in-progress` for non-`none` DSP trajectories and hardware-dependent cases. PAR-002/004/007 and BLD-006/011/012 remain non-passing. No TST row advances to `pass`; [F0 evidence](evidence/workstream-12/f0-harness-foundation.md) records each retained gap.
+- **Implementation changes:** the Workstream 12 series adds immutable reference data, deterministic exact-event rendering, three v1 analyzers, seven registry-derived smoothing templates, strict acceptance evaluation, exact 127-row requirement mapping, canonical reporting, and authoritative release enforcement. No production `Source/` file changed.
+- **Planning changes:** synchronized the roadmap F0 table, TST matrix rows, PAR-006 status, Workstream 03/12 definitions of done, current snapshot, change inventory, verification ledger, blockers, exact Workstream 04 resumption point, implementation-plan completion marks, and this append-only entry.
+- **Commands and results:** fresh exact-JUCE warnings-as-errors Release build passes in `/private/tmp/model-d-task5-final.cUgN5c/Release build with spaces`; serial full CTest passes 20/20 in 38.75 seconds; every required label passes; CLI validate and two runs exit 0; 16 candidate files compare byte-equal; release verify exits 3 at honest first-open BLD-006; 19 source hashes, 127-row order, 418 local links, source/history/status guards, and `git diff --check` pass. The same tree is reconfigured/rebuilt/retested at the exact closeout commit before packaging.
+- **Artifacts:** 19 indexed source artifacts; 16 generated candidate artifacts per run; 127-row/101-gate report at 14 pass, 94 not-run, 19 awaiting approved reference, 0 fail; durable hashes and commands are in the [F0 evidence](evidence/workstream-12/f0-harness-foundation.md).
+- **Decisions and assumptions:** F0 infrastructure completion is separate from Workstream 12 requirement completion. No production DSP, hardware capture, host execution, listening result, approved global manifest, or release evidence was invented.
+- **Blockers and known defects:** no F0 contract defect is known after the serial verification. Open owner evidence includes non-`none` PAR-006 trajectories, hardware-dependent reference bands, full analyzer/platform/host matrices, TST governance campaigns, designated-host PAR-002/004/007, and external BLD-006/011/012.
+- **Temporary work/cleanup:** only bounded fresh build/candidate/package/extraction trees under `/private/tmp` are agent-owned. The unavailable-Ninja configure-only attempt is not evidence. No build, dependency, downloaded validator, credential, setting, recovery file, or predecessor archive is staged or packaged.
+- **Successor package:** `Agent-08-Workstream-12-F0-Complete-Context.zip`, intentionally untracked outside Git; construct from the exact closeout commit and verify integrity, safe paths, no symlinks, fresh extraction, every internal hash, committed-file equality, final-commit equality, and semantic spot checks before reporting its outer SHA-256.
+- **First unmet gate:** PIT-001/PIT-002 are the next engineering action; PAR-006 remains an open parallel acceptance track rather than a reason to delay the accepted F0 seam.
+- **Exact resumption point:** open `04-pitch-tuning-glide-modulation.md`; add failing PIT-001/PIT-002 semitone-domain and exact coarse/fine offset fixtures first, then bind their render/analyzer results through the accepted F0 manifest/report contracts without altering frozen parameter/state/contour semantics.
+- **Next phase/workstream:** Workstream 04 in roadmap order; retain Workstream 02/03/12 open validation as visible pre-release tracks.
 
 ## Required template for every later handoff entry
 

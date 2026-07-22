@@ -34,7 +34,7 @@ scope are in the [Workstream 03 verification summary](evidence/workstream-03/wor
 | PAR-003 | pass | New v2 state defaults Tune to `Zero`; migrated v0 states preserve saved values. |
 | PAR-004 | in-progress | Canonical/legacy adapters, provenance, explicit conversion, and undo pass automated traces; designated-DAW automation and warning/cancel capture remain `not-run`. |
 | PAR-005 | pass | Strict deterministic v2 state, atomic v0 migration, synchronized publication, and rollback are committed and tested. |
-| PAR-006 | in-progress | Smoothing classes are declared and statically audited; Workstream 12/later DSP still owns approved-manifest click/step measurement. |
+| PAR-006 | in-progress | The F0 harness expands all 48 registry descriptors into seven indexed templates and enforces four approved derived-software policies. Only evidence-backed `none` trajectories can pass today; gain/control and dedicated pitch/cutoff/glide/contour DSP paths plus hardware-dependent response evidence remain open. [F0 evidence](evidence/workstream-12/f0-harness-foundation.md) |
 | PAR-007 | in-progress | Stable typed priority/trigger/Main/Phones defaults, state, restore, and bindings pass; designated-host enumeration/automation/save/reload remains `not-run`. |
 | PAR-008 | pass | The fault corpus and bounded safe-extension round trip pass. |
 | PAR-009 | pass | One prepared 48-value snapshot feeds rendering and shared typed attachments feed the editor without duplicated string maps or APVTS polling. |
@@ -181,7 +181,7 @@ Status: **not-run**. In designated VST3/AU hosts, capture automation lists befor
 
 ## Definition of done
 
-- [ ] PAR-001 through PAR-009 pass. Automated implementation is frozen, but PAR-002/004/006/007 retain the explicit manual/Workstream 12 obligations above.
+- [ ] PAR-001 through PAR-009 pass. Automated implementation is frozen, and the F0 executable PAR-006 policy seam is accepted, but PAR-002/004/006/007 retain the explicit manual, later-DSP, hardware, and designated-host obligations above.
 - [x] Registry is the only metadata source.
 - [x] Legacy IDs and automation remain addressable.
 - [x] v0 migration is atomic and visibly marked legacy; v2 is deterministic.

@@ -20,9 +20,27 @@ Every fidelity, correctness, compatibility, real-time, and host claim is reprodu
 | TST-008 | Cover supported sample rates, host block partitions, resets, state versions, platforms/architectures, and reproducibility. |
 | TST-009 | Define blinded, randomized, level-matched listening and hardware A/B protocols whose results cannot waive numerical failures. |
 
-## Current-code evidence
+## Foundation closeout status
 
-- The repository has no CMake/test target, test directory, offline renderer, fixtures, analyzers, reference manifest, hardware captures, or CI execution.
+The Workstream 12 **F0 harness skeleton** is complete and verified; Workstream
+12 as a whole is not complete. The durable command, hash, RED/GREEN, and status
+record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness-foundation.md).
+
+| ID | Status | F0 result / remaining acceptance |
+|---|---|---|
+| TST-001 | in-progress | Three deterministic state/MIDI/automation fixtures render 15 hashed candidate artifacts across three block patterns. Preset/audio-input and later owner-fixture coverage remains open. |
+| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, and `audio.click.v1` pass synthetic and finite-extreme contracts. The complete owner-analyzer catalog remains open. |
+| TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
+| TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
+| TST-005 | in-progress | Missing hardware provenance remains visible as `awaiting-approved-reference`; no hardware capture campaign or reference-instrument record has run. |
+| TST-006 | in-progress | The machine-readable manifest remains globally `draft`; exactly four derived PAR-006 policies are approved. Published, measured-hardware, performance, and owner-DSP evidence remains incomplete. |
+| TST-007 | in-progress | The map exactly covers 127 requirements and the canonical report/release verifier is authoritative. The F0 report is intentionally not release-ready. |
+| TST-008 | in-progress | F0 proves repeat equality across three block partitions and records state/build provenance on Darwin arm64. The full sample-rate/reset/platform/architecture/host matrix remains open. |
+| TST-009 | in-progress | The status model prevents listening from replacing numerical gates. No blinded, randomized, level-matched listening campaign has run. |
+
+## Original pre-remediation code evidence
+
+- At the planning baseline, the repository had no CMake/test target, test directory, offline renderer, fixtures, analyzers, reference manifest, hardware captures, or CI execution. Workstreams 02/03 and the F0 harness now supply the automated foundation; hardware captures remain absent.
 - DSP and state logic are embedded in `MoogMiniAudioProcessor::processBlock`/APVTS, so algorithms cannot currently be exercised independently of a plug-in wrapper.
 - The checked-in official manual supplies published constraints, but current code contains unsourced constants for waveform curvature, pulse width, contour time, filter modulation, mixer/noise scale, drive, feedback, glide, and cutoff limits.
 - No provenance connects current panel behavior or presets to an identified reference instrument/recording chain.
@@ -153,14 +171,15 @@ Audit a campaign from panel worksheet through raw hash, analyzer, band, calibrat
 ## Definition of done
 
 - [ ] TST-001 through TST-009 pass.
-- [ ] Every matrix ID has executable verification and evidence schema.
+- [x] F0 renderer/analyzer/fixture/manifest/map/report/release-enforcement skeleton is accepted.
+- [x] Every matrix ID has an executable verification mapping and evidence schema; current non-pass states remain explicit.
 - [ ] Acceptance v1 is approved with no invented/missing release gate.
 - [ ] Hardware captures/calibrations have full provenance/integrity.
 - [ ] Golden/listening governance is exercised, not only documented.
 
 ## Completion-report evidence
 
-Include schema files/examples; renderer reproducibility hashes; analyzer synthetic-validation results; requirement coverage report; published-source extract/page map; raw/reference/calibration/uncertainty manifests; approved acceptance/golden review records; cross-platform diffs; listening protocol/log/report; and commands to reproduce all artifacts.
+The F0 subset is recorded in the [foundation evidence](evidence/workstream-12/f0-harness-foundation.md). Final Workstream 12 completion must additionally include schema files/examples; renderer reproducibility hashes; analyzer synthetic-validation results; requirement coverage report; published-source extract/page map; raw/reference/calibration/uncertainty manifests; approved acceptance/golden review records; cross-platform diffs; listening protocol/log/report; and commands to reproduce all artifacts.
 
 ## Primary technical references
 
