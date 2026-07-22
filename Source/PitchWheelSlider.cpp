@@ -23,7 +23,7 @@ PitchWheelSlider::PitchWheelSlider() {
 
 
 void PitchWheelSlider::mouseUp(const juce::MouseEvent& event) {
-    Slider::mouseUp(event);
-    // Use sendNotificationSync to immediately trigger the listener
+    // Return to centre as the final value inside the active drag gesture.
     setValue(0.0, juce::sendNotificationSync);
+    Slider::mouseUp(event);
 }

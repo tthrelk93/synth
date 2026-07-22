@@ -4,6 +4,8 @@
 #include "ParameterRegistry.h"
 #include "ParameterSnapshotCapture.h"
 
+#include "ParameterBinding.h"
+
 #include <juce_cryptography/juce_cryptography.h>
 
 #include <algorithm>
@@ -22,6 +24,10 @@
 #include <type_traits>
 #include <utility>
 #include <vector>
+
+#if JUCE_MAC
+#include <CoreFoundation/CoreFoundation.h>
+#endif
 
 #define SYNTH_STRINGIFY_IMPL(value) #value
 #define SYNTH_STRINGIFY(value) SYNTH_STRINGIFY_IMPL(value)
@@ -2882,7 +2888,7 @@ void testContourTask3BContract (TestContext& test)
                      && processorSource.contains ("setContourEnvelopeSettings (normalizedToMilliseconds (routed.loudness.attack)"),
                  "processBlock must route both physical contour ports through the shared adapter");
     test.expect (editorSource.contains ("setSignalFlowContourControl")
-                     && editorSource.contains ("getSignalFlowContourSnapshot"),
+                     && editorSource.contains ("captureParameterSnapshot"),
                  "Signal Flow contour reads and writes must choose semantic IDs dynamically");
     test.expect (! editorSource.contains (
                      "callbacks.setContourAttack = [setParam](float value) { setParam(\"loudnessAttackTimeKnob\""),
@@ -3789,6 +3795,251 @@ void testPreparedSnapshotContract (TestContext& test)
         expectFixtureHash (test, sourceRoot.getChildFile (path), hash, path);
 }
 
+void testParameterBindingContract (TestContext& test)
+{
+    const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+    const auto bindingHeader = sourceRoot.getChildFile ("Source/ParameterBinding.h");
+    const auto bindingSource = sourceRoot.getChildFile ("Source/ParameterBinding.cpp");
+    const auto bindingHeaderText = bindingHeader.loadFileAsString();
+    const auto bindingSourceText = bindingSource.loadFileAsString();
+    const auto editorHeader = sourceRoot.getChildFile ("Source/PluginEditor.h")
+                                  .loadFileAsString();
+    const auto editorSource = sourceRoot.getChildFile ("Source/PluginEditor.cpp")
+                                  .loadFileAsString();
+    const auto pitchWheelSource = sourceRoot.getChildFile ("Source/PitchWheelSlider.cpp")
+                                      .loadFileAsString();
+
+    test.expect (bindingHeader.existsAsFile() && bindingSource.existsAsFile()
+                     && bindingHeaderText.contains ("class ParameterBinding")
+                     && bindingHeaderText.contains ("ParameterRegistry::Key")
+                     && bindingHeaderText.contains ("juce::ParameterAttachment")
+                     && bindingHeaderText.contains ("DisplayMapping"),
+                 "typed prepared ParameterBinding production files must exist");
+    test.expect (! editorHeader.contains ("getParameterID")
+                     && ! editorHeader.contains ("getNormalizedValue")
+                     && ! editorHeader.contains ("getSliderValueFromNormalized")
+                     && ! editorHeader.contains ("getEnumSizeLessOne")
+                     && ! editorHeader.contains ("sliderHasChanged")
+                     && ! editorSource.contains ("getParameterID")
+                     && ! editorSource.contains ("getNormalizedValue")
+                     && ! editorSource.contains ("getSliderValueFromNormalized")
+                     && ! editorSource.contains ("getEnumSizeLessOne")
+                     && ! editorSource.contains ("sliderHasChanged"),
+                 "editor duplicate ID and normalization chains must be deleted");
+    test.expect (! editorSource.contains ("audioProcessor.apvts.getRawParameterValue")
+                     && ! editorSource.contains ("audioProcessor.apvts.getParameter(")
+                     && ! editorSource.contains ("audioProcessor.apvts.getParameter (")
+                     && ! editorSource.contains ("audioProcessor.apvts.getParameterAsValue"),
+                 "editor must contain no direct APVTS parameter getter");
+
+    const auto timerStart = editorSource.indexOf (
+        "void MoogMiniAudioProcessorEditor::timerCallback()");
+    const auto timerSource = timerStart >= 0 ? editorSource.substring (timerStart)
+                                             : juce::String {};
+    const auto capture = timerSource.indexOf ("captureParameterSnapshot");
+    test.expect (timerStart >= 0 && capture >= 0
+                     && timerSource.indexOf (capture + 1, "captureParameterSnapshot") < 0
+                     && ! timerSource.contains ("getRawParameterValue")
+                     && ! timerSource.contains ("getParameter(")
+                     && ! timerSource.contains ("getParameter (")
+                     && ! timerSource.contains ("getParameterAsValue")
+                     && ! timerSource.contains ("getParameterID"),
+                 "timer must capture one complete snapshot and perform no parameter lookup");
+    test.expect (editorHeader.contains ("ParameterRegistry::Key parameterKey")
+                     && editorHeader.contains ("std::vector<std::unique_ptr<ParameterBinding>>")
+                     && editorSource.contains ("setValueAsCompleteGesture")
+                     && editorSource.contains ("ContourRouting::mapStoredControls"),
+                 "editor controls must retain typed bindings and dynamic stored contour mapping");
+    const auto pitchMouseUpStart = pitchWheelSource.indexOf (
+        "void PitchWheelSlider::mouseUp");
+    const auto pitchMouseUpSource = pitchWheelSource.substring (pitchMouseUpStart);
+    const auto pitchReset = pitchMouseUpSource.indexOf ("setValue(0.0");
+    const auto pitchEnd = pitchMouseUpSource.indexOf ("    Slider::mouseUp(event)");
+    test.expect (pitchMouseUpStart >= 0 && pitchReset >= 0 && pitchEnd >= 0
+                     && pitchReset < pitchEnd,
+                 "pitch wheel spring-back value must remain inside its single drag gesture");
+
+    struct ParameterEventListener final : juce::AudioProcessorParameter::Listener
+    {
+        void parameterValueChanged (int, float) override { events.emplace_back ("value"); }
+        void parameterGestureChanged (int, bool starting) override
+        {
+            events.emplace_back (starting ? "begin" : "end");
+        }
+        std::vector<std::string> events;
+    };
+
+    MoogMiniAudioProcessor processor;
+    const auto close = [] (float left, float right)
+    {
+        return std::abs (left - right) < 1.0e-5f;
+    };
+    const auto testSliderMapping = [&] (ParameterRegistry::Key key,
+                                        double componentMinimum,
+                                        double componentMaximum,
+                                        double componentInterval,
+                                        DisplayMapping mapping,
+                                        float parameterValue,
+                                        double expectedComponentValue,
+                                        double componentValue,
+                                        float expectedParameterValue,
+                                        std::string_view description)
+    {
+        auto* parameter = processor.getPreparedParameter (key);
+        juce::Slider slider;
+        slider.setRange (componentMinimum, componentMaximum, componentInterval);
+        ParameterBinding binding (key, *parameter, slider, mapping);
+
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (parameterValue));
+        test.expect (close (static_cast<float> (slider.getValue()),
+                            static_cast<float> (expectedComponentValue)),
+                     description);
+        binding.beginGesture();
+        slider.setValue (componentValue, juce::sendNotificationSync);
+        binding.endGesture();
+        test.expect (close (parameter->convertFrom0to1 (parameter->getValue()),
+                            expectedParameterValue),
+                     description);
+    };
+
+    testSliderMapping (ParameterRegistry::Key::feedbackKnob, 0.0, 10.0, 0.01,
+                       DisplayMapping::componentRange, 0.25f, 2.5, 7.0, 0.7f,
+                       "float binding must preserve normalized component range mapping");
+    testSliderMapping (ParameterRegistry::Key::osc1Waveform, 0.0, 5.0, 1.0,
+                       DisplayMapping::componentRange, 5.0f, 5.0, 2.0, 2.0f,
+                       "choice binding must preserve exact endpoints and round trips");
+    testSliderMapping (ParameterRegistry::Key::tune, -2.5, 2.5, 0.5,
+                       DisplayMapping::componentRange, 10.0f, 2.5, -2.5, 0.0f,
+                       "tune binding must preserve -2.5 through +2.5 display");
+    testSliderMapping (ParameterRegistry::Key::osc2Freq, -8.0, 8.0, 1.0,
+                       DisplayMapping::componentRange, 16.0f, 8.0, -8.0, 0.0f,
+                       "detune binding must preserve -8 through +8 display");
+    testSliderMapping (ParameterRegistry::Key::filterCutoff, -5.0, 5.0, 0.01,
+                       DisplayMapping::componentRange, 1.0f, 5.0, -5.0, 0.0f,
+                       "cutoff binding must preserve -5 through +5 display");
+    testSliderMapping (ParameterRegistry::Key::pitchWheelValue, -5.0, 5.0, 0.01,
+                       DisplayMapping::componentRange, 0.5f, 0.0, 5.0, 1.0f,
+                       "pitch wheel binding must preserve -5 through +5 display");
+    testSliderMapping (ParameterRegistry::Key::filterEmphasis, 0.0, 10.0, 1.0,
+                       DisplayMapping::componentRange, 10.0f, 10.0, 3.0, 3.0f,
+                       "panel-index binding must preserve exact 0 through 10 steps");
+    testSliderMapping (ParameterRegistry::Key::filterAttackTimeKnob,
+                       10.0, 10000.0, 0.01,
+                       DisplayMapping::contourTimeMilliseconds,
+                       0.0f, 10.0, 5000.0, 0.5f,
+                       "contour-time binding must retain physical*10000 and 10 ms clamp");
+
+    auto* booleanParameter = processor.getPreparedParameter (
+        ParameterRegistry::Key::filterModSwitch);
+    juce::ToggleButton button;
+    ParameterBinding buttonBinding (ParameterRegistry::Key::filterModSwitch,
+                                    *booleanParameter, button);
+    ParameterEventListener buttonEvents;
+    booleanParameter->addListener (&buttonEvents);
+    button.setToggleState (true, juce::sendNotificationSync);
+    test.expect (buttonEvents.events == std::vector<std::string> { "begin", "value", "end" }
+                     && booleanParameter->getValue() == 1.0f,
+                 "button binding must emit one complete begin/value/end gesture");
+    booleanParameter->removeListener (&buttonEvents);
+
+    auto* continuousParameter = processor.getPreparedParameter (
+        ParameterRegistry::Key::modWheelValue);
+    juce::Slider continuousSlider;
+    continuousSlider.setRange (0.0, 1.0, 0.0);
+    ParameterBinding continuousBinding (ParameterRegistry::Key::modWheelValue,
+                                        *continuousParameter, continuousSlider,
+                                        DisplayMapping::componentRange);
+    ParameterEventListener continuousEvents;
+    continuousParameter->addListener (&continuousEvents);
+    continuousBinding.beginGesture();
+    continuousSlider.setValue (0.2, juce::sendNotificationSync);
+    continuousSlider.setValue (0.8, juce::sendNotificationSync);
+    continuousBinding.endGesture();
+    test.expect (continuousEvents.events
+                     == std::vector<std::string> { "begin", "value", "value", "end" },
+                 "continuous binding must emit exactly begin/value(s)/end");
+
+    continuousEvents.events.clear();
+
+    MoogMiniAudioProcessor restoredProcessor;
+    auto* restoredParameter = restoredProcessor.getPreparedParameter (
+        ParameterRegistry::Key::outputVolKnob);
+    juce::Slider restoredSlider;
+    restoredSlider.setRange (0.0, 10.0, 1.0);
+    ParameterBinding restoredBinding (ParameterRegistry::Key::outputVolKnob,
+                                      *restoredParameter, restoredSlider,
+                                      DisplayMapping::componentRange);
+    MoogMiniAudioProcessor stateSource;
+    auto* sourceParameter = stateSource.getPreparedParameter (
+        ParameterRegistry::Key::outputVolKnob);
+    sourceParameter->setValueNotifyingHost (sourceParameter->convertTo0to1 (7.0f));
+    const auto stateBytes = serialiseProcessorStateBytes (stateSource);
+    auto beginOffThreadChanges = std::make_shared<juce::WaitableEvent>();
+    std::atomic<bool> restoreSucceeded { false };
+    std::atomic<bool> offThreadChangesFinished { false };
+    std::thread hostUpdate ([&, beginOffThreadChanges] {
+        beginOffThreadChanges->wait();
+        continuousParameter->setValueNotifyingHost (0.35f);
+        const auto restore = restoredProcessor.restoreState (
+            stateBytes.getData(), static_cast<int> (stateBytes.getSize()));
+        restoreSucceeded.store (restore.succeeded(), std::memory_order_release);
+        offThreadChangesFinished.store (true, std::memory_order_release);
+    });
+    juce::MessageManager::callAsync ([beginOffThreadChanges] {
+        beginOffThreadChanges->signal();
+    });
+
+#if JUCE_MAC
+    const auto pumpDeadline = juce::Time::getMillisecondCounterHiRes() + 500.0;
+    while (juce::Time::getMillisecondCounterHiRes() < pumpDeadline
+           && (! offThreadChangesFinished.load (std::memory_order_acquire)
+               || ! close (static_cast<float> (continuousSlider.getValue()), 0.35f)
+               || restoredSlider.getValue() != 7.0))
+    {
+        CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.005, true);
+    }
+#else
+    juce::Timer::callAfterDelay (500, [] {
+        juce::MessageManager::getInstance()->stopDispatchLoop();
+    });
+    juce::MessageManager::getInstance()->runDispatchLoop();
+#endif
+
+    beginOffThreadChanges->signal();
+    hostUpdate.join();
+    test.expect (continuousEvents.events == std::vector<std::string> { "value" }
+                     && close (static_cast<float> (continuousSlider.getValue()), 0.35f),
+                 "parameter-originated UI update must not echo a value or gesture");
+    continuousParameter->removeListener (&continuousEvents);
+    test.expect (restoreSucceeded.load (std::memory_order_acquire)
+                     && restoredSlider.getValue() == 7.0,
+                 "live binding must update after successful restore without timer polling");
+
+    MoogMiniAudioProcessor contourProcessor;
+    contourProcessor.setSignalFlowContourControl (
+        ContourRouting::SemanticContour::filter, ContourRouting::Stage::attack, 0.31f);
+    test.expect (close (physicalParameterValue (contourProcessor, "filterAttackTimeKnob"),
+                        0.31f),
+                 "canonical semantic contour write must select the filter stable ID");
+    const auto legacyBytes = binaryFromXml (*juce::parseXML (sourceRoot.getChildFile (
+        "Tests/fixtures/state/legacy-representative-state.xml")));
+    const auto legacyRestore = contourProcessor.restoreState (
+        legacyBytes.getData(), static_cast<int> (legacyBytes.getSize()));
+    contourProcessor.setSignalFlowContourControl (
+        ContourRouting::SemanticContour::filter, ContourRouting::Stage::attack, 0.42f);
+    auto* decay = contourProcessor.getPreparedParameter (ParameterRegistry::Key::decaySwitch);
+    decay->setValueNotifyingHost (0.0f);
+    const auto contourSnapshot = contourProcessor.captureParameterSnapshot ({});
+    const auto storedContours = ContourRouting::mapStoredControls (
+        contourSnapshot.contourContract, contourSnapshot.contours);
+    test.expect (legacyRestore.succeeded()
+                     && close (physicalParameterValue (contourProcessor,
+                                                       "loudnessAttackTimeKnob"), 0.42f)
+                     && storedContours.filter.sustain != 1.0f
+                     && storedContours.loudness.sustain != 1.0f,
+                 "restored legacy semantic contour writes must remap dynamically and disabled-Decay display must retain stored sustains");
+}
+
 void testMidiSampleZeroSmoke (TestContext& test)
 {
     MoogMiniAudioProcessor processor;
@@ -3855,6 +4106,8 @@ int runMode (std::string_view mode)
         testContourTask3BContract (test);
     else if (mode == "prepared-snapshot")
         testPreparedSnapshotContract (test);
+    else if (mode == "parameter-binding")
+        testParameterBindingContract (test);
     else if (mode == "fixtures")
         testLegacyParameterFixtures (test);
     else if (mode == "registry")

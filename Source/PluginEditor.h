@@ -11,8 +11,11 @@
 #include "BlackBackgroundComponent.h"
 #include "SignalFlowOverlay.h"
 #include "PresetManager.h"
+#include "ParameterBinding.h"
 
-class MoogMiniAudioProcessorEditor : public juce::AudioProcessorEditor, private juce::Timer, public juce::Slider::Listener, public juce::Button::Listener, public PianoKey::Listener {
+class MoogMiniAudioProcessorEditor : public juce::AudioProcessorEditor,
+                                     private juce::Timer,
+                                     public PianoKey::Listener {
 public:
     MoogMiniAudioProcessorEditor(MoogMiniAudioProcessor&);
     ~MoogMiniAudioProcessorEditor() override;
@@ -20,15 +23,8 @@ public:
     void paint(juce::Graphics&) override;
     void resized() override;
     void timerCallback() override;
-    void sliderValueChanged(juce::Slider* slider) override;
-    void buttonClicked(juce::Button* button) override;
-    float getEnumSizeLessOne(juce::Slider* slider);
-    juce::String getParameterID(juce::Slider* slider);
-    float getNormalizedValue(juce::Slider* slider, float enumSizeLessOne);
-    float getSliderValueFromNormalized(juce::Slider* slider, float normalizedValue);
-    bool sliderHasChanged(juce::Slider* slider);
-    void createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, std::string paramName, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob);
-    void createToggleSwitch(juce::ToggleButton& toggleSwitch, std::string toggleKey, std::string paramName, int posArray[], bool isHorizontal, int cellWidth, int cellHeight);
+    void createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, ParameterRegistry::Key parameterKey, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob);
+    void createToggleSwitch(juce::ToggleButton& toggleSwitch, std::string toggleKey, ParameterRegistry::Key parameterKey, int posArray[], bool isHorizontal, int cellWidth, int cellHeight);
     
     // PianoKey::Listener implementation
         void pianoKeyPressed(int noteNumber, PianoKey* key) override;
@@ -48,8 +44,6 @@ public:
     double sliderPositionToLoudnessAttackValue(double position);
 
     std::unordered_map<int, std::unordered_map<int, std::string>> nestedMap;
-    std::map<std::string, juce::Slider*> sliderMap;
-    std::map<std::string, juce::ToggleButton*>  toggleMap;
     std::map<std::string, juce::TextButton*>  buttonMap;
     std::map<std::string, juce::Label*>  labelMap;
     std::map<std::string, std::string>  labelStringMap;
@@ -66,8 +60,6 @@ private:
     juce::OwnedArray<WaveformSlider> waveformSliders;
     juce::OwnedArray<VintageLookAndFeel> vintageLookAndFeels;
 
-    juce::OwnedArray<juce::Slider> sliders;
-    juce::OwnedArray<juce::ToggleButton> toggles;
     juce::OwnedArray<juce::TextButton> buttons;
     
     WaveformSlider* ctrlTuneKnob = nullptr;
@@ -209,11 +201,19 @@ private:
     int initialKeyIndex;
     SmokeComponent smokeComponent;
     SignalFlowOverlay signalFlowOverlay;
-    MoogMiniAudioProcessor::ContourSnapshot signalFlowContourSnapshot;
+    MoogMiniAudioProcessor::ParameterSnapshot timerParameterSnapshot;
     juce::ComboBox presetComboBox;
     juce::TextButton savePresetButton;
     juce::TextButton loadPresetButton;
     juce::Label presetLabel;
+
+    std::vector<std::unique_ptr<ParameterBinding>> parameterBindings;
+    ParameterBinding* filterCutoffBinding = nullptr;
+    ParameterBinding* filterEmphasisBinding = nullptr;
+    ParameterBinding* filterContourBinding = nullptr;
+
+    ParameterBinding& retainParameterBinding (std::unique_ptr<ParameterBinding> binding);
+    juce::RangedAudioParameter& preparedParameter (ParameterRegistry::Key key) const;
 
     void createUIComponents();
     void updateSignalFlowOverlayLayout();

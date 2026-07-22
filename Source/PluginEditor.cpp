@@ -477,116 +477,117 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
    
     
     
-    createSliderKnob(osc1WaveFormKnob, "osc1WaveFormKnob", 6, 0, 5, 1, "osc1Waveform", false, osc1WaveformPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc1WaveFormKnob, "osc1WaveFormKnob", 6, 0, 5, 1, ParameterRegistry::Key::osc1Waveform, false, osc1WaveformPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc2WaveFormKnob, "osc2WaveFormKnob", 6, 0, 5, 1, "osc2Waveform", false, osc2WaveformPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc2WaveFormKnob, "osc2WaveFormKnob", 6, 0, 5, 1, ParameterRegistry::Key::osc2Waveform, false, osc2WaveformPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc3WaveFormKnob, "osc3WaveFormKnob", 6, 0, 5, 1, "osc3Waveform", false, osc3WaveformPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc3WaveFormKnob, "osc3WaveFormKnob", 6, 0, 5, 1, ParameterRegistry::Key::osc3Waveform, false, osc3WaveformPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc1RangeKnob, "osc1RangeKnob", 6, 0, 5, 1, "osc1Range", false, osc1RangePos, cellWidth, cellHeight, false);
+    createSliderKnob(osc1RangeKnob, "osc1RangeKnob", 6, 0, 5, 1, ParameterRegistry::Key::osc1Range, false, osc1RangePos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc2RangeKnob, "osc2RangeKnob", 6, 0, 5, 1, "osc2Range", false, osc2RangePos, cellWidth, cellHeight, false);
+    createSliderKnob(osc2RangeKnob, "osc2RangeKnob", 6, 0, 5, 1, ParameterRegistry::Key::osc2Range, false, osc2RangePos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc3RangeKnob, "osc3RangeKnob", 6, 0, 5, 1, "osc3Range", false, osc3RangePos, cellWidth, cellHeight, false);
+    createSliderKnob(osc3RangeKnob, "osc3RangeKnob", 6, 0, 5, 1, ParameterRegistry::Key::osc3Range, false, osc3RangePos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc2FreqKnob, "osc2FreqKnob", 17, -8, 8, 1.0, "osc2Freq", true, osc2FreqPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc2FreqKnob, "osc2FreqKnob", 17, -8, 8, 1.0, ParameterRegistry::Key::osc2Freq, true, osc2FreqPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc3FreqKnob, "osc3FreqKnob", 17, -8, 8, 1.0, "osc3Freq", true, osc3FreqPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc3FreqKnob, "osc3FreqKnob", 17, -8, 8, 1.0, ParameterRegistry::Key::osc3Freq, true, osc3FreqPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc1VolKnob, "osc1VolKnob", 11, 0, 10, 1.0, "osc1Vol", false, osc1VolPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc1VolKnob, "osc1VolKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::osc1Vol, false, osc1VolPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc2VolKnob, "osc2VolKnob", 11, 0, 10, 1.0, "osc2Vol", false, osc2VolPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc2VolKnob, "osc2VolKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::osc2Vol, false, osc2VolPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(osc3VolKnob, "osc3VolKnob", 11, 0, 10, 1.0, "osc3Vol", false, osc3VolPos, cellWidth, cellHeight, false);
+    createSliderKnob(osc3VolKnob, "osc3VolKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::osc3Vol, false, osc3VolPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(ctrlTuneKnob, "ctrlTuneKnob", 11, -2.5, 2.5, 0.5, "tune", true, ctrlTunePos, cellWidth, cellHeight, false);
+    createSliderKnob(ctrlTuneKnob, "ctrlTuneKnob", 11, -2.5, 2.5, 0.5, ParameterRegistry::Key::tune, true, ctrlTunePos, cellWidth, cellHeight, false);
     
-    createSliderKnob(filterCutoffFreqKnob, "filterCutoffFreqKnob", 11, -5, 5, 1.0, "filterCutoff", true, filterCutoffPos, cellWidth, cellHeight, false);
+    createSliderKnob(filterCutoffFreqKnob, "filterCutoffFreqKnob", 11, -5, 5, 1.0, ParameterRegistry::Key::filterCutoff, true, filterCutoffPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(filterEmphasisKnob, "filterEmphasisKnob", 11, 0, 10, 1.0, "filterEmphasis", true, filterEmphasisPos, cellWidth, cellHeight, false);
+    createSliderKnob(filterEmphasisKnob, "filterEmphasisKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::filterEmphasis, true, filterEmphasisPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(filterAmtContourKnob, "filterAmtContourKnob", 11, 0, 10, 1.0, "filterContour", true, filterContourPos, cellWidth, cellHeight, false);
+    createSliderKnob(filterAmtContourKnob, "filterAmtContourKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::filterContour, true, filterContourPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(outputVolKnob, "outputVolKnob", 11, 0, 10, 1.0, "outputVolKnob", true, outputVolKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(outputVolKnob, "outputVolKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::outputVolKnob, true, outputVolKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(extInputVolKnob, "extInputVolKnob", 11, 0, 10, 1.0, "extInputVolKnob", true, extInputVolKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(extInputVolKnob, "extInputVolKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::extInputVolKnob, true, extInputVolKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(ctrlModMixKnob, "ctrlModMixKnob", 11, 0, 10, 1.0, "ctrlModMixKnob", true, ctrlModMixKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(ctrlModMixKnob, "ctrlModMixKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::ctrlModMixKnob, true, ctrlModMixKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(ctrlGlideKnob, "ctrlGlideKnob", 11, 0, 10, 1.0, "ctrlGlideKnob", true, ctrlGlideKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(ctrlGlideKnob, "ctrlGlideKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::ctrlGlideKnob, true, ctrlGlideKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(filterAttackTimeKnob, "filterAttackTimeKnob", 1, 10, 10000, 0.01f, "filterAttackTimeKnob", true, filterAttackTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(filterAttackTimeKnob, "filterAttackTimeKnob", 1, 10, 10000, 0.01f, ParameterRegistry::Key::filterAttackTimeKnob, true, filterAttackTimeKnobPos, cellWidth, cellHeight, true);
     
-    createSliderKnob(filterDecayTimeKnob, "filterDecayTimeKnob", 1, 10, 10000, 0.01f, "filterDecayTimeKnob", true, filterDecayTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(filterDecayTimeKnob, "filterDecayTimeKnob", 1, 10, 10000, 0.01f, ParameterRegistry::Key::filterDecayTimeKnob, true, filterDecayTimeKnobPos, cellWidth, cellHeight, true);
     
-    createSliderKnob(filterSustainKnob, "filterSustainKnob", 11, 0, 10, 1.0, "filterSustainKnob", true, filterSustainKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(filterSustainKnob, "filterSustainKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::filterSustainKnob, true, filterSustainKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(noiseVolKnob, "noiseVolKnob", 11, 0, 10, 1.0, "noiseVolKnob", true, noiseVolKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(noiseVolKnob, "noiseVolKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::noiseVolKnob, true, noiseVolKnobPos, cellWidth, cellHeight, false);
     
-    createSliderKnob(loudnessAttackTimeKnob, "loudnessAttackTimeKnob", 1, 10, 10000, 0.01f, "loudnessAttackTimeKnob", true, loudnessAttackTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(loudnessAttackTimeKnob, "loudnessAttackTimeKnob", 1, 10, 10000, 0.01f, ParameterRegistry::Key::loudnessAttackTimeKnob, true, loudnessAttackTimeKnobPos, cellWidth, cellHeight, true);
     
-    createSliderKnob(loudnessDecayTimeKnob, "loudnessDecayTimeKnob", 1, 10, 10000, 0.01f, "loudnessDecayTimeKnob", true, loudnessDecayTimeKnobPos, cellWidth, cellHeight, true);
+    createSliderKnob(loudnessDecayTimeKnob, "loudnessDecayTimeKnob", 1, 10, 10000, 0.01f, ParameterRegistry::Key::loudnessDecayTimeKnob, true, loudnessDecayTimeKnobPos, cellWidth, cellHeight, true);
     
-    createSliderKnob(loudnessSustainLevelKnob, "loudnessSustainLevelKnob", 11, 0, 10, 1.0, "loudnessSustainLevelKnob", true, loudnessSustainLevelKnobPos, cellWidth, cellHeight, false);
+    createSliderKnob(loudnessSustainLevelKnob, "loudnessSustainLevelKnob", 11, 0, 10, 1.0, ParameterRegistry::Key::loudnessSustainLevelKnob, true, loudnessSustainLevelKnobPos, cellWidth, cellHeight, false);
     
     // The current panel intentionally omits the Phones Vol control (its grid
     // entry is disabled above); keep the pointer null rather than positioning
     // it from an uninitialised stack coordinate.
 
-    //createSliderKnob(feedbackKnob, "feedbackKnob", 11, 0, 10, 1.0, "feedbackKnob", true, feedbackKnobPos, cellWidth, cellHeight, false);
-
-    auto configureToggleSlider = [&](WaveformSlider* slider, const juce::String& paramId, bool drivesSmoke) {
+    auto configureToggleSlider = [&](WaveformSlider* slider,
+                                     ParameterRegistry::Key parameterKey,
+                                     bool drivesSmoke) {
         if (slider == nullptr) {
             return;
         }
         slider->setToggleEnabled(true);
-        const bool isOn = audioProcessor.apvts.getRawParameterValue(paramId)->load() > 0.5f;
-        slider->setToggleActive(isOn);
-        if (drivesSmoke) {
-            smokeComponent.setVisible(isOn);
-        }
-        slider->setToggleCallback([this, paramId, slider, drivesSmoke](bool nextState) {
-            audioProcessor.apvts.getParameter(paramId)->setValueNotifyingHost(nextState ? 1.0f : 0.0f);
-            slider->setToggleActive(nextState);
-            if (drivesSmoke) {
-                smokeComponent.setVisible(nextState);
-            }
+        auto binding = std::make_unique<ParameterBinding> (
+            parameterKey, preparedParameter (parameterKey),
+            [this, slider, drivesSmoke] (float physicalValue) {
+                const bool isOn = physicalValue >= 0.5f;
+                slider->setToggleActive (isOn);
+                if (drivesSmoke)
+                    smokeComponent.setVisible (isOn);
+            });
+        auto* bindingPointer = binding.get();
+        retainParameterBinding (std::move (binding));
+        slider->setToggleCallback ([bindingPointer] (bool nextState) {
+            bindingPointer->setValueAsCompleteGesture (nextState ? 1.0f : 0.0f);
         });
     };
 
-    configureToggleSlider(osc1WaveFormKnob, "osc1OnOff", false);
-    configureToggleSlider(osc2WaveFormKnob, "osc2OnOff", false);
-    configureToggleSlider(osc3WaveFormKnob, "osc3OnOff", false);
-    configureToggleSlider(noiseVolKnob, "noiseOnOffSwitch", true);
-    configureToggleSlider(extInputVolKnob, "extInputVolSwitch", false);
+    configureToggleSlider(osc1WaveFormKnob, ParameterRegistry::Key::osc1OnOff, false);
+    configureToggleSlider(osc2WaveFormKnob, ParameterRegistry::Key::osc2OnOff, false);
+    configureToggleSlider(osc3WaveFormKnob, ParameterRegistry::Key::osc3OnOff, false);
+    configureToggleSlider(noiseVolKnob, ParameterRegistry::Key::noiseOnOffSwitch, true);
+    configureToggleSlider(extInputVolKnob, ParameterRegistry::Key::extInputVolSwitch, false);
     
-    createToggleSwitch(osc1OnOffSwitch, "osc1OnOffSwitch", "osc1OnOff", osc1OnOffPos, true, cellWidth, cellHeight);
+    createToggleSwitch(osc1OnOffSwitch, "osc1OnOffSwitch", ParameterRegistry::Key::osc1OnOff, osc1OnOffPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(osc2OnOffSwitch, "osc2OnOffSwitch", "osc2OnOff", osc2OnOffPos, true, cellWidth, cellHeight);
+    createToggleSwitch(osc2OnOffSwitch, "osc2OnOffSwitch", ParameterRegistry::Key::osc2OnOff, osc2OnOffPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(osc3OnOffSwitch, "osc3OnOffSwitch", "osc3OnOff", osc3OnOffPos, true, cellWidth, cellHeight);
+    createToggleSwitch(osc3OnOffSwitch, "osc3OnOffSwitch", ParameterRegistry::Key::osc3OnOff, osc3OnOffPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(a440hzSwitch, "a440hzSwitch", "a440HzOnOff", a440OnOffPos, true, cellWidth, cellHeight);
+    createToggleSwitch(a440hzSwitch, "a440hzSwitch", ParameterRegistry::Key::a440HzOnOff, a440OnOffPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(osc3CtrlSwitch, "osc3CtrlSwitch", "osc3CtrlMode", osc3CtrlPos, false, cellWidth, cellHeight);
+    createToggleSwitch(osc3CtrlSwitch, "osc3CtrlSwitch", ParameterRegistry::Key::osc3CtrlMode, osc3CtrlPos, false, cellWidth, cellHeight);
     
-    createToggleSwitch(oscModSwitch, "oscModSwitch", "oscModSwitch", oscModSwitchPos, true, cellWidth, cellHeight);
+    createToggleSwitch(oscModSwitch, "oscModSwitch", ParameterRegistry::Key::oscModSwitch, oscModSwitchPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(noiseOnOffSwitch, "noiseOnOffSwitch", "noiseOnOffSwitch", noiseOnOffSwitchPos, true, cellWidth, cellHeight);
+    createToggleSwitch(noiseOnOffSwitch, "noiseOnOffSwitch", ParameterRegistry::Key::noiseOnOffSwitch, noiseOnOffSwitchPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(extInputVolSwitch, "extInputVolSwitch", "extInputVolSwitch", extInputVolSwitchPos, true, cellWidth, cellHeight);
+    createToggleSwitch(extInputVolSwitch, "extInputVolSwitch", ParameterRegistry::Key::extInputVolSwitch, extInputVolSwitchPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(whitePinkSwitch, "whitePinkSwitch", "whitePinkSwitch", whitePinkSwitchPos, false, cellWidth, cellHeight);
+    createToggleSwitch(whitePinkSwitch, "whitePinkSwitch", ParameterRegistry::Key::whitePinkSwitch, whitePinkSwitchPos, false, cellWidth, cellHeight);
     
-    createToggleSwitch(filterModSwitch, "filterModSwitch", "filterModSwitch", filterModSwitchPos, true, cellWidth, cellHeight);
+    createToggleSwitch(filterModSwitch, "filterModSwitch", ParameterRegistry::Key::filterModSwitch, filterModSwitchPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(keyboardCtrlSwitch1, "keyboardCtrlSwitch1", "keyboardCtrlSwitch1", keyboardCtrlSwitch1Pos, true, cellWidth, cellHeight);
+    createToggleSwitch(keyboardCtrlSwitch1, "keyboardCtrlSwitch1", ParameterRegistry::Key::keyboardCtrlSwitch1, keyboardCtrlSwitch1Pos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(keyboardCtrlSwitch2, "keyboardCtrlSwitch2", "keyboardCtrlSwitch2", keyboardCtrlSwitch2Pos, true, cellWidth, cellHeight);
+    createToggleSwitch(keyboardCtrlSwitch2, "keyboardCtrlSwitch2", ParameterRegistry::Key::keyboardCtrlSwitch2, keyboardCtrlSwitch2Pos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(decaySwitch, "decaySwitch", "decaySwitch", decaySwitchPos, true, cellWidth, cellHeight);
+    createToggleSwitch(decaySwitch, "decaySwitch", ParameterRegistry::Key::decaySwitch, decaySwitchPos, true, cellWidth, cellHeight);
     
-    createToggleSwitch(glideSwitch, "glideSwitch", "glideSwitch", glideSwitchPos, true, cellWidth, cellHeight);
+    createToggleSwitch(glideSwitch, "glideSwitch", ParameterRegistry::Key::glideSwitch, glideSwitchPos, true, cellWidth, cellHeight);
 
     auto hideToggle = [&](juce::ToggleButton& toggle, juce::Label& label) {
         toggle.setVisible(false);
@@ -786,10 +787,15 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     combinedWaveformDisplay.setVisible(false);
 
     pitchWheelSlider.setBounds(ctrlGlideKnob->getX() + ctrlGlideKnob->getWidth() - 7 , ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
-    pitchWheelSlider.addListener(this);
-
     modWheelSlider.setBounds(pitchWheelSlider.getRight() - 15,ctrlGlideKnob->getY() - 55, wheelSize/2, wheelSize);
-    modWheelSlider.addListener(this);
+    retainParameterBinding (std::make_unique<ParameterBinding> (
+        ParameterRegistry::Key::pitchWheelValue,
+        preparedParameter (ParameterRegistry::Key::pitchWheelValue),
+        pitchWheelSlider, DisplayMapping::componentRange));
+    retainParameterBinding (std::make_unique<ParameterBinding> (
+        ParameterRegistry::Key::modWheelValue,
+        preparedParameter (ParameterRegistry::Key::modWheelValue),
+        modWheelSlider, DisplayMapping::componentRange));
 
     const float whiteKeyWidth = 43.6f;
     const float blackKeyWidth = whiteKeyWidth / 1.7f;
@@ -860,20 +866,18 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
     signalFlowOverlay.setBounds(getLocalBounds());
     signalFlowOverlay.setInterceptsMouseClicks(true, true);
     {
-        auto setParam = [this](const juce::String& paramId, float value) {
-            if (auto* param = audioProcessor.apvts.getParameter(paramId)) {
-                param->setValueNotifyingHost(juce::jlimit(0.0f, 1.0f, value));
-            }
-        };
-        auto setChoiceParam = [setParam](const juce::String& paramId, float value) {
-            const float stepped = std::round(juce::jlimit(0.0f, 1.0f, value) * 10.0f) / 10.0f;
-            setParam(paramId, stepped);
-        };
-
         SignalFlowOverlay::FilterVizCallbacks callbacks;
-        callbacks.setCutoff = [setParam](float value) { setParam("filterCutoff", value); };
-        callbacks.setResonance = [setChoiceParam](float value) { setChoiceParam("filterEmphasis", value); };
-        callbacks.setContour = [setChoiceParam](float value) { setChoiceParam("filterContour", value); };
+        callbacks.setCutoff = [this](float value) {
+            filterCutoffBinding->setNormalisedValueAsCompleteGesture (value);
+        };
+        callbacks.setResonance = [this](float value) {
+            const float stepped = std::round (juce::jlimit (0.0f, 1.0f, value) * 10.0f) / 10.0f;
+            filterEmphasisBinding->setNormalisedValueAsCompleteGesture (stepped);
+        };
+        callbacks.setContour = [this](float value) {
+            const float stepped = std::round (juce::jlimit (0.0f, 1.0f, value) * 10.0f) / 10.0f;
+            filterContourBinding->setNormalisedValueAsCompleteGesture (stepped);
+        };
         callbacks.setContourAttack = [this](float value) {
             audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::filter,
                                                         ContourRouting::Stage::attack, value);
@@ -917,12 +921,29 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
             }
         }
     }
+
+    timerParameterSnapshot = audioProcessor.captureParameterSnapshot ({});
     
     startTimerHz(60); // repaint at 60 Hz
     resized();
 }
 
-void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, std::string paramName, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob){
+ParameterBinding& MoogMiniAudioProcessorEditor::retainParameterBinding (
+    std::unique_ptr<ParameterBinding> binding)
+{
+    parameterBindings.push_back (std::move (binding));
+    return *parameterBindings.back();
+}
+
+juce::RangedAudioParameter& MoogMiniAudioProcessorEditor::preparedParameter (
+    ParameterRegistry::Key key) const
+{
+    auto* parameter = audioProcessor.getPreparedParameter (key);
+    jassert (parameter != nullptr);
+    return *parameter;
+}
+
+void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob, std::string sliderKey, int numPositions, float minPosVal, float maxPosVal, float increment, ParameterRegistry::Key parameterKey, bool useCustomRange, int posArray[], int cellWidth, int cellHeight, bool isTimeKnob){
     const double adjustedWidth = static_cast<double>(cellWidth) * 0.94;
     const auto toPixel = [](double coordinate) { return static_cast<int>(coordinate); };
     const int oscColumnSpacing = 72;
@@ -935,13 +956,6 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
     }
     waveformSliders.add(sliderKnob); // Take ownership
     sliderKnob->setRange(minPosVal, maxPosVal, increment);
-    if (auto* parameter = audioProcessor.apvts.getParameter(paramName)) {
-        sliderKnob->setValue(getSliderValueFromNormalized(sliderKnob, parameter->getValue()),
-                             juce::dontSendNotification);
-    } else {
-        jassertfalse;
-    }
-    sliderKnob->addListener(this);
     sliderKnob->setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
 
     sliderKnob->setTextBoxStyle(juce::Slider::NoTextBox, false, 100, 20);
@@ -1005,10 +1019,39 @@ void MoogMiniAudioProcessorEditor::createSliderKnob(WaveformSlider*& sliderKnob,
         label->setJustificationType(juce::Justification::centred);
         addAndMakeVisible(label);
     }
-   
+
+    ParameterBinding::ValueChangedCallback sideEffect;
+    if (parameterKey == ParameterRegistry::Key::osc1Range
+        || parameterKey == ParameterRegistry::Key::osc2Range
+        || parameterKey == ParameterRegistry::Key::osc3Range)
+    {
+        sideEffect = [sliderKnob] (float physicalValue) {
+            sliderKnob->setTextValueSuffix (
+                " " + Oscillator::getRangeLabel (juce::roundToInt (physicalValue)));
+        };
+    }
+    else if (parameterKey == ParameterRegistry::Key::noiseVolKnob)
+    {
+        sideEffect = [this] (float physicalValue) {
+            smokeComponent.setAlpha (juce::jlimit (0.0f, 1.0f, physicalValue / 10.0f));
+        };
+    }
+
+    auto& binding = retainParameterBinding (std::make_unique<ParameterBinding> (
+        parameterKey, preparedParameter (parameterKey), *sliderKnob,
+        isTimeKnob ? DisplayMapping::contourTimeMilliseconds
+                   : DisplayMapping::componentRange,
+        std::move (sideEffect)));
+    if (parameterKey == ParameterRegistry::Key::filterCutoff)
+        filterCutoffBinding = &binding;
+    else if (parameterKey == ParameterRegistry::Key::filterEmphasis)
+        filterEmphasisBinding = &binding;
+    else if (parameterKey == ParameterRegistry::Key::filterContour)
+        filterContourBinding = &binding;
+
 }
 
-void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggleSwitch, std::string toggleKey, std::string paramName, int posArray[], bool isHorizontal, int cellWidth, int cellHeight){
+void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggleSwitch, std::string toggleKey, ParameterRegistry::Key parameterKey, int posArray[], bool isHorizontal, int cellWidth, int cellHeight){
     const double adjustedWidth = static_cast<double>(cellWidth) * 0.94;
     const auto toPixel = [](double coordinate) { return static_cast<int>(coordinate); };
     auto* label = labelMap[toggleKey];
@@ -1019,8 +1062,6 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
     }
     vintageLookAndFeels.add(vintageLook); // Take ownership
     toggleSwitch.setLookAndFeel(vintageLook);
-    toggleSwitch.addListener(this);
-    toggleSwitch.setToggleState(audioProcessor.apvts.getParameterAsValue(paramName).getValue(), juce::dontSendNotification);
     toggleSwitch.setEnabled(true);
     if(isHorizontal){
         if (toggleKey == "extInputVolSwitch" && extInputVolKnob != nullptr) {
@@ -1106,35 +1147,20 @@ void MoogMiniAudioProcessorEditor::createToggleSwitch(juce::ToggleButton& toggle
         label->setJustificationType(juce::Justification::centred);
         addAndMakeVisible(label);
     }
-    
+
+    ParameterBinding::ValueChangedCallback sideEffect;
+    if (parameterKey == ParameterRegistry::Key::noiseOnOffSwitch)
+        sideEffect = [this] (float value) { smokeComponent.setVisible (value >= 0.5f); };
+    else if (parameterKey == ParameterRegistry::Key::whitePinkSwitch)
+        sideEffect = [this] (float value) { smokeComponent.setIsPink (value >= 0.5f); };
+    retainParameterBinding (std::make_unique<ParameterBinding> (
+        parameterKey, preparedParameter (parameterKey), toggleSwitch,
+        std::move (sideEffect)));
+
 }
 
 
-MoogMiniAudioProcessorEditor::~MoogMiniAudioProcessorEditor() {
-    // Clean up
-    //sliders.clear(true);
-    toggles.clear(true);
-    buttons.clear(true);
-    osc1WaveFormKnob->removeListener (this);
-    osc2WaveFormKnob->removeListener (this);
-    osc3WaveFormKnob->removeListener (this);
-    osc1RangeKnob->removeListener (this);
-    osc2RangeKnob->removeListener (this);
-    osc3RangeKnob->removeListener (this);
-    osc2FreqKnob->removeListener (this);
-    osc3FreqKnob->removeListener (this);
-    osc1VolKnob->removeListener (this);
-    osc2VolKnob->removeListener (this);
-    osc3VolKnob->removeListener (this);
-    osc1OnOffSwitch.removeListener (this);
-    osc2OnOffSwitch.removeListener (this);
-    osc3OnOffSwitch.removeListener (this);
-    ctrlTuneKnob->removeListener(this);
-    filterEmphasisKnob->removeListener(this);
-    filterCutoffFreqKnob->removeListener(this);
-    filterEmphasisKnob->removeListener(this);
-    
-}
+MoogMiniAudioProcessorEditor::~MoogMiniAudioProcessorEditor() = default;
 
 double MoogMiniAudioProcessorEditor::sliderPositionToLoudnessAttackValue(double position) {
     juce::Logger::writeToLog("Slider Position: " + juce::String(position));
@@ -1152,284 +1178,6 @@ double MoogMiniAudioProcessorEditor::sliderPositionToLoudnessAttackValue(double 
     return value;
 }
 
-
-bool MoogMiniAudioProcessorEditor::sliderHasChanged(juce::Slider* slider) {
-    // Retrieve the current value of the parameter linked to the slider
-    float currentValue = audioProcessor.apvts.getParameter(getParameterID(slider))->getValue();
-    
-    // Compare with the slider's new value
-    float newValue = getNormalizedValue(slider, getEnumSizeLessOne(slider));
-    
-    return currentValue != newValue; // Return true if the values are different
-}
-
-float MoogMiniAudioProcessorEditor::getNormalizedValue(juce::Slider* slider, float) {
-    const float index = static_cast<float>(slider->getValue());
-    //juce::Logger::writeToLog("Slider Raw Value: " + juce::String(index));
-    if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob ) {
-        return index / 5.0f;
-    } else if (slider == osc1WaveFormKnob || slider == osc2WaveFormKnob || slider == osc3WaveFormKnob) {
-        return index / 5.0f;
-    }
-    
-    else if (slider == osc2FreqKnob || slider == osc3FreqKnob) {
-        return (index + 8) / 16.0f; // Maps -8 to 0.0 and +8 to 1.0
-    }
-    else if (slider == ctrlTuneKnob) {
-        // Assuming the range is -2.5 to +2.5
-        return (index + 2.5f) / 5.0f; // Maps -2.5 to 0.0 and +2.5 to 1.0
-    }
-    else if(slider == filterCutoffFreqKnob || slider == &pitchWheelSlider){
-        
-        return (index + 5) / 10.0f;
-    }
-    else if (slider == osc1VolKnob || slider == osc2VolKnob || slider == osc3VolKnob || slider == ctrlTuneKnob || slider == filterEmphasisKnob || slider == filterAmtContourKnob     || slider == outputVolKnob  || slider == extInputVolKnob || slider == ctrlGlideKnob || slider == ctrlModMixKnob || slider == filterSustainKnob || slider == loudnessSustainLevelKnob || slider == outputPhonesVolKnob || slider == noiseVolKnob|| slider == feedbackKnob) {
-        return index / 10.0f;
-    }
-    else if(slider == filterAttackTimeKnob || slider == filterDecayTimeKnob || slider == loudnessAttackTimeKnob || slider == loudnessDecayTimeKnob){
-       
-        const float normalizedValue = index / 10000.0f;
-        
-       
-        return normalizedValue;
-    }
-   
-    else {
-        return index;
-    }
-    // Add other conditions for different sliders...
-}
-
-float MoogMiniAudioProcessorEditor::getSliderValueFromNormalized(juce::Slider* slider, float normalizedValue) {
-    if (slider == nullptr) {
-        return normalizedValue;
-    }
-    float value = normalizedValue;
-    if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob) {
-        value = std::round(normalizedValue * 5.0f);
-    } else if (slider == osc1WaveFormKnob || slider == osc2WaveFormKnob || slider == osc3WaveFormKnob) {
-        value = std::round(normalizedValue * 5.0f);
-    } else if (slider == osc2FreqKnob || slider == osc3FreqKnob) {
-        value = std::round(normalizedValue * 16.0f) - 8.0f;
-    } else if (slider == ctrlTuneKnob) {
-        value = normalizedValue * 5.0f - 2.5f;
-        value = std::round(value * 2.0f) / 2.0f;
-    } else if (slider == filterCutoffFreqKnob || slider == &pitchWheelSlider) {
-        value = normalizedValue * 10.0f - 5.0f;
-    } else if (slider == osc1VolKnob || slider == osc2VolKnob || slider == osc3VolKnob || slider == ctrlTuneKnob
-               || slider == filterEmphasisKnob || slider == filterAmtContourKnob || slider == outputVolKnob
-               || slider == extInputVolKnob || slider == ctrlGlideKnob || slider == ctrlModMixKnob
-               || slider == filterSustainKnob || slider == loudnessSustainLevelKnob || slider == outputPhonesVolKnob
-               || slider == noiseVolKnob || slider == feedbackKnob) {
-        value = std::round(normalizedValue * 10.0f);
-    } else if (slider == filterAttackTimeKnob || slider == filterDecayTimeKnob
-               || slider == loudnessAttackTimeKnob || slider == loudnessDecayTimeKnob) {
-        value = normalizedValue * 10000.0f;
-    }
-
-    const float minValue = static_cast<float>(slider->getMinimum());
-    const float maxValue = static_cast<float>(slider->getMaximum());
-    return juce::jlimit(minValue, maxValue, value);
-}
-
-juce::String MoogMiniAudioProcessorEditor::getParameterID(juce::Slider* slider) {
-    if (slider == osc1WaveFormKnob) {
-        
-        return "osc1Waveform";
-    }
-    else if (slider == osc2WaveFormKnob) {
-        
-        return "osc2Waveform";
-    }
-    else if (slider == osc3WaveFormKnob) {
-        
-        return "osc3Waveform";
-    }
-    else if (slider == osc1RangeKnob) {
-        
-        return "osc1Range";
-        
-    }
-    else if (slider == osc2RangeKnob) {
-        
-        return "osc2Range";
-        
-    }
-    else if (slider == osc3RangeKnob) {
-        
-        return "osc3Range";
-        
-    }
-    else if (slider == osc2FreqKnob) {
-        
-        return "osc2Freq";
-    }
-    else if (slider == osc3FreqKnob) {
-        
-        return "osc3Freq";
-    }
-    else if (slider == osc1VolKnob) {
-        
-        return "osc1Vol";
-    }
-    else if (slider == osc2VolKnob) {
-        
-        return "osc2Vol";
-    }
-    else if (slider == osc3VolKnob) {
-        
-        return "osc3Vol";
-    }
-    else if (slider == ctrlTuneKnob) {
-        
-        return "tune";
-    }
-    else if (slider == filterCutoffFreqKnob) {
-        
-        return "filterCutoff";
-    }
-    else if (slider == filterEmphasisKnob) {
-        
-        return "filterEmphasis";
-    }
-    else if (slider == filterAmtContourKnob) {
-        
-        return "filterContour";
-    } else if(slider == &modWheelSlider){
-        return "modWheelValue";
-    } else if(slider == &pitchWheelSlider){
-        return "pitchWheelValue";
-    } else if(slider == outputVolKnob){
-        return "outputVolKnob";
-    } else if(slider == extInputVolKnob){
-        return "extInputVolKnob";
-    } else if(slider == ctrlGlideKnob){
-        return "ctrlGlideKnob";
-    } else if(slider == ctrlModMixKnob){
-        return "ctrlModMixKnob";
-    } else if(slider == filterAttackTimeKnob){
-        return "filterAttackTimeKnob";
-    } else if(slider == filterDecayTimeKnob){
-        return "filterDecayTimeKnob";
-    } else if(slider == filterSustainKnob){
-        return "filterSustainKnob";
-    } else if(slider == noiseVolKnob){
-        return "noiseVolKnob";
-    } else if(slider == loudnessAttackTimeKnob){
-        return "loudnessAttackTimeKnob";
-    } else if(slider == loudnessDecayTimeKnob){
-        return "loudnessDecayTimeKnob";
-    } else if(slider == loudnessSustainLevelKnob){
-        return "loudnessSustainLevelKnob";
-    } else if(slider == outputPhonesVolKnob){
-        return "outputPhonesVolKnob";
-    } else if(slider == feedbackKnob){
-        return "feedbackKnob";
-    } else {
-        return "";
-    }
-    // Add other conditions for different sliders...
-}
-
-float MoogMiniAudioProcessorEditor::getEnumSizeLessOne(juce::Slider* slider) {
-    
-    if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob) {
-        return 5.0;
-    } else if (slider == osc1WaveFormKnob || slider == osc2WaveFormKnob || slider == osc3WaveFormKnob) {
-        return 5.0;
-    }
-    
-    else if (slider == osc2FreqKnob || slider == osc3FreqKnob) {
-        return 16.0;
-    }
-    
-    else if (slider == osc1VolKnob || slider == osc2VolKnob || slider == osc3VolKnob || slider == ctrlTuneKnob || slider == filterCutoffFreqKnob || slider == filterEmphasisKnob || slider == filterAmtContourKnob     || slider == outputVolKnob  || slider == extInputVolKnob || slider == ctrlGlideKnob || slider == ctrlModMixKnob || slider == filterSustainKnob || slider == loudnessSustainLevelKnob || slider == outputPhonesVolKnob|| slider == feedbackKnob) {
-        return 10.0;
-    }
-    else if(slider == filterAttackTimeKnob || slider == filterDecayTimeKnob || slider == loudnessAttackTimeKnob || slider == loudnessDecayTimeKnob){
-        return 1.0;
-    }
-    else {
-        return 1.0;
-    }
-    // Add other conditions for different sliders...
-}
-
-void MoogMiniAudioProcessorEditor::sliderValueChanged(juce::Slider* slider) {
-    if (!sliderHasChanged(slider)) {
-        return; // Exit if the slider value hasn't actually changed
-    }
-    auto parameterID = getParameterID(slider);
-    auto normalizedValue = getNormalizedValue(slider, getEnumSizeLessOne(slider));
-    if(slider == noiseVolKnob){
-        
-        smokeComponent.setAlpha(normalizedValue);
-    }
-    
-    if(slider == &pitchWheelSlider){
-        
-        juce::Logger::writeToLog(parameterID + " = " + juce::String(normalizedValue));
-    }
-    audioProcessor.apvts.getParameter(parameterID)->setValueNotifyingHost(normalizedValue);
-    
-    int index = static_cast<int>(slider->getValue());
-    
-    if (slider == osc1RangeKnob || slider == osc2RangeKnob || slider == osc3RangeKnob) {
-        
-        juce::String textLabel = Oscillator::getRangeLabel(index);
-        slider->setTextValueSuffix(" " + textLabel);
-    }
-    
-    
-}
-
-void MoogMiniAudioProcessorEditor::buttonClicked(juce::Button* button)
-{
-    if (button == &osc1OnOffSwitch)
-    {
-        bool toggleState = osc1OnOffSwitch.getToggleState();
-        
-        audioProcessor.apvts.getParameter("osc1OnOff")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &osc2OnOffSwitch) {
-        bool toggleState = osc2OnOffSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("osc2OnOff")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &osc3OnOffSwitch) {
-        bool toggleState = osc3OnOffSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("osc3OnOff")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &a440hzSwitch) {
-        bool toggleState = a440hzSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("a440HzOnOff")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &osc3CtrlSwitch) {
-        bool toggleState = osc3CtrlSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("osc3CtrlMode")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &oscModSwitch) {
-        bool toggleState = oscModSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("oscModSwitch")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &noiseOnOffSwitch) {
-        bool toggleState = noiseOnOffSwitch.getToggleState();
-        smokeComponent.setVisible(toggleState);
-        audioProcessor.apvts.getParameter("noiseOnOffSwitch")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &whitePinkSwitch) {
-        bool toggleState = whitePinkSwitch.getToggleState();
-        smokeComponent.setIsPink(toggleState);
-        audioProcessor.apvts.getParameter("whitePinkSwitch")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &filterModSwitch) {
-        bool toggleState = filterModSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("filterModSwitch")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &keyboardCtrlSwitch1) {
-        bool toggleState = keyboardCtrlSwitch1.getToggleState();
-        audioProcessor.apvts.getParameter("keyboardCtrlSwitch1")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &keyboardCtrlSwitch2) {
-        bool toggleState = keyboardCtrlSwitch2.getToggleState();
-        audioProcessor.apvts.getParameter("keyboardCtrlSwitch2")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &decaySwitch) {
-        bool toggleState = decaySwitch.getToggleState();
-        audioProcessor.apvts.getParameter("decaySwitch")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    } else if (button == &glideSwitch) {
-        bool toggleState = glideSwitch.getToggleState();
-        audioProcessor.apvts.getParameter("glideSwitch")->setValueNotifyingHost(toggleState ? 1.0f : 0.0f);
-    }
-}
 
 void MoogMiniAudioProcessorEditor::pianoKeyPressed(int noteNumber, PianoKey* key) {
     pressedKey = key;
@@ -1863,60 +1611,14 @@ void MoogMiniAudioProcessorEditor::resized() {
 
 void MoogMiniAudioProcessorEditor::timerCallback() {
     signalFlowOverlay.setSampleRate(audioProcessor.getSampleRate());
-    auto syncSliderValue = [this](juce::Slider* slider) {
-        if (slider == nullptr || slider->isMouseButtonDown()) {
-            return;
-        }
-        const auto paramId = getParameterID(slider);
-        if (paramId.isEmpty()) {
-            return;
-        }
-        auto* param = audioProcessor.apvts.getParameter(paramId);
-        if (param == nullptr) {
-            return;
-        }
-        const float normalizedValue = param->getValue();
-        const float newValue = getSliderValueFromNormalized(slider, normalizedValue);
-        if (std::abs(static_cast<float>(slider->getValue()) - newValue) > 0.0001f) {
-            slider->setValue(newValue, juce::dontSendNotification);
-        }
-    };
+    const auto parameterSnapshot = audioProcessor.captureParameterSnapshot (
+        timerParameterSnapshot);
+    if (! parameterSnapshot.usedFallback)
+        timerParameterSnapshot = parameterSnapshot;
 
-    auto syncToggleState = [this](juce::ToggleButton& toggle, const juce::String& paramId) {
-        auto* paramValue = audioProcessor.apvts.getRawParameterValue(paramId);
-        if (paramValue == nullptr || toggle.isMouseButtonDown()) {
-            return;
-        }
-        const bool isOn = paramValue->load() > 0.5f;
-        if (toggle.getToggleState() != isOn) {
-            toggle.setToggleState(isOn, juce::dontSendNotification);
-        }
-    };
-
-    syncSliderValue(&modWheelSlider);
-    syncSliderValue(&pitchWheelSlider);
-    for (auto* slider : waveformSliders) {
-        syncSliderValue(slider);
-    }
-
-    syncToggleState(osc1OnOffSwitch, "osc1OnOff");
-    syncToggleState(osc2OnOffSwitch, "osc2OnOff");
-    syncToggleState(osc3OnOffSwitch, "osc3OnOff");
-    syncToggleState(a440hzSwitch, "a440HzOnOff");
-    syncToggleState(osc3CtrlSwitch, "osc3CtrlMode");
-    syncToggleState(oscModSwitch, "oscModSwitch");
-    syncToggleState(noiseOnOffSwitch, "noiseOnOffSwitch");
-    syncToggleState(extInputVolSwitch, "extInputVolSwitch");
-    syncToggleState(whitePinkSwitch, "whitePinkSwitch");
-    syncToggleState(filterModSwitch, "filterModSwitch");
-    syncToggleState(keyboardCtrlSwitch1, "keyboardCtrlSwitch1");
-    syncToggleState(keyboardCtrlSwitch2, "keyboardCtrlSwitch2");
-    syncToggleState(decaySwitch, "decaySwitch");
-    syncToggleState(glideSwitch, "glideSwitch");
-
-    const bool osc1On = audioProcessor.apvts.getRawParameterValue("osc1OnOff")->load() > 0.5f;
-    const bool osc2On = audioProcessor.apvts.getRawParameterValue("osc2OnOff")->load() > 0.5f;
-    const bool osc3On = audioProcessor.apvts.getRawParameterValue("osc3OnOff")->load() > 0.5f;
+    const bool osc1On = parameterSnapshot.oscillator1.enabled;
+    const bool osc2On = parameterSnapshot.oscillator2.enabled;
+    const bool osc3On = parameterSnapshot.oscillator3.enabled;
     if (osc1WaveFormKnob) {
         osc1WaveFormKnob->setToggleActive(osc1On);
     }
@@ -1926,15 +1628,15 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     if (osc3WaveFormKnob) {
         osc3WaveFormKnob->setToggleActive(osc3On);
     }
-    const bool noiseOn = audioProcessor.apvts.getRawParameterValue("noiseOnOffSwitch")->load() > 0.5f;
+    const bool noiseOn = parameterSnapshot.noiseEnabled;
     if (noiseVolKnob) {
         noiseVolKnob->setToggleActive(noiseOn);
     }
-    const bool extInputOn = audioProcessor.apvts.getRawParameterValue("extInputVolSwitch")->load() > 0.5f;
+    const bool extInputOn = parameterSnapshot.externalInputEnabled;
     if (extInputVolKnob) {
         extInputVolKnob->setToggleActive(extInputOn);
     }
-    const bool isPinkNoise = audioProcessor.apvts.getRawParameterValue("whitePinkSwitch")->load() > 0.5f;
+    const bool isPinkNoise = parameterSnapshot.pinkNoise;
     if (smokeComponent.getIsPink() != isPinkNoise) {
         smokeComponent.setIsPink(isPinkNoise);
     }
@@ -1942,8 +1644,8 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
         smokeComponent.setVisible(noiseOn);
     }
     {
-        const float noiseVol = audioProcessor.apvts.getRawParameterValue("noiseVolKnob")->load();
-        const float noiseAlpha = juce::jlimit(0.0f, 1.0f, noiseVol / 10.0f);
+        const float noiseAlpha = juce::jlimit (
+            0.0f, 1.0f, static_cast<float> (parameterSnapshot.noiseLevel) / 10.0f);
         smokeComponent.setAlpha(noiseOn ? noiseAlpha : 0.0f);
     }
 
@@ -1981,14 +1683,12 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     signalFlowOverlay.setLevels(overlayLevels);
 
     SignalFlowOverlay::FilterVizState filterViz;
-    signalFlowContourSnapshot = audioProcessor.getSignalFlowContourSnapshot (
-        signalFlowContourSnapshot);
     const auto routedContours = ContourRouting::mapStoredControls (
-        signalFlowContourSnapshot.contract, signalFlowContourSnapshot.controls);
+        parameterSnapshot.contourContract, parameterSnapshot.contours);
     filterViz.cutoffHz = audioProcessor.mapFilterCutoffValueToFrequency(
-        audioProcessor.apvts.getRawParameterValue("filterCutoff")->load());
-    filterViz.resonance = audioProcessor.apvts.getRawParameterValue("filterEmphasis")->load() / 10.0f;
-    filterViz.contourAmount = audioProcessor.apvts.getRawParameterValue("filterContour")->load() / 10.0f;
+        parameterSnapshot.filterCutoff);
+    filterViz.resonance = static_cast<float> (parameterSnapshot.filterEmphasis) / 10.0f;
+    filterViz.contourAmount = static_cast<float> (parameterSnapshot.filterContour) / 10.0f;
     filterViz.filterEnvelope = audioProcessor.getFilterEnvelopeValue();
     filterViz.contourEnvelope = audioProcessor.getContourEnvelopeValue();
     filterViz.attackMs = audioProcessor.normalizedToMilliseconds (routedContours.filter.attack);
@@ -2000,8 +1700,8 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     filterViz.loudnessAttackNorm = routedContours.loudness.attack;
     filterViz.loudnessDecayNorm = routedContours.loudness.decay;
     filterViz.loudnessSustainLevel = routedContours.loudness.sustain;
-    const bool keyCtrl1 = audioProcessor.apvts.getRawParameterValue("keyboardCtrlSwitch1")->load() > 0.5f;
-    const bool keyCtrl2 = audioProcessor.apvts.getRawParameterValue("keyboardCtrlSwitch2")->load() > 0.5f;
+    const bool keyCtrl1 = parameterSnapshot.keyboardControl1;
+    const bool keyCtrl2 = parameterSnapshot.keyboardControl2;
     filterViz.keyTracking = (keyCtrl1 ? (1.0f / 3.0f) : 0.0f) + (keyCtrl2 ? (2.0f / 3.0f) : 0.0f);
     signalFlowOverlay.setFilterVizState(filterViz);
 
@@ -2026,12 +1726,12 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     };
 
     SignalFlowOverlay::OscFrequencyScales scales;
-    scales.osc1Tune = tuneRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("tune")->load()));
-    scales.osc1Range = rangeRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc1Range")->load()));
-    scales.osc2Detune = detuneRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc2Freq")->load()));
-    scales.osc2Range = rangeRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc2Range")->load()));
-    scales.osc3Detune = detuneRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc3Freq")->load()));
-    scales.osc3Range = rangeRatio(static_cast<int>(audioProcessor.apvts.getRawParameterValue("osc3Range")->load()));
+    scales.osc1Tune = tuneRatio(parameterSnapshot.masterTune);
+    scales.osc1Range = rangeRatio(parameterSnapshot.oscillator1.range);
+    scales.osc2Detune = detuneRatio(parameterSnapshot.oscillator2.detune);
+    scales.osc2Range = rangeRatio(parameterSnapshot.oscillator2.range);
+    scales.osc3Detune = detuneRatio(parameterSnapshot.oscillator3.detune);
+    scales.osc3Range = rangeRatio(parameterSnapshot.oscillator3.range);
     signalFlowOverlay.setOscFrequencyScales(scales);
 
     signalFlowOverlay.advance();

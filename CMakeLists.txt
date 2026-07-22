@@ -153,6 +153,7 @@ set(MODEL_D_PLUGIN_SOURCES
         Source/CustomSliderLookAndFeel.cpp
         Source/ContourRouting.cpp
         Source/ModWheelSlider.cpp
+        Source/ParameterBinding.cpp
         Source/ParameterRegistry.cpp
         Source/PianoKey.cpp
         Source/PitchWheelLookAndFeel.cpp
@@ -651,6 +652,8 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDContourContract state contours)
     synth_add_model_d_test(ModelDPreparedSnapshotContract state prepared-snapshot)
     set_property(TEST ModelDPreparedSnapshotContract APPEND PROPERTY LABELS realtime)
+    synth_add_model_d_test(ModelDParameterBindingContract unit parameter-binding)
+    set_property(TEST ModelDParameterBindingContract APPEND PROPERTY LABELS state)
     synth_add_model_d_test(ModelDLegacyParameterFixtures state fixtures)
     synth_add_model_d_test(ModelDParameterRegistry state registry)
     synth_add_model_d_test(ModelDDspContract dsp dsp)
