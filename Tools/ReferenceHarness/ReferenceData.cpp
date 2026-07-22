@@ -945,11 +945,24 @@ LoadResult<SmoothingFixture> loadSmoothingFixture (const juce::File& fixtureFile
     if (! readRequiredString (*root, "analyzer", fixture.analyzerId)
         || ! readRequiredString (*root, "requiredTap", fixture.requiredTap)
         || ! readRequiredString (*root, "ownerWorkstream", fixture.ownerWorkstream)
-        || ! readRequiredString (*root, "policyId", fixture.policyId)
         || ! readRequiredString (*root, "reasonCode", fixture.reasonCode)
         || ! readRequiredString (*root, "referenceReasonCode", fixture.referenceReasonCode))
         return failure<SmoothingFixture> (
-            "smoothing.provenance", "smoothing analyzer, tap, owner, policy, and reason codes are required");
+            "smoothing.provenance", "smoothing analyzer, tap, owner, and reason codes are required");
+    const auto readOptionalString = [&] (const char* name,
+                                         std::optional<std::string>& destination) {
+        const auto* value = requiredProperty (*root, name);
+        if (value == nullptr)
+            return true;
+        if (! value->isString() || value->toString().isEmpty())
+            return false;
+        destination = value->toString().toStdString();
+        return true;
+    };
+    if (! readOptionalString ("policyId", fixture.policyId)
+        || ! readOptionalString ("settlingPolicyId", fixture.settlingPolicyId))
+        return failure<SmoothingFixture> (
+            "smoothing.provenance", "declared smoothing policy IDs must be nonempty strings");
 
     const auto readStatus = [&] (const char* name, Status& destination) {
         std::string status;
@@ -972,7 +985,7 @@ LoadResult<SmoothingFixture> loadSmoothingFixture (const juce::File& fixtureFile
     if (fixture.smoothingClass == ParameterRegistry::SmoothingClass::none) {
         if (fixture.durationSeconds != 0.0
             || fixture.intermediateValues != std::optional<int> { 0 }
-            || fixture.status != Status::pass || fixture.referenceStatus != Status::notRun)
+            || fixture.status != Status::notRun || fixture.referenceStatus != Status::notRun)
             return failure<SmoothingFixture> (
                 "smoothing.none-policy", "none must be an exact step with no intermediate values");
     } else {

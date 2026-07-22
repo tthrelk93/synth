@@ -12,6 +12,7 @@
   "requiredTap": "owner-declared-control-domain",
   "ownerWorkstream": "04-11-feature-owners",
   "policyId": "par006.control.duration",
+  "settlingPolicyId": "par006.settling.allowance",
   "status": "not-run",
   "reasonCode": "owner-control-tap-unavailable",
   "referenceStatus": "awaiting-approved-reference",

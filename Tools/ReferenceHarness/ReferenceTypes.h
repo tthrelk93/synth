@@ -206,7 +206,8 @@ struct SmoothingFixture {
     std::string reasonCode;
     Status referenceStatus = Status::awaitingApprovedReference;
     std::string referenceReasonCode;
-    std::string policyId;
+    std::optional<std::string> policyId;
+    std::optional<std::string> settlingPolicyId;
     std::string relativePath;
     std::string sha256;
 };
@@ -214,6 +215,13 @@ struct SmoothingFixture {
 struct SmoothingCase : SmoothingFixture {
     ParameterRegistry::Key key {};
     std::string parameterId;
+};
+
+struct SmoothingEvidence {
+    std::string parameterId;
+    RenderResult render;
+    std::string candidateArtifactPath;
+    std::string candidateArtifactSha256;
 };
 
 } // namespace ReferenceHarness

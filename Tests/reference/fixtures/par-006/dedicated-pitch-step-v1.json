@@ -11,7 +11,6 @@
   "analyzer": "control.step.v1",
   "requiredTap": "pitch-owner-frequency-control",
   "ownerWorkstream": "05-oscillators",
-  "policyId": "future.pitch-owner-policy",
   "status": "not-run",
   "reasonCode": "dedicated-pitch-tap-required",
   "referenceStatus": "awaiting-approved-reference",

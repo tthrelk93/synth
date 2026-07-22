@@ -12,6 +12,7 @@
   "requiredTap": "owner-dsp-linear-amplitude-control",
   "ownerWorkstream": "10-mixer-output",
   "policyId": "par006.gain-control.duration",
+  "settlingPolicyId": "par006.settling.allowance",
   "status": "not-run",
   "reasonCode": "owner-dsp-tap-unavailable",
   "referenceStatus": "awaiting-approved-reference",

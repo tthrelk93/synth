@@ -274,20 +274,38 @@ LoadResult<std::vector<GateDefinition>> readSection (
 
 bool exactDerivedPolicy (const GateDefinition& gate)
 {
-    if (gate.provenance.at ("reviewBasis") != "2026-07-22 user-approved design"
+    if (gate.status != Status::notRun
+        || gate.requirements != std::vector<std::string> { "PAR-006", "TST-006" }
+        || gate.analyzer.id != "control.step.v1" || gate.analyzer.version != 1
+        || gate.allowance != 0.0
+        || gate.provenance.at ("reviewStatus") != "approved"
+        || gate.provenance.at ("reviewBasis") != "2026-07-22 user-approved design"
         || gate.provenance.at ("reviewDate") != "2026-07-22"
         || gate.provenance.at ("claimScope")
                != "software safety policy; not a hardware measurement")
         return false;
     if (gate.id == "par006.gain-control.duration")
-        return gate.value == 0.005 && gate.unit == "seconds";
+        return gate.value == 0.005 && gate.unit == "seconds"
+            && gate.metric == "settled-sample"
+            && gate.provenance.at ("derivation")
+                   == "5 ms linear-amplitude software safety ramp";
     if (gate.id == "par006.control.duration")
-        return gate.value == 0.010 && gate.unit == "seconds";
+        return gate.value == 0.010 && gate.unit == "seconds"
+            && gate.metric == "settled-sample"
+            && gate.provenance.at ("derivation")
+                   == "10 ms owner-declared control-domain software safety ramp";
     if (gate.id == "par006.settling.allowance")
-        return gate.value == 1.0 && gate.unit == "samples";
+        return gate.value == 1.0 && gate.unit == "samples"
+            && gate.metric == "settled-sample"
+            && gate.provenance.at ("derivation")
+                   == "+1 sample after ceil(duration * sampleRate)";
     if (gate.id == "par006.none.intermediate")
         return gate.value == 0.0 && gate.unit == "count"
-            && gate.provenance.contains ("zeroBasis");
+            && gate.metric == "maximum-per-sample-movement"
+            && gate.provenance.at ("derivation")
+                   == "0 intermediate values for registry class none"
+            && gate.provenance.contains ("zeroBasis")
+            && gate.provenance.at ("zeroBasis") == "approved exact-step policy";
     return false;
 }
 
@@ -364,11 +382,24 @@ LoadResult<AcceptanceManifest> loadAcceptanceManifest (
         return failure<AcceptanceManifest> (
             "acceptance.derived-policy", "only the four approved PAR-006 software policies are permitted");
 
-    if (manifest.status == "approved"
-        && (manifest.published.empty() || manifest.measuredHardware.empty()
-            || manifest.performance.empty()))
-        return failure<AcceptanceManifest> (
-            "acceptance.incomplete", "globally approved acceptance cannot omit evidence classes");
+    if (manifest.status == "approved") {
+        const auto sections = std::array {
+            &manifest.hardSoftware,
+            &manifest.published,
+            &manifest.derivedSoftware,
+            &manifest.measuredHardware,
+            &manifest.performance,
+        };
+        if (std::any_of (sections.begin(), sections.end(), [] (const auto* section) {
+                return section->empty()
+                    || std::any_of (section->begin(), section->end(), [] (const auto& gate) {
+                           return gate.status != Status::pass;
+                       });
+            }))
+            return failure<AcceptanceManifest> (
+                "acceptance.incomplete",
+                "globally approved acceptance requires every evidence class and gate to pass");
+    }
 
     for (const auto* section : { &manifest.hardSoftware, &manifest.published,
                                  &manifest.derivedSoftware, &manifest.measuredHardware,
@@ -388,7 +419,8 @@ LoadResult<AcceptanceManifest> loadAcceptanceManifest (
 
 LoadResult<std::vector<SmoothingCase>> expandSmoothingFixtures (
     const juce::File& sourceRoot,
-    const FixtureIndex& index)
+    const FixtureIndex& index,
+    const AcceptanceManifest& manifest)
 {
     if (index.smoothingFixtures.size() != 7)
         return failure<std::vector<SmoothingCase>> (
@@ -409,6 +441,43 @@ LoadResult<std::vector<SmoothingCase>> expandSmoothingFixtures (
         if (! analyzers.find (loaded.value->analyzerId).ok())
             return failure<std::vector<SmoothingCase>> (
                 "smoothing.analyzer", "smoothing template analyzer must be registered");
+        const auto hasPolicy = [&] (const std::optional<std::string>& policy,
+                                    const std::string_view expected) {
+            if (! policy.has_value() || *policy != expected)
+                return false;
+            return std::any_of (manifest.derivedSoftware.begin(),
+                                manifest.derivedSoftware.end(), [&] (const auto& gate) {
+                return gate.id == expected;
+            });
+        };
+        const auto policyMatches = [&] {
+            switch (loaded.value->smoothingClass) {
+                case ParameterRegistry::SmoothingClass::none:
+                    return hasPolicy (loaded.value->policyId, "par006.none.intermediate")
+                        && ! loaded.value->settlingPolicyId.has_value();
+                case ParameterRegistry::SmoothingClass::gainControl:
+                    return hasPolicy (loaded.value->policyId, "par006.gain-control.duration")
+                        && hasPolicy (loaded.value->settlingPolicyId,
+                                      "par006.settling.allowance");
+                case ParameterRegistry::SmoothingClass::control:
+                    return hasPolicy (loaded.value->policyId, "par006.control.duration")
+                        && hasPolicy (loaded.value->settlingPolicyId,
+                                      "par006.settling.allowance");
+                case ParameterRegistry::SmoothingClass::dedicatedPitch:
+                case ParameterRegistry::SmoothingClass::dedicatedCutoff:
+                case ParameterRegistry::SmoothingClass::dedicatedGlide:
+                case ParameterRegistry::SmoothingClass::contourStage:
+                    return ! loaded.value->policyId.has_value()
+                        && ! loaded.value->settlingPolicyId.has_value();
+                case ParameterRegistry::SmoothingClass::unspecified:
+                    return false;
+            }
+            return false;
+        }();
+        if (! policyMatches)
+            return failure<std::vector<SmoothingCase>> (
+                "smoothing.policy",
+                "smoothing template policies must match the exact approved manifest class policies");
         loaded.value->relativePath = artifact.relativePath;
         loaded.value->sha256 = artifact.sha256;
         if (! templates.emplace (loaded.value->smoothingClass, std::move (*loaded.value)).second)
@@ -446,7 +515,9 @@ LoadResult<std::vector<SmoothingCase>> expandSmoothingFixtures (
 
 LoadResult<std::vector<GateResult>> evaluateAcceptance (
     const AcceptanceManifest& manifest,
-    const std::span<const SmoothingCase> smoothingCases)
+    const std::span<const SmoothingCase> smoothingCases,
+    const std::span<const SmoothingEvidence> evidence,
+    const AnalyzerRegistry& analyzers)
 {
     std::vector<GateResult> results;
     const auto appendManifestSection = [&] (const std::vector<GateDefinition>& gates) {
@@ -462,19 +533,136 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
     appendManifestSection (manifest.measuredHardware);
     appendManifestSection (manifest.performance);
 
+    std::map<std::string, const SmoothingEvidence*> evidenceByParameter;
+    for (const auto& item : evidence) {
+        if (item.parameterId.empty()
+            || ! evidenceByParameter.emplace (item.parameterId, &item).second)
+            return failure<std::vector<GateResult>> (
+                "smoothing.evidence-identity",
+                "smoothing evidence parameter IDs must be nonempty and unique");
+    }
+
+    const auto metricNamed = [] (const std::vector<MetricResult>& metrics,
+                                 const std::string_view name) -> const MetricResult* {
+        const auto found = std::find_if (metrics.begin(), metrics.end(), [&] (const auto& metric) {
+            return metric.metric == name;
+        });
+        return found == metrics.end() ? nullptr : &*found;
+    };
+
     for (const auto& smoothingCase : smoothingCases) {
         GateResult control {
             "par006." + smoothingCase.parameterId + ".control",
-            smoothingCase.status,
-            smoothingCase.reasonCode,
+            Status::notRun,
+            smoothingCase.smoothingClass == ParameterRegistry::SmoothingClass::none
+                ? "smoothing.evidence-missing" : smoothingCase.reasonCode,
             { "PAR-006" },
-            std::nullopt,
-            smoothingCase.status == Status::pass ? smoothingCase.relativePath : std::string {},
-            smoothingCase.status == Status::pass ? smoothingCase.sha256 : std::string {},
+            std::nullopt, {}, {},
         };
-        if (control.status == Status::pass && ! lowercaseSha256 (control.artifactSha256))
-            return failure<std::vector<GateResult>> (
-                "acceptance.pass-artifact", "evaluated pass requires its exact fixture SHA-256");
+
+        const auto supplied = evidenceByParameter.find (smoothingCase.parameterId);
+        if (smoothingCase.smoothingClass == ParameterRegistry::SmoothingClass::none
+            && supplied != evidenceByParameter.end()) {
+            const auto& item = *supplied->second;
+            const auto artifact = juce::File { item.candidateArtifactPath };
+            const auto outputHash = item.render.reproducibility.outputHashes.find (
+                "control-trace.json");
+            if (item.candidateArtifactPath.empty()
+                || artifact.getFileName() != "control-trace.json"
+                || ! lowercaseSha256 (item.candidateArtifactSha256)
+                || ! artifact.existsAsFile()
+                || sha256File (artifact) != item.candidateArtifactSha256
+                || outputHash == item.render.reproducibility.outputHashes.end()
+                || outputHash->second != item.candidateArtifactSha256) {
+                control.status = Status::fail;
+                control.reasonCode = "smoothing.artifact-hash";
+            } else if (std::find (smoothingCase.sampleRates.begin(),
+                                 smoothingCase.sampleRates.end(),
+                                 static_cast<int> (item.render.sampleRate))
+                       == smoothingCase.sampleRates.end()
+                       || item.render.sampleRate
+                              != static_cast<double> (static_cast<int> (item.render.sampleRate))) {
+                control.status = Status::fail;
+                control.reasonCode = "smoothing.trace-mismatch";
+            } else {
+                std::vector<const ControlTracePoint*> points;
+                for (const auto& point : item.render.controlTrace)
+                    if (point.key == smoothingCase.key)
+                        points.push_back (&point);
+                std::sort (points.begin(), points.end(), [] (const auto* left, const auto* right) {
+                    return left->sample < right->sample;
+                });
+                const auto eventPrefix = "automation:"
+                                       + std::to_string (smoothingCase.eventSample) + ":";
+                const auto parameterToken = ":" + smoothingCase.parameterId + ":";
+                const auto hasEvent = std::any_of (
+                    item.render.eventTrace.begin(), item.render.eventTrace.end(),
+                    [&] (const auto& event) {
+                        return event.starts_with (eventPrefix)
+                            && event.find (parameterToken) != std::string::npos;
+                    });
+                if (points.size() != 2 || points.front()->sample >= smoothingCase.eventSample
+                    || points.back()->sample != smoothingCase.eventSample || ! hasEvent
+                    || ! std::isfinite (points.front()->normalizedValue)
+                    || ! std::isfinite (points.back()->normalizedValue)
+                    || std::abs (static_cast<double> (points.front()->normalizedValue)
+                                 - smoothingCase.startNormalized)
+                           > 8.0 * std::numeric_limits<double>::epsilon()) {
+                    control.status = Status::fail;
+                    control.reasonCode = "smoothing.trace-mismatch";
+                } else {
+                    std::vector<double> denseControl (
+                        static_cast<size_t> (smoothingCase.eventSample + 2),
+                        static_cast<double> (points.front()->normalizedValue));
+                    std::fill (denseControl.begin()
+                                   + static_cast<std::ptrdiff_t> (smoothingCase.eventSample),
+                               denseControl.end(),
+                               static_cast<double> (points.back()->normalizedValue));
+                    const auto analyzed = analyzers.analyze (
+                        smoothingCase.analyzerId,
+                        AnalysisRequest {
+                            .eventSample = smoothingCase.eventSample,
+                            .durationSamples = 0,
+                            .start = smoothingCase.startNormalized,
+                            .target = smoothingCase.endNormalized,
+                            .control = denseControl,
+                        });
+                    const auto validMetrics = [&] {
+                        if (! analyzed.ok() || ! analyzed.value.has_value())
+                            return false;
+                        const auto* first = metricNamed (*analyzed.value, "first-change-sample");
+                        const auto* settled = metricNamed (*analyzed.value, "settled-sample");
+                        const auto* monotonic = metricNamed (*analyzed.value, "monotonic");
+                        const auto* overshoot = metricNamed (*analyzed.value, "overshoot");
+                        const auto* movement = metricNamed (
+                            *analyzed.value, "maximum-per-sample-movement");
+                        return first != nullptr && settled != nullptr && monotonic != nullptr
+                            && overshoot != nullptr && movement != nullptr
+                            && first->finite && settled->finite && monotonic->finite
+                            && overshoot->finite && movement->finite
+                            && first->value == static_cast<double> (smoothingCase.eventSample)
+                            && settled->value == static_cast<double> (smoothingCase.eventSample)
+                            && monotonic->value == 1.0 && overshoot->value == 0.0
+                            && movement->value
+                                   == std::abs (smoothingCase.endNormalized
+                                                - smoothingCase.startNormalized)
+                            && smoothingCase.durationSeconds == 0.0
+                            && smoothingCase.intermediateValues == std::optional<int> { 0 };
+                    }();
+                    if (! validMetrics) {
+                        control.status = Status::fail;
+                        control.reasonCode = "smoothing.metric-mismatch";
+                    } else {
+                        const auto* settled = metricNamed (*analyzed.value, "settled-sample");
+                        control.status = Status::pass;
+                        control.reasonCode = "smoothing.exact-step-pass";
+                        control.metric = *settled;
+                        control.artifactPath = item.candidateArtifactPath;
+                        control.artifactSha256 = item.candidateArtifactSha256;
+                    }
+                }
+            }
+        }
         results.push_back (std::move (control));
         results.push_back ({ "par006." + smoothingCase.parameterId + ".reference",
                              smoothingCase.referenceStatus,

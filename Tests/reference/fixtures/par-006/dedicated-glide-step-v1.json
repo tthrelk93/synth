@@ -11,7 +11,6 @@
   "analyzer": "control.step.v1",
   "requiredTap": "keyboard-owner-glide-control",
   "ownerWorkstream": "06-keyboard-glide",
-  "policyId": "future.glide-owner-policy",
   "status": "not-run",
   "reasonCode": "dedicated-glide-tap-required",
   "referenceStatus": "awaiting-approved-reference",

@@ -81,43 +81,43 @@
     {
       "id": "par-006-none-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/none-step-v1.json",
-      "sha256": "84f2be9a06a1e727fa223b8dde9b963d7a1a5466f00ca88f6b3cb573dfbcf74e",
+      "sha256": "e2346232c6d4ad68621231982c35de64377789ed83678d6dd0509dfbe1f9b6b3",
       "requirements": ["PAR-006"]
     },
     {
       "id": "par-006-gain-control-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/gain-control-step-v1.json",
-      "sha256": "ade35bf0299bc84985cdc5869dfcac1850ce8b960ad28fc87d1f6d304f3b5c0b",
+      "sha256": "e44a0d7953c79f2bc8604d9b8addb527e986da73f43cd155c91e9050459ebfcf",
       "requirements": ["PAR-006"]
     },
     {
       "id": "par-006-control-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/control-step-v1.json",
-      "sha256": "bfccf9f778b2feb3ec69447275608013f23189abf06405d2cff5f2c11547f1bb",
+      "sha256": "43dded14ef88f7d7fc1b43cffd69e15fc498af95d4e59b5aff44cd258613684f",
       "requirements": ["PAR-006"]
     },
     {
       "id": "par-006-dedicated-pitch-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/dedicated-pitch-step-v1.json",
-      "sha256": "495870900e6bd17864b68e588506dfa16d9f0297f615f1d00dc1d94811a74445",
+      "sha256": "34426fd74ba02378daf201246195471808a72da6a8d57d50c7d38c0e17f9e70c",
       "requirements": ["PAR-006"]
     },
     {
       "id": "par-006-dedicated-cutoff-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/dedicated-cutoff-step-v1.json",
-      "sha256": "d0a81f3cb1d956c2bed9e1360831155f1f8afe5c30cb8cd74462a19e694dfcd4",
+      "sha256": "e3199bbaea44488f31d62354f6257d68ed67e2bb38ae6f7abd6c12da258d1677",
       "requirements": ["PAR-006"]
     },
     {
       "id": "par-006-dedicated-glide-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/dedicated-glide-step-v1.json",
-      "sha256": "68a3fdc590a4e39db208d253ee11fc4c18d38f3150b680a718658e49e248162a",
+      "sha256": "116777cf514b05bf1c96bb6a883bbd68fec48244f82b13ccd84807887d8035fb",
       "requirements": ["PAR-006"]
     },
     {
       "id": "par-006-contour-stage-step-v1",
       "relativePath": "Tests/reference/fixtures/par-006/contour-stage-step-v1.json",
-      "sha256": "22d8ac7114128916d0e2f17cf9a3caae9e0d11b2f04349a13040c618af82e2ea",
+      "sha256": "4a982469f00b68b01276017a6afac32f765221892b8da7062ff64d5770677bb4",
       "requirements": ["PAR-006"]
     }
   ]

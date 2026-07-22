@@ -396,6 +396,35 @@ public:
                               "signal.stats.v1", AnalysisRequest { .metric = "unknown",
                                                                     .audio = constant }),
                           "analyzer.unknown-metric");
+        const std::array<double, 3> finiteControl { 0.0, 1.0, 1.0 };
+        for (const auto& invalidRequest : {
+                 AnalysisRequest { .eventSample = 1,
+                                   .start = std::numeric_limits<double>::infinity(),
+                                   .target = 1.0,
+                                   .control = finiteControl },
+                 AnalysisRequest { .eventSample = 1,
+                                   .start = 0.0,
+                                   .target = std::numeric_limits<double>::quiet_NaN(),
+                                   .control = finiteControl },
+             }) {
+            const auto invalidControl = registry.analyze ("control.step.v1", invalidRequest);
+            expectDiagnostic (invalidControl, "analyzer.non-finite");
+            expect (invalidControl.value.has_value(),
+                    "invalid control requests must retain deterministic failure metrics");
+            if (! invalidControl.value.has_value())
+                continue;
+            for (const auto& metric : *invalidControl.value)
+                expect (std::isfinite (metric.value) && std::isfinite (metric.allowance),
+                        "every failed control metric field must remain finite");
+            const auto firstJson = metricResultsJson (*invalidControl.value);
+            const auto secondJson = metricResultsJson (*invalidControl.value);
+            expectEquals (firstJson, secondJson,
+                          "failed control metric JSON must be byte-deterministic");
+            expect (! firstJson.containsIgnoreCase ("nan")
+                        && ! firstJson.containsIgnoreCase ("infinity")
+                        && ! firstJson.containsIgnoreCase ("null"),
+                    "failed control metric JSON must not encode non-finite placeholders");
+        }
 
         beginTest ("the draft acceptance manifest validates exact approved software policies");
         const auto sourceRoot = juce::File { sourceRootPath };
@@ -473,6 +502,24 @@ public:
                                     acceptanceText.replaceFirstOccurrenceOf (
                                         R"("status": "draft")", R"("status": "approved")"),
                                     "acceptance.incomplete");
+        const auto approvedWithOpenEvidence = acceptanceText
+            .replaceFirstOccurrenceOf (R"("status": "draft")", R"("status": "approved")")
+            .replaceFirstOccurrenceOf (
+                R"("published": [])",
+                R"("published": [{"id":"published.probe","classification":"published","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","page":"1"}])")
+            .replaceFirstOccurrenceOf (
+                R"("measuredHardware": [])",
+                R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware","status":"awaiting-approved-reference","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceSet":"approved set","bandArtifact":"band.json","rawSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","uncertainty":"approved method"}])")
+            .replaceFirstOccurrenceOf (
+                R"("performance": [])",
+                R"("performance": [{"id":"performance.probe","classification":"performance","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"targetSystem":"approved system","budgetBasis":"approved budget","rationale":"approved rationale"}])");
+        expectAcceptanceDiagnostic (sourceRoot, registry, approvedWithOpenEvidence,
+                                    "acceptance.incomplete");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            approvedWithOpenEvidence.replaceFirstOccurrenceOf (
+                R"("status": "not-run")", R"("status": "fail")"),
+            "acceptance.incomplete");
         expectAcceptanceDiagnostic (sourceRoot, registry,
                                     acceptanceText.replaceFirstOccurrenceOf (
                                         R"("zeroBasis": "approved exact-step policy")",
@@ -490,6 +537,70 @@ public:
                                     "acceptance.derived-policy");
         expectAcceptanceDiagnostic (sourceRoot, registry,
                                     acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("value": 0.005)", R"("value": 0.006)"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("unit": "seconds")", R"("unit": "samples")"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("metric": "settled-sample")",
+                                        R"("metric": "first-change-sample")"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText
+                .replaceFirstOccurrenceOf (R"("analyzer": "control.step.v1")",
+                                           R"("analyzer": "signal.stats.v1")")
+                .replaceFirstOccurrenceOf (R"("metric": "settled-sample")",
+                                           R"("metric": "sample-count")"),
+            "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("requirements": ["PAR-006", "TST-006"])",
+                                        R"("requirements": ["PAR-006"])"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("id": "par006.gain-control.duration",
+      "classification": "derived-software",
+      "status": "not-run")",
+                R"("id": "par006.gain-control.duration",
+      "classification": "derived-software",
+      "status": "fail")"),
+            "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        "5 ms linear-amplitude software safety ramp",
+                                        "5 ms normalized-domain ramp"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        "10 ms owner-declared control-domain software safety ramp",
+                                        "10 ms unspecified ramp"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        "+1 sample after ceil(duration * sampleRate)",
+                                        "+2 samples after floor(duration * sampleRate)"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        "approved exact-step policy", "nonempty but wrong basis"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        "2026-07-22 user-approved design", "unspecified review"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("reviewDate": "2026-07-22")",
+                                        R"("reviewDate": "2026-07-23")"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
                                         R"("status": "not-run")", R"("status": "pass")"),
                                     "acceptance.pass-artifact");
 
@@ -500,7 +611,10 @@ public:
         if (! index.value.has_value())
             return;
         expectEquals (static_cast<int> (index.value->smoothingFixtures.size()), 7);
-        const auto expanded = expandSmoothingFixtures (sourceRoot, *index.value);
+        if (! manifest.value.has_value())
+            return;
+        const auto expanded = expandSmoothingFixtures (
+            sourceRoot, *index.value, *manifest.value);
         expect (expanded.ok(), "the seven templates must expand by registry class");
         if (! expanded.value.has_value())
             return;
@@ -529,8 +643,8 @@ public:
             if (smoothingCase.smoothingClass == ParameterRegistry::SmoothingClass::none) {
                 expect (smoothingCase.durationSeconds == 0.0
                             && smoothingCase.intermediateValues == std::optional<int> { 0 }
-                            && smoothingCase.status == Status::pass,
-                        "none must use the executable exact-step policy");
+                            && smoothingCase.status == Status::notRun,
+                        "none must require evidence before its exact-step policy can pass");
             } else if (smoothingCase.smoothingClass
                        == ParameterRegistry::SmoothingClass::gainControl) {
                 expectWithinAbsoluteError (smoothingCase.durationSeconds, 0.005, 1.0e-15,
@@ -554,11 +668,66 @@ public:
                         "dedicated classes must not substitute a generic ramp");
             }
         }
+        expectSmoothingPolicyDiagnostic (
+            sourceRoot, *manifest.value,
+            "Tests/reference/fixtures/par-006/gain-control-step-v1.json",
+            "par006.gain-control.duration", "par006.control.duration");
+        expectSmoothingPolicyDiagnostic (
+            sourceRoot, *manifest.value,
+            "Tests/reference/fixtures/par-006/control-step-v1.json",
+            "par006.settling.allowance", "par006.none.intermediate");
+        expectSmoothingPolicyDiagnostic (
+            sourceRoot, *manifest.value,
+            "Tests/reference/fixtures/par-006/dedicated-pitch-step-v1.json",
+            "  \"analyzer\": \"control.step.v1\",",
+            "  \"policyId\": \"par006.gain-control.duration\",\n"
+            "  \"analyzer\": \"control.step.v1\",");
 
-        beginTest ("live evaluation passes only exact-step control evidence");
+        beginTest ("declarations alone cannot produce an acceptance pass");
         if (! manifest.value.has_value())
             return;
-        const auto evaluated = evaluateAcceptance (*manifest.value, *expanded.value);
+        const auto declarationsOnly = evaluateAcceptance (
+            *manifest.value, *expanded.value, {}, registry);
+        expect (declarationsOnly.ok(), "draft declarations must evaluate as unavailable evidence");
+        int declarationPassCount = 0;
+        for (const auto& result : *declarationsOnly.value)
+            declarationPassCount += result.status == Status::pass ? 1 : 0;
+        expectEquals (declarationPassCount, 0,
+                      "fixture declarations and fixture hashes must never fabricate a pass");
+
+        beginTest ("only supplied analyzer-valid none trace evidence can pass");
+        const TemporaryDirectory candidateRoot { "model-d-acceptance-evidence" };
+        expect (candidateRoot.isOwned(), "evidence candidate root must be owned");
+        if (! candidateRoot.isOwned())
+            return;
+        const auto candidateTrace = candidateRoot.directory.getChildFile ("control-trace.json");
+        candidateTrace.replaceWithText (R"({"schema":"candidate-control-trace"}\n)");
+        const auto candidateHash = sha256File (candidateTrace);
+        const auto& noneCase = expanded.value->front();
+        expect (noneCase.smoothingClass == ParameterRegistry::SmoothingClass::none,
+                "first frozen descriptor must use class none");
+
+        SmoothingEvidence validEvidence;
+        validEvidence.parameterId = noneCase.parameterId;
+        validEvidence.render.sampleRate = 48000.0;
+        validEvidence.render.controlTrace = {
+            { 0, noneCase.key, 0.0f, 0.0f },
+            { noneCase.eventSample, noneCase.key, 1.0f, 1.0f },
+        };
+        validEvidence.render.eventTrace = {
+            "automation:0:0:" + noneCase.parameterId + ":0",
+            "automation:" + std::to_string (noneCase.eventSample) + ":1:"
+                + noneCase.parameterId + ":1",
+        };
+        validEvidence.render.reproducibility.outputHashes = {
+            { "control-trace.json", candidateHash },
+        };
+        validEvidence.candidateArtifactPath = candidateTrace.getFullPathName().toStdString();
+        validEvidence.candidateArtifactSha256 = candidateHash;
+
+        const auto evaluated = evaluateAcceptance (
+            *manifest.value, *expanded.value,
+            std::span<const SmoothingEvidence> { &validEvidence, 1 }, registry);
         expect (evaluated.ok(), "draft F0 acceptance must evaluate honestly");
         int passCount = 0;
         int awaitingCount = 0;
@@ -568,8 +737,42 @@ public:
             if (result.status == Status::pass)
                 expect (! result.artifactSha256.empty(), "a pass must carry an artifact hash");
         }
-        expectEquals (passCount, 27, "only the 27 none-class control gates may pass");
+        expectEquals (passCount, 1, "only the one supplied valid none case may pass");
         expect (awaitingCount > 0, "missing hardware references must remain awaiting approval");
+        const auto passed = findGate (*evaluated.value,
+                                      "par006." + noneCase.parameterId + ".control");
+        expect (passed != nullptr && passed->metric.has_value()
+                    && passed->artifactPath == validEvidence.candidateArtifactPath
+                    && passed->artifactSha256 == candidateHash,
+                "a pass must carry its executed metric and real candidate artifact");
+
+        beginTest ("invalid traces, analyzer metrics, and hashes cannot pass");
+        const auto expectEvidenceFailure = [&] (SmoothingEvidence evidence,
+                                                const std::string_view reason) {
+            const auto result = evaluateAcceptance (
+                *manifest.value, *expanded.value,
+                std::span<const SmoothingEvidence> { &evidence, 1 }, registry);
+            expect (result.ok(), "invalid supplied evidence must produce an honest gate result");
+            if (! result.value.has_value())
+                return;
+            const auto* gate = findGate (*result.value,
+                                         "par006." + noneCase.parameterId + ".control");
+            expect (gate != nullptr && gate->status == Status::fail
+                        && gate->reasonCode == reason
+                        && gate->artifactPath.empty() && gate->artifactSha256.empty(),
+                    "invalid evidence must fail without an artifact pass claim");
+        };
+        auto invalidTrace = validEvidence;
+        invalidTrace.render.controlTrace.insert (
+            invalidTrace.render.controlTrace.begin() + 1,
+            { noneCase.eventSample - 1, noneCase.key, 0.5f, 0.5f });
+        expectEvidenceFailure (std::move (invalidTrace), "smoothing.trace-mismatch");
+        auto invalidMetric = validEvidence;
+        invalidMetric.render.controlTrace.back().normalizedValue = 0.5f;
+        expectEvidenceFailure (std::move (invalidMetric), "smoothing.metric-mismatch");
+        auto invalidHash = validEvidence;
+        invalidHash.candidateArtifactSha256 = std::string (64, '0');
+        expectEvidenceFailure (std::move (invalidHash), "smoothing.artifact-hash");
     }
 
 private:
@@ -621,6 +824,16 @@ private:
         return values;
     }
 
+    static const ReferenceHarness::GateResult* findGate (
+        const std::vector<ReferenceHarness::GateResult>& results,
+        const std::string_view id)
+    {
+        const auto found = std::find_if (results.begin(), results.end(), [&] (const auto& result) {
+            return result.id == id;
+        });
+        return found == results.end() ? nullptr : &*found;
+    }
+
     void expectAcceptanceDiagnostic (const juce::File& sourceRoot,
                                      const ReferenceHarness::AnalyzerRegistry& registry,
                                      const juce::String& text,
@@ -633,6 +846,42 @@ private:
         const auto file = temporary.directory.getChildFile ("acceptance.json");
         file.replaceWithText (text);
         expectDiagnostic (loadAcceptanceManifest (sourceRoot, file, registry), code);
+    }
+
+    void expectSmoothingPolicyDiagnostic (const juce::File& sourceRoot,
+                                          const ReferenceHarness::AcceptanceManifest& manifest,
+                                          const juce::String& relativePath,
+                                          const juce::String& needle,
+                                          const juce::String& replacement)
+    {
+        const TemporaryDirectory probeRoot { "model-d-smoothing-policy-negative" };
+        expect (probeRoot.isOwned(), "smoothing policy probe root must be owned");
+        if (! probeRoot.isOwned())
+            return;
+        for (const auto path : frozenFixturePaths) {
+            const auto source = sourceRoot.getChildFile (path);
+            const auto destination = probeRoot.directory.getChildFile (path);
+            destination.getParentDirectory().createDirectory();
+            expect (source.copyFileTo (destination),
+                    "smoothing policy probe must copy every indexed fixture");
+        }
+        const auto fixture = probeRoot.directory.getChildFile (relativePath);
+        fixture.replaceWithText (
+            fixture.loadFileAsString().replaceFirstOccurrenceOf (needle, replacement));
+        const auto indexPath = "Tests/reference/fixture-index-v1.json";
+        const auto indexFile = probeRoot.directory.getChildFile (indexPath);
+        indexFile.getParentDirectory().createDirectory();
+        const auto originalHash = ReferenceHarness::sha256File (
+            sourceRoot.getChildFile (relativePath));
+        indexFile.replaceWithText (
+            sourceRoot.getChildFile (indexPath).loadFileAsString().replaceFirstOccurrenceOf (
+                originalHash, ReferenceHarness::sha256File (fixture)));
+        const auto index = ReferenceHarness::loadFixtureIndex (probeRoot.directory, indexFile);
+        expect (index.ok(), "policy mutation index must remain structurally valid");
+        if (index.value.has_value())
+            expectDiagnostic (ReferenceHarness::expandSmoothingFixtures (
+                                  probeRoot.directory, *index.value, manifest),
+                              "smoothing.policy");
     }
 };
 

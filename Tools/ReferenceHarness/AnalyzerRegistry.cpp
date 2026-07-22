@@ -114,7 +114,15 @@ LoadResult<Metrics> analyzeSignalStats (const AnalysisRequest& request)
 LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
 {
     const AnalyzerIdentity identity { "control.step.v1", 1 };
-    const auto travel = std::abs (request.target - request.start);
+    const auto finiteEndpoints = std::isfinite (request.start) && std::isfinite (request.target);
+    double travel = 0.0;
+    auto finiteTravel = false;
+    if (finiteEndpoints) {
+        const auto signedTravel = request.target - request.start;
+        finiteTravel = std::isfinite (signedTravel);
+        if (finiteTravel)
+            travel = std::abs (signedTravel);
+    }
     const auto epsilonAllowance = 8.0 * std::numeric_limits<double>::epsilon()
                                 * std::max (1.0, travel);
     const auto idealIncrement = request.durationSamples == 0
@@ -129,7 +137,7 @@ LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
 
     const auto valid = ! request.control.empty()
                     && request.eventSample < request.control.size()
-                    && std::isfinite (request.start) && std::isfinite (request.target)
+                    && finiteEndpoints && finiteTravel
                     && std::all_of (request.control.begin(), request.control.end(), [] (const auto value) {
                            return std::isfinite (value);
                        });

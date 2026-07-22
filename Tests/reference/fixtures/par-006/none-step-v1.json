@@ -13,8 +13,8 @@
   "requiredTap": "registry-control-event",
   "ownerWorkstream": "03-parameter-state",
   "policyId": "par006.none.intermediate",
-  "status": "pass",
-  "reasonCode": "exact-control-event-available",
+  "status": "not-run",
+  "reasonCode": "evidence-not-supplied",
   "referenceStatus": "not-run",
   "referenceReasonCode": "path-owned-audio-click-not-run"
 }
