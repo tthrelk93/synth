@@ -1,0 +1,19 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-dedicated-pitch-step-v1",
+  "registryClass": "dedicatedPitch",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.0,
+  "analyzer": "control.step.v1",
+  "requiredTap": "pitch-owner-frequency-control",
+  "ownerWorkstream": "05-oscillators",
+  "policyId": "future.pitch-owner-policy",
+  "status": "not-run",
+  "reasonCode": "dedicated-pitch-tap-required",
+  "referenceStatus": "awaiting-approved-reference",
+  "referenceReasonCode": "hardware-pitch-response-awaiting-approved-reference"
+}

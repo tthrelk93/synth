@@ -1,5 +1,7 @@
 #include "ReferenceData.h"
 #include "OfflineRenderer.h"
+#include "Acceptance.h"
+#include "AnalyzerRegistry.h"
 #include "PluginProcessor.h"
 
 #include <array>
@@ -55,6 +57,13 @@ constexpr std::array frozenFixturePaths {
     "Tests/reference/fixtures/native-v2-foundation.json",
     "Tests/reference/fixtures/migrated-v2-foundation.json",
     "Tests/reference/fixtures/legacy-contour-foundation.json",
+    "Tests/reference/fixtures/par-006/none-step-v1.json",
+    "Tests/reference/fixtures/par-006/gain-control-step-v1.json",
+    "Tests/reference/fixtures/par-006/control-step-v1.json",
+    "Tests/reference/fixtures/par-006/dedicated-pitch-step-v1.json",
+    "Tests/reference/fixtures/par-006/dedicated-cutoff-step-v1.json",
+    "Tests/reference/fixtures/par-006/dedicated-glide-step-v1.json",
+    "Tests/reference/fixtures/par-006/contour-stage-step-v1.json",
 };
 
 class ReferenceHarnessTest final : public juce::UnitTest {
@@ -242,6 +251,392 @@ private:
 };
 
 ReferenceHarnessTest referenceHarnessTest;
+
+class ReferenceAnalyzerTest final : public juce::UnitTest {
+public:
+    ReferenceAnalyzerTest()
+        : juce::UnitTest ("ModelDReferenceAnalyzerContract", "analyzers")
+    {
+    }
+
+    void runTest() override
+    {
+        using namespace ReferenceHarness;
+        const auto registry = AnalyzerRegistry::withFoundationAnalyzers();
+
+        beginTest ("foundation analyzer identities are versioned and immutable");
+        for (const auto id : { "signal.stats.v1", "control.step.v1", "audio.click.v1" }) {
+            const auto found = registry.find (id);
+            expect (found.ok() && found.value->id == id && found.value->version == 1,
+                    juce::String { id } + " must resolve at version one");
+        }
+        expectDiagnostic (registry.find ("signal.stats.v2"), "analyzer.unknown");
+
+        beginTest ("signal statistics calibrate constant and impulse inputs");
+        const std::array<float, 4> constant { 2.0f, 2.0f, 2.0f, 2.0f };
+        const auto constantMetrics = registry.analyze (
+            "signal.stats.v1", AnalysisRequest { .audio = constant });
+        expect (constantMetrics.ok(), "constant statistics must analyze");
+        expectMetric (constantMetrics, "sample-count", "count", 4.0);
+        expectMetric (constantMetrics, "finite-count", "count", 4.0);
+        expectMetric (constantMetrics, "minimum", "amplitude", 2.0);
+        expectMetric (constantMetrics, "maximum", "amplitude", 2.0);
+        expectMetric (constantMetrics, "peak-absolute", "amplitude", 2.0);
+        expectMetric (constantMetrics, "mean", "amplitude", 2.0);
+        expectMetric (constantMetrics, "rms", "amplitude", 2.0);
+        expectMetric (constantMetrics, "maximum-first-difference", "amplitude/sample", 0.0);
+        const std::array<float, 5> impulse { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f };
+        const auto impulseMetrics = registry.analyze (
+            "signal.stats.v1", AnalysisRequest { .audio = impulse });
+        expectMetric (impulseMetrics, "mean", "amplitude", 0.2);
+        expectMetric (impulseMetrics, "rms", "amplitude", std::sqrt (0.2));
+        expectMetric (impulseMetrics, "maximum-first-difference", "amplitude/sample", 1.0);
+        if (constantMetrics.value.has_value()) {
+            const auto settings = constantMetrics.value->front().settings;
+            expect (settings == std::map<std::string, std::string> {
+                                   { "finite-policy", "reject-non-finite" },
+                                   { "input", "audio" },
+                                   { "sample-domain", "contiguous" },
+                               },
+                    "signal analyzer settings must be exact and explicit");
+            expectEquals (metricResultsJson (*constantMetrics.value),
+                          metricResultsJson (*constantMetrics.value),
+                          "metric JSON must be deterministic");
+        }
+
+        beginTest ("control steps calibrate directions, policy ramps, overshoot, and settling");
+        const std::array<double, 5> upward { 0.0, 0.0, 1.0, 1.0, 1.0 };
+        const auto up = registry.analyze (
+            "control.step.v1", AnalysisRequest { .eventSample = 2, .start = 0.0,
+                                                   .target = 1.0, .control = upward });
+        expectMetric (up, "first-change-sample", "samples", 2.0);
+        expectMetric (up, "settled-sample", "samples", 2.0);
+        expectMetric (up, "monotonic", "boolean", 1.0);
+        expectMetric (up, "overshoot", "normalized", 0.0);
+        expectMetric (up, "maximum-per-sample-movement", "normalized/sample", 1.0);
+
+        const std::array<double, 5> downward { 1.0, 1.0, 0.0, 0.0, 0.0 };
+        const auto down = registry.analyze (
+            "control.step.v1", AnalysisRequest { .eventSample = 2, .start = 1.0,
+                                                   .target = 0.0, .control = downward });
+        expectMetric (down, "first-change-sample", "samples", 2.0);
+        expectMetric (down, "monotonic", "boolean", 1.0);
+
+        const auto fiveMs = makeRamp (10, 240, false);
+        const auto five = registry.analyze (
+            "control.step.v1", AnalysisRequest { .eventSample = 10, .durationSamples = 240,
+                                                   .start = 0.0, .target = 1.0,
+                                                   .control = fiveMs });
+        expectMetric (five, "first-change-sample", "samples", 11.0);
+        expectMetric (five, "settled-sample", "samples", 250.0);
+        expectMetric (five, "monotonic", "boolean", 1.0);
+
+        const auto tenMs = makeRamp (10, 480, false);
+        const auto ten = registry.analyze (
+            "control.step.v1", AnalysisRequest { .eventSample = 10, .durationSamples = 480,
+                                                   .start = 0.0, .target = 1.0,
+                                                   .control = tenMs });
+        expectMetric (ten, "settled-sample", "samples", 490.0);
+
+        const std::array<double, 6> overshoot { 0.0, 0.0, 0.5, 1.1, 1.0, 1.0 };
+        const auto over = registry.analyze (
+            "control.step.v1", AnalysisRequest { .eventSample = 2, .durationSamples = 2,
+                                                   .start = 0.0, .target = 1.0,
+                                                   .control = overshoot });
+        expectMetric (over, "monotonic", "boolean", 0.0);
+        expectMetric (over, "overshoot", "normalized", 0.1);
+        const std::array<double, 7> late { 0.0, 0.0, 0.3, 0.6, 0.9, 0.99, 1.0 };
+        const auto lateMetrics = registry.analyze (
+            "control.step.v1", AnalysisRequest { .eventSample = 2, .durationSamples = 3,
+                                                   .start = 0.0, .target = 1.0,
+                                                   .control = late });
+        expectMetric (lateMetrics, "settled-sample", "samples", 6.0);
+        expectMetric (lateMetrics, "floating-allowance", "normalized",
+                      8.0 * std::numeric_limits<double>::epsilon());
+        if (five.value.has_value())
+            expect (five.value->front().settings == std::map<std::string, std::string> {
+                        { "allowance", "8*epsilon*max(1,travel)" },
+                        { "first-change", "first sample at/after event outside start allowance" },
+                        { "ideal-increment", "travel/duration-or-travel-for-zero-duration" },
+                        { "settled", "first sample whose suffix remains within target allowance" },
+                    },
+                    "control-step settings must be exact and explicit");
+
+        beginTest ("audio click metrics calibrate a declared event window");
+        const std::array<float, 7> click { 1.0f, 1.0f, 1.0f, 2.0f, 1.0f, 1.0f, 1.0f };
+        const auto clickMetrics = registry.analyze (
+            "audio.click.v1", AnalysisRequest { .eventSample = 3, .durationSamples = 1,
+                                                  .audio = click });
+        expectMetric (clickMetrics, "maximum-first-difference", "amplitude/sample", 1.0);
+        expectMetric (clickMetrics, "pre-rms", "amplitude", 1.0);
+        expectMetric (clickMetrics, "post-rms", "amplitude", 1.0);
+        expectMetric (clickMetrics, "peak-over-steady-state", "dB", 0.0);
+        expectMetric (clickMetrics, "finite-count", "count", 7.0);
+        if (clickMetrics.value.has_value())
+            expect (clickMetrics.value->front().settings == std::map<std::string, std::string> {
+                        { "event-window", "inclusive transition indices event..event+duration" },
+                        { "finite-policy", "reject-non-finite" },
+                        { "steady-state", "mean of pre/post RMS" },
+                    },
+                    "audio-click settings must be exact and explicit");
+
+        beginTest ("empty, non-finite, and unknown metric analysis fails stably without NaN JSON");
+        const auto empty = registry.analyze ("signal.stats.v1", {});
+        expectDiagnostic (empty, "analyzer.empty-input");
+        const std::array<float, 2> nonFinite { 0.0f, std::numeric_limits<float>::quiet_NaN() };
+        const auto nan = registry.analyze (
+            "signal.stats.v1", AnalysisRequest { .audio = nonFinite });
+        expectDiagnostic (nan, "analyzer.non-finite");
+        if (nan.value.has_value()) {
+            const auto json = metricResultsJson (*nan.value);
+            expect (! json.containsIgnoreCase ("nan") && ! json.containsIgnoreCase ("inf"),
+                    "failed metric JSON must remain numeric and deterministic");
+        }
+        expectDiagnostic (registry.analyze (
+                              "signal.stats.v1", AnalysisRequest { .metric = "unknown",
+                                                                    .audio = constant }),
+                          "analyzer.unknown-metric");
+
+        beginTest ("the draft acceptance manifest validates exact approved software policies");
+        const auto sourceRoot = juce::File { sourceRootPath };
+        const auto acceptanceFile = sourceRoot.getChildFile ("Tests/reference/acceptance-v1.json");
+        const auto manifest = loadAcceptanceManifest (sourceRoot, acceptanceFile, registry);
+        expect (manifest.ok(), "the checked-in acceptance manifest must validate");
+        if (manifest.value.has_value()) {
+            expect (manifest.value->status == "draft", "global acceptance must remain draft");
+            expectEquals (static_cast<int> (manifest.value->derivedSoftware.size()), 4);
+        }
+
+        beginTest ("acceptance validation rejects unsupported or unproven claims");
+        const auto acceptanceText = acceptanceFile.loadFileAsString();
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        "model-d.acceptance.v1", "model-d.acceptance.v2"),
+                                    "acceptance.schema");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("status": "draft")", R"("status": "staged")"),
+                                    "acceptance.status");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("classification": "hard-software")",
+                                        R"("classification": "subjective")"),
+                                    "acceptance.classification");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("analyzer": "signal.stats.v1")",
+                                        R"("analyzer": "signal.stats.v2")"),
+                                    "acceptance.analyzer");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("analyzerVersion": 1)", R"("analyzerVersion": 2)"),
+                                    "acceptance.analyzer-version");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("metric": "sample-count")", R"("metric": "mystery")"),
+                                    "acceptance.metric");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("unit": "count")", R"("unit": "mystery")"),
+                                    "acceptance.unit");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("id": "hard.registry.count")",
+                                        R"("id": "par006.gain-control.duration")"),
+                                    "acceptance.duplicate-id");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("requirements": ["PAR-001", "TST-006"])",
+                                        R"("requirements": [])"),
+                                    "acceptance.requirement");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("derivation": "5 ms linear-amplitude software safety ramp")",
+                                        R"("derivation": "")"),
+                                    "acceptance.derivation");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("published": [])",
+                                        R"("published": [{"id":"bad.source","classification":"published","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1}])"),
+                                    "acceptance.source");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("measuredHardware": [])",
+                                        R"("measuredHardware": [{"id":"bad.reference","classification":"measured-hardware","status":"awaiting-approved-reference","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1}])"),
+                                    "acceptance.reference");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("performance": [])",
+                                        R"("performance": [{"id":"bad.performance","classification":"performance","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1}])"),
+                                    "acceptance.performance");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("status": "draft")", R"("status": "approved")"),
+                                    "acceptance.incomplete");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("zeroBasis": "approved exact-step policy")",
+                                        R"("zeroBasis": "")"),
+                                    "acceptance.zero");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("reviewStatus": "approved")",
+                                        R"("reviewStatus": "draft")"),
+                                    "acceptance.derived-review");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("id": "par006.gain-control.duration")",
+                                        R"("id": "par006.unapproved.duration")"),
+                                    "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (sourceRoot, registry,
+                                    acceptanceText.replaceFirstOccurrenceOf (
+                                        R"("status": "not-run")", R"("status": "pass")"),
+                                    "acceptance.pass-artifact");
+
+        beginTest ("seven templates expand from the live registry without a duplicate ID inventory");
+        const auto index = loadFixtureIndex (
+            sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
+        expect (index.ok(), "fixture index with smoothing templates must validate");
+        if (! index.value.has_value())
+            return;
+        expectEquals (static_cast<int> (index.value->smoothingFixtures.size()), 7);
+        const auto expanded = expandSmoothingFixtures (sourceRoot, *index.value);
+        expect (expanded.ok(), "the seven templates must expand by registry class");
+        if (! expanded.value.has_value())
+            return;
+        expectEquals (static_cast<int> (expanded.value->size()), 48);
+        const std::map<ParameterRegistry::SmoothingClass, int> expectedCounts {
+            { ParameterRegistry::SmoothingClass::none, 27 },
+            { ParameterRegistry::SmoothingClass::gainControl, 7 },
+            { ParameterRegistry::SmoothingClass::control, 5 },
+            { ParameterRegistry::SmoothingClass::dedicatedPitch, 1 },
+            { ParameterRegistry::SmoothingClass::dedicatedCutoff, 1 },
+            { ParameterRegistry::SmoothingClass::dedicatedGlide, 1 },
+            { ParameterRegistry::SmoothingClass::contourStage, 6 },
+        };
+        std::map<ParameterRegistry::SmoothingClass, int> actualCounts;
+        for (size_t position = 0; position < expanded.value->size(); ++position) {
+            const auto& smoothingCase = expanded.value->at (position);
+            ++actualCounts[smoothingCase.smoothingClass];
+            expect (smoothingCase.parameterId
+                        == ParameterRegistry::descriptors()[position].id,
+                    "expansion order and IDs must come directly from the registry");
+            expect (smoothingCase.sampleRates == std::vector<int> { 44100, 48000, 96000 },
+                    "every template must declare the exact sample-rate matrix");
+        }
+        expect (actualCounts == expectedCounts, "frozen registry class counts must match");
+        for (const auto& smoothingCase : *expanded.value) {
+            if (smoothingCase.smoothingClass == ParameterRegistry::SmoothingClass::none) {
+                expect (smoothingCase.durationSeconds == 0.0
+                            && smoothingCase.intermediateValues == std::optional<int> { 0 }
+                            && smoothingCase.status == Status::pass,
+                        "none must use the executable exact-step policy");
+            } else if (smoothingCase.smoothingClass
+                       == ParameterRegistry::SmoothingClass::gainControl) {
+                expectWithinAbsoluteError (smoothingCase.durationSeconds, 0.005, 1.0e-15,
+                                           "gainControl must retain the approved 5 ms policy");
+                expect (smoothingCase.status == Status::notRun,
+                        "gainControl owner DSP tap must remain not-run");
+                expect (! smoothingCase.intermediateValues.has_value(),
+                        "gainControl must not invent an intermediate count before its tap runs");
+            } else if (smoothingCase.smoothingClass
+                       == ParameterRegistry::SmoothingClass::control) {
+                expectWithinAbsoluteError (smoothingCase.durationSeconds, 0.010, 1.0e-15,
+                                           "control must retain the approved 10 ms policy");
+                expect (smoothingCase.status == Status::notRun,
+                        "control owner DSP tap must remain not-run");
+                expect (! smoothingCase.intermediateValues.has_value(),
+                        "control must not invent an intermediate count before its tap runs");
+            } else {
+                expect (smoothingCase.durationSeconds == 0.0
+                            && ! smoothingCase.intermediateValues.has_value()
+                            && smoothingCase.status == Status::notRun,
+                        "dedicated classes must not substitute a generic ramp");
+            }
+        }
+
+        beginTest ("live evaluation passes only exact-step control evidence");
+        if (! manifest.value.has_value())
+            return;
+        const auto evaluated = evaluateAcceptance (*manifest.value, *expanded.value);
+        expect (evaluated.ok(), "draft F0 acceptance must evaluate honestly");
+        int passCount = 0;
+        int awaitingCount = 0;
+        for (const auto& result : *evaluated.value) {
+            passCount += result.status == Status::pass ? 1 : 0;
+            awaitingCount += result.status == Status::awaitingApprovedReference ? 1 : 0;
+            if (result.status == Status::pass)
+                expect (! result.artifactSha256.empty(), "a pass must carry an artifact hash");
+        }
+        expectEquals (passCount, 27, "only the 27 none-class control gates may pass");
+        expect (awaitingCount > 0, "missing hardware references must remain awaiting approval");
+    }
+
+private:
+    template <typename T>
+    void expectDiagnostic (const ReferenceHarness::LoadResult<T>& result,
+                           const std::string_view code)
+    {
+        expect (! result.ok(), "negative case must fail");
+        const auto actual = result.diagnostics.empty() ? "<none>" : result.diagnostics.front().code;
+        expect (! result.diagnostics.empty() && actual == code,
+                "negative case must report stable diagnostic " + std::string { code }
+                    + ", got " + actual);
+    }
+
+    void expectMetric (const ReferenceHarness::LoadResult<
+                           std::vector<ReferenceHarness::MetricResult>>& result,
+                       const std::string_view name,
+                       const std::string_view unit,
+                       const double expected)
+    {
+        expect (result.value.has_value(), "analysis must return metric records");
+        if (! result.value.has_value())
+            return;
+        const auto found = std::find_if (result.value->begin(), result.value->end(), [&] (const auto& metric) {
+            return metric.metric == name;
+        });
+        expect (found != result.value->end(), "metric must be reported: " + std::string { name });
+        if (found != result.value->end()) {
+            expect (found->unit == unit, "metric unit must be exact: " + std::string { name });
+            expectWithinAbsoluteError (found->value, expected, 1.0e-12,
+                                       "metric value must match analytic calibration");
+            expect (std::isfinite (found->value), "metric JSON values must always be finite");
+        }
+    }
+
+    static std::vector<double> makeRamp (const size_t eventSample,
+                                         const size_t durationSamples,
+                                         const bool downward)
+    {
+        std::vector<double> values (eventSample + durationSamples + 3,
+                                    downward ? 1.0 : 0.0);
+        for (size_t offset = 1; offset <= durationSamples; ++offset) {
+            const auto normalized = static_cast<double> (offset)
+                                  / static_cast<double> (durationSamples);
+            values[eventSample + offset] = downward ? 1.0 - normalized : normalized;
+        }
+        std::fill (values.begin() + static_cast<std::ptrdiff_t> (eventSample + durationSamples),
+                   values.end(), downward ? 0.0 : 1.0);
+        return values;
+    }
+
+    void expectAcceptanceDiagnostic (const juce::File& sourceRoot,
+                                     const ReferenceHarness::AnalyzerRegistry& registry,
+                                     const juce::String& text,
+                                     const std::string_view code)
+    {
+        const TemporaryDirectory temporary { "model-d-acceptance-negative" };
+        expect (temporary.isOwned(), "acceptance negative root must be owned");
+        if (! temporary.isOwned())
+            return;
+        const auto file = temporary.directory.getChildFile ("acceptance.json");
+        file.replaceWithText (text);
+        expectDiagnostic (loadAcceptanceManifest (sourceRoot, file, registry), code);
+    }
+};
+
+ReferenceAnalyzerTest referenceAnalyzerTest;
 
 class ReferenceRendererTest final : public juce::UnitTest {
 public:

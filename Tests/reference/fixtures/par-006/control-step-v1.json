@@ -1,0 +1,19 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-control-step-v1",
+  "registryClass": "control",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.010,
+  "analyzer": "control.step.v1",
+  "requiredTap": "owner-declared-control-domain",
+  "ownerWorkstream": "04-11-feature-owners",
+  "policyId": "par006.control.duration",
+  "status": "not-run",
+  "reasonCode": "owner-control-tap-unavailable",
+  "referenceStatus": "awaiting-approved-reference",
+  "referenceReasonCode": "hardware-shape-awaiting-approved-reference"
+}

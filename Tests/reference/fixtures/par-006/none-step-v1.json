@@ -1,0 +1,20 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-none-step-v1",
+  "registryClass": "none",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.0,
+  "intermediateValues": 0,
+  "analyzer": "control.step.v1",
+  "requiredTap": "registry-control-event",
+  "ownerWorkstream": "03-parameter-state",
+  "policyId": "par006.none.intermediate",
+  "status": "pass",
+  "reasonCode": "exact-control-event-available",
+  "referenceStatus": "not-run",
+  "referenceReasonCode": "path-owned-audio-click-not-run"
+}

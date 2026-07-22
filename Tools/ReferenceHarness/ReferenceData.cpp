@@ -867,4 +867,131 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
     return { std::move (fixture), {} };
 }
 
+LoadResult<SmoothingFixture> loadSmoothingFixture (const juce::File& fixtureFile)
+{
+    if (! fixtureFile.existsAsFile())
+        return failure<SmoothingFixture> ("smoothing.missing", "smoothing fixture does not exist");
+
+    juce::var parsed;
+    if (juce::JSON::parse (fixtureFile.loadFileAsString(), parsed).failed())
+        return failure<SmoothingFixture> ("smoothing.parse", "smoothing fixture is not valid JSON");
+    const auto* root = parsed.getDynamicObject();
+    if (root == nullptr)
+        return failure<SmoothingFixture> ("smoothing.shape", "smoothing fixture root must be an object");
+
+    SmoothingFixture fixture;
+    if (! readRequiredString (*root, "schema", fixture.schema)
+        || fixture.schema != "model-d.smoothing-fixture.v1")
+        return failure<SmoothingFixture> ("smoothing.schema", "smoothing fixture schema is unsupported");
+    if (! readRequiredString (*root, "id", fixture.id))
+        return failure<SmoothingFixture> ("smoothing.id", "smoothing fixture ID is required");
+
+    std::string className;
+    if (! readRequiredString (*root, "registryClass", className))
+        return failure<SmoothingFixture> ("smoothing.class", "registry smoothing class is required");
+    const std::map<std::string, ParameterRegistry::SmoothingClass> classes {
+        { "none", ParameterRegistry::SmoothingClass::none },
+        { "gainControl", ParameterRegistry::SmoothingClass::gainControl },
+        { "control", ParameterRegistry::SmoothingClass::control },
+        { "dedicatedPitch", ParameterRegistry::SmoothingClass::dedicatedPitch },
+        { "dedicatedCutoff", ParameterRegistry::SmoothingClass::dedicatedCutoff },
+        { "dedicatedGlide", ParameterRegistry::SmoothingClass::dedicatedGlide },
+        { "contourStage", ParameterRegistry::SmoothingClass::contourStage },
+    };
+    const auto smoothingClass = classes.find (className);
+    if (smoothingClass == classes.end())
+        return failure<SmoothingFixture> ("smoothing.class", "registry smoothing class is unsupported");
+    fixture.smoothingClass = smoothingClass->second;
+
+    if (! readFiniteNumber (*root, "startNormalized", fixture.startNormalized)
+        || ! readFiniteNumber (*root, "endNormalized", fixture.endNormalized)
+        || fixture.startNormalized < 0.0 || fixture.startNormalized > 1.0
+        || fixture.endNormalized < 0.0 || fixture.endNormalized > 1.0
+        || fixture.startNormalized == fixture.endNormalized)
+        return failure<SmoothingFixture> (
+            "smoothing.range", "smoothing start/end must be distinct normalized values");
+
+    const auto* ratesValue = requiredProperty (*root, "sampleRates");
+    const auto* rates = ratesValue == nullptr ? nullptr : ratesValue->getArray();
+    constexpr std::array expectedRates { 44100, 48000, 96000 };
+    if (rates == nullptr || rates->size() != static_cast<int> (expectedRates.size()))
+        return failure<SmoothingFixture> (
+            "smoothing.sample-rates", "smoothing sample-rate matrix must contain 44.1, 48, and 96 kHz");
+    for (int index = 0; index < rates->size(); ++index) {
+        const auto& rate = rates->getReference (index);
+        if (! rate.isInt() || static_cast<int> (rate) != expectedRates[static_cast<size_t> (index)])
+            return failure<SmoothingFixture> (
+                "smoothing.sample-rates", "smoothing sample-rate matrix order is fixed");
+        fixture.sampleRates.push_back (static_cast<int> (rate));
+    }
+
+    if (! readUnsignedInteger (*root, "eventSample", fixture.eventSample)
+        || ! readUnsignedInteger (*root, "analysisWindow", fixture.analysisWindow)
+        || fixture.analysisWindow == 0)
+        return failure<SmoothingFixture> (
+            "smoothing.window", "smoothing event sample and positive analysis window are required");
+    if (! readFiniteNumber (*root, "durationSeconds", fixture.durationSeconds)
+        || fixture.durationSeconds < 0.0)
+        return failure<SmoothingFixture> (
+            "smoothing.duration", "smoothing duration must be a finite nonnegative policy value");
+    const auto* intermediate = requiredProperty (*root, "intermediateValues");
+    if (intermediate != nullptr) {
+        if (! intermediate->isInt() || static_cast<int> (*intermediate) < 0)
+            return failure<SmoothingFixture> (
+                "smoothing.intermediate", "declared intermediate-value count must be nonnegative");
+        fixture.intermediateValues = static_cast<int> (*intermediate);
+    }
+
+    if (! readRequiredString (*root, "analyzer", fixture.analyzerId)
+        || ! readRequiredString (*root, "requiredTap", fixture.requiredTap)
+        || ! readRequiredString (*root, "ownerWorkstream", fixture.ownerWorkstream)
+        || ! readRequiredString (*root, "policyId", fixture.policyId)
+        || ! readRequiredString (*root, "reasonCode", fixture.reasonCode)
+        || ! readRequiredString (*root, "referenceReasonCode", fixture.referenceReasonCode))
+        return failure<SmoothingFixture> (
+            "smoothing.provenance", "smoothing analyzer, tap, owner, policy, and reason codes are required");
+
+    const auto readStatus = [&] (const char* name, Status& destination) {
+        std::string status;
+        if (! readRequiredString (*root, name, status))
+            return false;
+        if (status == "pass")
+            destination = Status::pass;
+        else if (status == "not-run")
+            destination = Status::notRun;
+        else if (status == "awaiting-approved-reference")
+            destination = Status::awaitingApprovedReference;
+        else
+            return false;
+        return true;
+    };
+    if (! readStatus ("status", fixture.status)
+        || ! readStatus ("referenceStatus", fixture.referenceStatus))
+        return failure<SmoothingFixture> ("smoothing.status", "smoothing status is unsupported");
+
+    if (fixture.smoothingClass == ParameterRegistry::SmoothingClass::none) {
+        if (fixture.durationSeconds != 0.0
+            || fixture.intermediateValues != std::optional<int> { 0 }
+            || fixture.status != Status::pass || fixture.referenceStatus != Status::notRun)
+            return failure<SmoothingFixture> (
+                "smoothing.none-policy", "none must be an exact step with no intermediate values");
+    } else {
+        const auto expectedDuration = fixture.smoothingClass
+                                          == ParameterRegistry::SmoothingClass::gainControl
+                                        ? 0.005
+                                        : fixture.smoothingClass
+                                              == ParameterRegistry::SmoothingClass::control
+                                            ? 0.010
+                                            : 0.0;
+        if (fixture.durationSeconds != expectedDuration
+            || fixture.status != Status::notRun
+            || fixture.referenceStatus != Status::awaitingApprovedReference
+            || fixture.intermediateValues.has_value())
+            return failure<SmoothingFixture> (
+                "smoothing.delegation", "unavailable owner paths must remain unexecuted without a generic ramp");
+    }
+
+    return { std::move (fixture), {} };
+}
+
 } // namespace ReferenceHarness

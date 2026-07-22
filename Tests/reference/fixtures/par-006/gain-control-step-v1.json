@@ -1,0 +1,19 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-gain-control-step-v1",
+  "registryClass": "gainControl",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.005,
+  "analyzer": "control.step.v1",
+  "requiredTap": "owner-dsp-linear-amplitude-control",
+  "ownerWorkstream": "10-mixer-output",
+  "policyId": "par006.gain-control.duration",
+  "status": "not-run",
+  "reasonCode": "owner-dsp-tap-unavailable",
+  "referenceStatus": "awaiting-approved-reference",
+  "referenceReasonCode": "hardware-taper-awaiting-approved-reference"
+}

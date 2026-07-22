@@ -1,0 +1,19 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-dedicated-glide-step-v1",
+  "registryClass": "dedicatedGlide",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.0,
+  "analyzer": "control.step.v1",
+  "requiredTap": "keyboard-owner-glide-control",
+  "ownerWorkstream": "06-keyboard-glide",
+  "policyId": "future.glide-owner-policy",
+  "status": "not-run",
+  "reasonCode": "dedicated-glide-tap-required",
+  "referenceStatus": "awaiting-approved-reference",
+  "referenceReasonCode": "hardware-glide-response-awaiting-approved-reference"
+}

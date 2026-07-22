@@ -633,9 +633,13 @@ if(NOT _model_d_source_commit_status EQUAL 0 OR _model_d_source_commit STREQUAL 
 endif()
 
 add_library(ModelDReferenceHarness STATIC
+    Tools/ReferenceHarness/Acceptance.cpp
+    Tools/ReferenceHarness/AnalyzerRegistry.cpp
     Tools/ReferenceHarness/ReferenceData.cpp
     Tools/ReferenceHarness/OfflineRenderer.cpp)
 synth_enable_project_warnings(
+    Tools/ReferenceHarness/Acceptance.cpp
+    Tools/ReferenceHarness/AnalyzerRegistry.cpp
     Tools/ReferenceHarness/ReferenceData.cpp
     Tools/ReferenceHarness/OfflineRenderer.cpp)
 target_include_directories(ModelDReferenceHarness
@@ -721,6 +725,8 @@ if(SYNTH_BUILD_TESTS)
     set_tests_properties(ModelDReferenceManifestContract PROPERTIES LABELS "unit;state")
     synth_add_reference_test(ModelDReferenceRendererContract renderer)
     set_tests_properties(ModelDReferenceRendererContract PROPERTIES LABELS "dsp;state")
+    synth_add_reference_test(ModelDReferenceAnalyzerContract analyzers)
+    set_tests_properties(ModelDReferenceAnalyzerContract PROPERTIES LABELS "unit;dsp")
 
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)

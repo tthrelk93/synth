@@ -1,0 +1,19 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-contour-stage-step-v1",
+  "registryClass": "contourStage",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.0,
+  "analyzer": "control.step.v1",
+  "requiredTap": "contour-owner-stage-control",
+  "ownerWorkstream": "07-contours",
+  "policyId": "future.contour-owner-policy",
+  "status": "not-run",
+  "reasonCode": "contour-stage-tap-required",
+  "referenceStatus": "awaiting-approved-reference",
+  "referenceReasonCode": "hardware-contour-shape-awaiting-approved-reference"
+}

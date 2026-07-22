@@ -77,5 +77,48 @@
       "requirements": ["PAR-004", "PAR-006"]
     }
   ],
-  "smoothingFixtures": []
+  "smoothingFixtures": [
+    {
+      "id": "par-006-none-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/none-step-v1.json",
+      "sha256": "84f2be9a06a1e727fa223b8dde9b963d7a1a5466f00ca88f6b3cb573dfbcf74e",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "par-006-gain-control-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/gain-control-step-v1.json",
+      "sha256": "ade35bf0299bc84985cdc5869dfcac1850ce8b960ad28fc87d1f6d304f3b5c0b",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "par-006-control-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/control-step-v1.json",
+      "sha256": "bfccf9f778b2feb3ec69447275608013f23189abf06405d2cff5f2c11547f1bb",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "par-006-dedicated-pitch-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/dedicated-pitch-step-v1.json",
+      "sha256": "495870900e6bd17864b68e588506dfa16d9f0297f615f1d00dc1d94811a74445",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "par-006-dedicated-cutoff-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/dedicated-cutoff-step-v1.json",
+      "sha256": "d0a81f3cb1d956c2bed9e1360831155f1f8afe5c30cb8cd74462a19e694dfcd4",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "par-006-dedicated-glide-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/dedicated-glide-step-v1.json",
+      "sha256": "68a3fdc590a4e39db208d253ee11fc4c18d38f3150b680a718658e49e248162a",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "par-006-contour-stage-step-v1",
+      "relativePath": "Tests/reference/fixtures/par-006/contour-stage-step-v1.json",
+      "sha256": "22d8ac7114128916d0e2f17cf9a3caae9e0d11b2f04349a13040c618af82e2ea",
+      "requirements": ["PAR-006"]
+    }
+  ]
 }

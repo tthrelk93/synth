@@ -18,5 +18,6 @@ LoadResult<FixtureIndex> loadFixtureIndex (
     const juce::File& sourceRoot, const juce::File& indexFile);
 LoadResult<RenderFixture> loadRenderFixture (
     const juce::File& sourceRoot, const juce::File& fixtureFile);
+LoadResult<SmoothingFixture> loadSmoothingFixture (const juce::File& fixtureFile);
 
 } // namespace ReferenceHarness

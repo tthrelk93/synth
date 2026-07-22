@@ -1,0 +1,89 @@
+{
+  "schema": "model-d.acceptance.v1",
+  "manifestVersion": 1,
+  "status": "draft",
+  "hardSoftware": [
+    {
+      "id": "hard.registry.count",
+      "classification": "hard-software",
+      "status": "not-run",
+      "requirements": ["PAR-001", "TST-006"],
+      "analyzer": "signal.stats.v1",
+      "analyzerVersion": 1,
+      "metric": "sample-count",
+      "unit": "count",
+      "value": 48,
+      "provenance": "live ParameterRegistry::descriptors() contract"
+    }
+  ],
+  "published": [],
+  "derivedSoftware": [
+    {
+      "id": "par006.gain-control.duration",
+      "classification": "derived-software",
+      "status": "not-run",
+      "requirements": ["PAR-006", "TST-006"],
+      "analyzer": "control.step.v1",
+      "analyzerVersion": 1,
+      "metric": "settled-sample",
+      "unit": "seconds",
+      "value": 0.005,
+      "derivation": "5 ms linear-amplitude software safety ramp",
+      "reviewStatus": "approved",
+      "reviewBasis": "2026-07-22 user-approved design",
+      "reviewDate": "2026-07-22",
+      "claimScope": "software safety policy; not a hardware measurement"
+    },
+    {
+      "id": "par006.control.duration",
+      "classification": "derived-software",
+      "status": "not-run",
+      "requirements": ["PAR-006", "TST-006"],
+      "analyzer": "control.step.v1",
+      "analyzerVersion": 1,
+      "metric": "settled-sample",
+      "unit": "seconds",
+      "value": 0.010,
+      "derivation": "10 ms owner-declared control-domain software safety ramp",
+      "reviewStatus": "approved",
+      "reviewBasis": "2026-07-22 user-approved design",
+      "reviewDate": "2026-07-22",
+      "claimScope": "software safety policy; not a hardware measurement"
+    },
+    {
+      "id": "par006.settling.allowance",
+      "classification": "derived-software",
+      "status": "not-run",
+      "requirements": ["PAR-006", "TST-006"],
+      "analyzer": "control.step.v1",
+      "analyzerVersion": 1,
+      "metric": "settled-sample",
+      "unit": "samples",
+      "value": 1,
+      "derivation": "+1 sample after ceil(duration * sampleRate)",
+      "reviewStatus": "approved",
+      "reviewBasis": "2026-07-22 user-approved design",
+      "reviewDate": "2026-07-22",
+      "claimScope": "software safety policy; not a hardware measurement"
+    },
+    {
+      "id": "par006.none.intermediate",
+      "classification": "derived-software",
+      "status": "not-run",
+      "requirements": ["PAR-006", "TST-006"],
+      "analyzer": "control.step.v1",
+      "analyzerVersion": 1,
+      "metric": "maximum-per-sample-movement",
+      "unit": "count",
+      "value": 0,
+      "zeroBasis": "approved exact-step policy",
+      "derivation": "0 intermediate values for registry class none",
+      "reviewStatus": "approved",
+      "reviewBasis": "2026-07-22 user-approved design",
+      "reviewDate": "2026-07-22",
+      "claimScope": "software safety policy; not a hardware measurement"
+    }
+  ],
+  "measuredHardware": [],
+  "performance": []
+}

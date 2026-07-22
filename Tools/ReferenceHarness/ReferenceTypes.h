@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -116,6 +117,103 @@ struct RenderResult {
     std::vector<std::string> eventTrace;
     std::vector<int> blockPattern;
     ReproducibilityInfo reproducibility;
+};
+
+struct AnalyzerIdentity {
+    std::string id;
+    int version = 0;
+};
+
+struct AnalysisRequest {
+    std::string metric;
+    std::uint64_t eventSample = 0;
+    std::uint64_t durationSamples = 0;
+    double start = 0.0;
+    double target = 0.0;
+    std::span<const double> control;
+    std::span<const float> audio;
+};
+
+struct MetricResult {
+    AnalyzerIdentity analyzer;
+    std::string metric;
+    std::string unit;
+    double value = 0.0;
+    double allowance = 0.0;
+    bool finite = false;
+    std::map<std::string, std::string> settings;
+};
+
+enum class GateClassification {
+    hardSoftware,
+    published,
+    derivedSoftware,
+    measuredHardware,
+    performance
+};
+
+struct GateDefinition {
+    std::string id;
+    GateClassification classification = GateClassification::hardSoftware;
+    Status status = Status::notRun;
+    std::vector<std::string> requirements;
+    AnalyzerIdentity analyzer;
+    std::string metric;
+    std::string unit;
+    double value = 0.0;
+    double allowance = 0.0;
+    std::map<std::string, std::string> provenance;
+    std::string artifactPath;
+    std::string artifactSha256;
+};
+
+struct GateResult {
+    std::string id;
+    Status status = Status::notRun;
+    std::string reasonCode;
+    std::vector<std::string> requirements;
+    std::optional<MetricResult> metric;
+    std::string artifactPath;
+    std::string artifactSha256;
+};
+
+struct AcceptanceManifest {
+    std::string schema;
+    int version = 0;
+    std::string status;
+    std::vector<GateDefinition> hardSoftware;
+    std::vector<GateDefinition> published;
+    std::vector<GateDefinition> derivedSoftware;
+    std::vector<GateDefinition> measuredHardware;
+    std::vector<GateDefinition> performance;
+};
+
+struct SmoothingFixture {
+    std::string schema;
+    std::string id;
+    ParameterRegistry::SmoothingClass smoothingClass = ParameterRegistry::SmoothingClass::unspecified;
+    double startNormalized = 0.0;
+    double endNormalized = 0.0;
+    std::vector<int> sampleRates;
+    std::uint64_t eventSample = 0;
+    std::uint64_t analysisWindow = 0;
+    double durationSeconds = 0.0;
+    std::optional<int> intermediateValues;
+    std::string analyzerId;
+    std::string requiredTap;
+    std::string ownerWorkstream;
+    Status status = Status::notRun;
+    std::string reasonCode;
+    Status referenceStatus = Status::awaitingApprovedReference;
+    std::string referenceReasonCode;
+    std::string policyId;
+    std::string relativePath;
+    std::string sha256;
+};
+
+struct SmoothingCase : SmoothingFixture {
+    ParameterRegistry::Key key {};
+    std::string parameterId;
 };
 
 } // namespace ReferenceHarness

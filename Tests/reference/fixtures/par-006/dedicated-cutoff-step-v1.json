@@ -1,0 +1,19 @@
+{
+  "schema": "model-d.smoothing-fixture.v1",
+  "id": "par-006-dedicated-cutoff-step-v1",
+  "registryClass": "dedicatedCutoff",
+  "startNormalized": 0.0,
+  "endNormalized": 1.0,
+  "sampleRates": [44100, 48000, 96000],
+  "eventSample": 256,
+  "analysisWindow": 4096,
+  "durationSeconds": 0.0,
+  "analyzer": "control.step.v1",
+  "requiredTap": "filter-owner-cutoff-control",
+  "ownerWorkstream": "08-filter",
+  "policyId": "future.cutoff-owner-policy",
+  "status": "not-run",
+  "reasonCode": "dedicated-cutoff-tap-required",
+  "referenceStatus": "awaiting-approved-reference",
+  "referenceReasonCode": "hardware-cutoff-response-awaiting-approved-reference"
+}
