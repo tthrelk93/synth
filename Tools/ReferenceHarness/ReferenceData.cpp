@@ -1,5 +1,8 @@
 #include "ReferenceData.h"
 
+#include "ParameterRegistry.h"
+#include "StateContract.h"
+
 #include <juce_cryptography/juce_cryptography.h>
 
 #include <algorithm>
@@ -193,6 +196,173 @@ bool readArtifactSection (const juce::DynamicObject& root,
     return true;
 }
 
+std::optional<Diagnostic> semanticFailure (const char* code, const char* message)
+{
+    return Diagnostic { code, message };
+}
+
+std::optional<Diagnostic> validateDescriptorFixture (
+    const juce::File& file,
+    const char* schema,
+    const char* entriesName,
+    std::span<const ParameterRegistry::Descriptor> expectedDescriptors,
+    const bool requireVersionHint,
+    const char* code)
+{
+    juce::var parsed;
+    if (juce::JSON::parse (file.loadFileAsString(), parsed).failed())
+        return semanticFailure (code, "parameter fixture must be valid JSON");
+
+    const auto* root = parsed.getDynamicObject();
+    const auto* schemaProperty = root == nullptr ? nullptr : requiredProperty (*root, "schema");
+    const auto* entries = root == nullptr ? nullptr : requiredProperty (*root, entriesName);
+    const auto* entryArray = entries == nullptr ? nullptr : entries->getArray();
+    if (schemaProperty == nullptr || ! schemaProperty->isString()
+        || schemaProperty->toString() != schema || entryArray == nullptr
+        || entryArray->size() != static_cast<int> (expectedDescriptors.size()))
+        return semanticFailure (code, "parameter fixture must match the live descriptor count and schema");
+
+    for (size_t position = 0; position < expectedDescriptors.size(); ++position) {
+        const auto* entry = entryArray->getReference (static_cast<int> (position)).getDynamicObject();
+        const auto* index = entry == nullptr ? nullptr : requiredProperty (*entry, "index");
+        const auto* id = entry == nullptr ? nullptr : requiredProperty (*entry, "id");
+        if (index == nullptr || ! index->isInt() || static_cast<int> (*index) != static_cast<int> (position)
+            || id == nullptr || ! id->isString()
+            || id->toString().toStdString() != expectedDescriptors[position].id)
+            return semanticFailure (code, "parameter fixture descriptor order does not match the live registry");
+
+        if (requireVersionHint) {
+            const auto* versionHint = requiredProperty (*entry, "version_hint");
+            if (versionHint == nullptr || ! versionHint->isInt()
+                || static_cast<int> (*versionHint) != expectedDescriptors[position].versionHint)
+                return semanticFailure (code, "parameter fixture version hints do not match the live registry");
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<Diagnostic> validateParameterFixtures (const juce::File& sourceRoot)
+{
+    const auto descriptors = ParameterRegistry::descriptors();
+    if (descriptors.size() != ParameterRegistry::parameterCount)
+        return semanticFailure ("semantic.registry", "live parameter registry must contain exactly 48 descriptors");
+
+    if (const auto diagnostic = validateDescriptorFixture (
+            sourceRoot.getChildFile ("Tests/fixtures/parameters/parameter-registry-v2.json"),
+            "model-d.parameter-registry.v2", "parameters", descriptors, true, "semantic.registry");
+        diagnostic.has_value())
+        return diagnostic;
+
+    std::vector<ParameterRegistry::Descriptor> legacyDescriptors;
+    legacyDescriptors.reserve (descriptors.size());
+    for (const auto& descriptor : descriptors)
+        if (descriptor.versionHint == 0)
+            legacyDescriptors.push_back (descriptor);
+    if (const auto diagnostic = validateDescriptorFixture (
+            sourceRoot.getChildFile ("Tests/fixtures/parameters/legacy-parameter-inventory.json"),
+            "model-d.legacy-parameter-inventory.v1", "parameters", legacyDescriptors, true, "semantic.inventory");
+        diagnostic.has_value())
+        return diagnostic;
+
+    return validateDescriptorFixture (
+        sourceRoot.getChildFile ("Tests/fixtures/parameters/parameter-snapshot-v2.json"),
+        "model-d.parameter-snapshot.v2", "fields", descriptors, false, "semantic.snapshot");
+}
+
+const char* contourContractName (const StateContract::ContourContract contract)
+{
+    return contract == StateContract::ContourContract::legacyCrossedContours
+             ? "legacyCrossedContours"
+             : "canonicalContours";
+}
+
+std::optional<Diagnostic> validateStateFixture (
+    const juce::File& file,
+    const bool isLegacy,
+    const StateContract::ContourContract expectedContour = StateContract::ContourContract::canonicalContours)
+{
+    const auto xml = juce::XmlDocument::parse (file);
+    if (xml == nullptr)
+        return semanticFailure ("semantic.state", "state fixture must be valid XML");
+
+    if (isLegacy) {
+        if (! xml->hasTagName ("Parameters") || xml->hasAttribute ("stateVersion"))
+            return semanticFailure ("semantic.state", "legacy state fixture must retain the Parameters root");
+        return std::nullopt;
+    }
+
+    if (! xml->hasTagName ("modelDState")
+        || xml->getStringAttribute ("stateVersion") != juce::String (StateContract::currentVersion))
+        return semanticFailure ("semantic.state", "v2 state fixture must retain the current modelDState root and version");
+
+    const auto* compatibility = xml->getChildByName ("compatibility");
+    if (compatibility == nullptr
+        || compatibility->getStringAttribute ("contourContract") != contourContractName (expectedContour))
+        return semanticFailure ("semantic.state", "v2 state fixture has an incompatible contour marker");
+    return std::nullopt;
+}
+
+std::optional<Diagnostic> validateStateFixtures (const juce::File& sourceRoot)
+{
+    const auto validate = [&] (const char* path,
+                               const bool isLegacy,
+                               const StateContract::ContourContract contour) {
+        return validateStateFixture (sourceRoot.getChildFile (path), isLegacy, contour);
+    };
+
+    if (const auto diagnostic = validate ("Tests/fixtures/state/legacy-default-state.xml", true,
+                                          StateContract::ContourContract::legacyCrossedContours);
+        diagnostic.has_value())
+        return diagnostic;
+    if (const auto diagnostic = validate ("Tests/fixtures/state/legacy-representative-state.xml", true,
+                                          StateContract::ContourContract::legacyCrossedContours);
+        diagnostic.has_value())
+        return diagnostic;
+    if (const auto diagnostic = validate ("Tests/fixtures/state/native-default-state-v2.xml", false,
+                                          StateContract::ContourContract::canonicalContours);
+        diagnostic.has_value())
+        return diagnostic;
+    if (const auto diagnostic = validate ("Tests/fixtures/state/migrated-default-state-v2.xml", false,
+                                          StateContract::ContourContract::legacyCrossedContours);
+        diagnostic.has_value())
+        return diagnostic;
+    return validate ("Tests/fixtures/state/migrated-representative-state-v2.xml", false,
+                     StateContract::ContourContract::legacyCrossedContours);
+}
+
+std::optional<Diagnostic> validateContourFixture (const juce::File& sourceRoot)
+{
+    const auto file = sourceRoot.getChildFile ("Tests/fixtures/state/contour-routing-conversion-trace.json");
+    juce::var parsed;
+    if (juce::JSON::parse (file.loadFileAsString(), parsed).failed())
+        return semanticFailure ("semantic.contour", "contour fixture must be valid JSON");
+
+    const auto* root = parsed.getDynamicObject();
+    const auto* schema = root == nullptr ? nullptr : requiredProperty (*root, "schema");
+    const auto* canonical = root == nullptr ? nullptr : requiredProperty (*root, "canonicalContours");
+    const auto* legacy = root == nullptr ? nullptr : requiredProperty (*root, "legacyCrossedContours");
+    const auto* conversion = root == nullptr ? nullptr : requiredProperty (*root, "confirmedConversion");
+    const auto* conversionObject = conversion == nullptr ? nullptr : conversion->getDynamicObject();
+    const auto* marker = conversionObject == nullptr ? nullptr : requiredProperty (*conversionObject, "marker");
+    if (schema == nullptr || ! schema->isString() || schema->toString() != "model-d-contour-routing-trace-v1"
+        || canonical == nullptr || canonical->getDynamicObject() == nullptr
+        || legacy == nullptr || legacy->getDynamicObject() == nullptr
+        || marker == nullptr || ! marker->isString()
+        || marker->toString() != contourContractName (StateContract::ContourContract::canonicalContours))
+        return semanticFailure ("semantic.contour", "contour trace must retain canonical and legacy compatibility markers");
+    return std::nullopt;
+}
+
+std::optional<Diagnostic> validateLiveContracts (const juce::File& sourceRoot)
+{
+    if (const auto diagnostic = validateParameterFixtures (sourceRoot); diagnostic.has_value())
+        return diagnostic;
+    if (const auto diagnostic = validateStateFixtures (sourceRoot); diagnostic.has_value())
+        return diagnostic;
+    return validateContourFixture (sourceRoot);
+}
+
 } // namespace
 
 std::string statusName (const Status status)
@@ -317,6 +487,9 @@ LoadResult<FixtureIndex> loadFixtureIndex (const juce::File& sourceRoot,
         if (const auto diagnostic = validateArtifactBytes (*section); diagnostic.has_value())
             return { std::nullopt, { std::move (*diagnostic) } };
     }
+
+    if (const auto diagnostic = validateLiveContracts (sourceRoot); diagnostic.has_value())
+        return { std::nullopt, { std::move (*diagnostic) } };
 
     for (size_t indexPosition = 0; indexPosition < expectedFrozenArtifacts.size(); ++indexPosition) {
         const auto& actual = index.frozenArtifacts[indexPosition];

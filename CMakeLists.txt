@@ -670,12 +670,17 @@ if(SYNTH_BUILD_TESTS)
         Tools/ReferenceHarness/ReferenceData.cpp)
     target_include_directories(ModelDReferenceHarness
         PUBLIC
-            Tools/ReferenceHarness)
+            Tools/ReferenceHarness
+        PRIVATE
+            Source
+            cmake/plugin_compat
+            "${juce_SOURCE_DIR}/modules")
     target_link_libraries(ModelDReferenceHarness
         PUBLIC
             juce::juce_core
             juce::juce_cryptography
         PRIVATE
+            ModelDPlugin
             SynthProjectOptions)
     set(_model_d_reference_build_definitions
         SYNTH_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
