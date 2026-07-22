@@ -11,7 +11,7 @@
   "render": {
     "sampleRate": 48000,
     "totalSamples": 2048,
-    "seed": 212791958372932,
+    "seed": 0,
     "blockPatterns": [[128], [17, 31, 64, 127], [512]]
   },
   "automation": [

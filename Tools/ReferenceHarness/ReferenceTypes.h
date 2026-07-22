@@ -58,6 +58,7 @@ struct MidiEvent {
 struct RenderConfig {
     double sampleRate = 0.0;
     std::uint64_t totalSamples = 0;
+    // v1 has no stochastic harness input generator, so only zero is valid.
     std::uint64_t seed = 0;
     std::vector<std::vector<int>> blockPatterns;
 };

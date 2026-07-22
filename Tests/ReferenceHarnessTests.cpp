@@ -5,6 +5,7 @@
 #include <array>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 
 namespace {
 
@@ -355,24 +356,30 @@ public:
         }
 
         beginTest ("repeated runs and host block patterns have identical local-policy hashes");
-        const auto secondRun = ReferenceHarness::renderFixture (fixtures.front());
-        expect (secondRun.ok(), "repeated native render must succeed");
-        if (secondRun.value.has_value() && secondRun.value->size() == firstRun.value->size()) {
-            const auto expectedMain = firstRun.value->front().reproducibility.outputHashes.at ("main");
-            const auto expectedPhones = firstRun.value->front().reproducibility.outputHashes.at ("phones");
-            const auto expectedControl = firstRun.value->front().reproducibility.outputHashes.at ("control");
-            for (size_t pattern = 0; pattern < firstRun.value->size(); ++pattern) {
-                const auto& first = firstRun.value->at (pattern);
-                const auto& second = secondRun.value->at (pattern);
-                expect (first.reproducibility.outputHashes.at ("main") == expectedMain
-                            && second.reproducibility.outputHashes.at ("main") == expectedMain,
-                        "main audio hash must be repeatable and host-block invariant");
-                expect (first.reproducibility.outputHashes.at ("phones") == expectedPhones
-                            && second.reproducibility.outputHashes.at ("phones") == expectedPhones,
-                        "phones audio hash must be repeatable and host-block invariant");
-                expect (first.reproducibility.outputHashes.at ("control") == expectedControl
-                            && second.reproducibility.outputHashes.at ("control") == expectedControl,
-                        "control trace hash must be repeatable and host-block invariant");
+        std::optional<ReferenceHarness::LoadResult<std::vector<ReferenceHarness::RenderResult>>>
+            nativeSecondRun;
+        for (size_t fixtureIndex = 0; fixtureIndex < fixtures.size(); ++fixtureIndex) {
+            const auto repeatedFirst = ReferenceHarness::renderFixture (fixtures[fixtureIndex]);
+            const auto repeatedSecond = ReferenceHarness::renderFixture (fixtures[fixtureIndex]);
+            expect (repeatedFirst.ok() && repeatedSecond.ok(),
+                    "every foundation fixture must render twice");
+            if (! repeatedFirst.value.has_value() || ! repeatedSecond.value.has_value()
+                || repeatedFirst.value->size() != repeatedSecond.value->size()
+                || repeatedFirst.value->empty())
+                continue;
+            if (fixtureIndex == 0)
+                nativeSecondRun = repeatedSecond;
+            for (const auto hashName : { "main", "phones", "control", "event" }) {
+                const auto expected = repeatedFirst.value->front()
+                                          .reproducibility.outputHashes.at (hashName);
+                for (size_t pattern = 0; pattern < repeatedFirst.value->size(); ++pattern) {
+                    expect (repeatedFirst.value->at (pattern)
+                                    .reproducibility.outputHashes.at (hashName) == expected
+                                && repeatedSecond.value->at (pattern)
+                                       .reproducibility.outputHashes.at (hashName) == expected,
+                            fixtures[fixtureIndex].id + " " + hashName
+                                + " hash must be repeatable and host-block invariant");
+                }
             }
         }
 
@@ -399,6 +406,13 @@ public:
                                     R"("blockPatterns": [[0]])"),
                                 "fixture.block-size");
         expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("blockPatterns": [[128], [17, 31, 64, 127], [512]])",
+                                    R"("blockPatterns": [[2049]])"),
+                                "fixture.block-size");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("seed": 0)", R"("seed": 1)"),
+                                "fixture.seed");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
                                     R"("sample": 512, "sequence": 3)",
                                     R"("sample": 2049, "sequence": 3)"),
                                 "fixture.event-sample");
@@ -410,6 +424,9 @@ public:
                                     R"("bytes": [144, 60, 100])", R"("bytes": [144, 60, 999])"),
                                 "fixture.midi");
         expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("bytes": [144, 60, 100])", R"("bytes": [144, 255, 255])"),
+                                "fixture.midi");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
                                     R"("parameterId": "filterCutoff")",
                                     R"("parameterId": "unknownParameter")"),
                                 "fixture.parameter");
@@ -417,6 +434,20 @@ public:
                                     R"("normalizedValue": 0.25)",
                                     R"("normalizedValue": 1e999)"),
                                 "fixture.automation-value");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("input": {"kind": "silence"})",
+                                    R"("input": {"kind": "dc", "value": 1e300})"),
+                                "fixture.input-value");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("input": {"kind": "silence"})",
+                                    R"("input": {"kind": "sine", "value": -1e300, "frequencyHz": 440})"),
+                                "fixture.input-value");
+
+        const auto legacyText = sourceRoot.getChildFile (fixturePaths.back()).loadFileAsString();
+        expectFixtureDiagnostic (sourceRoot, legacyText.replaceFirstOccurrenceOf (
+                                    R"({"sample": 0, "sequence": 2, "parameterId": "noiseOnOffSwitch", "normalizedValue": 0.0})",
+                                    R"({"sample": 0, "sequence": 2, "parameterId": "noiseOnOffSwitch", "normalizedValue": 1.0})"),
+                                "fixture.stochastic-state");
 
         const TemporaryDirectory wavRoot { "model-d-reference-wav-negative" };
         expect (wavRoot.isOwned(), "WAV negative root must be owned");
@@ -457,11 +488,36 @@ public:
             expect (candidateRoot.createDirectory(), "retained candidate root must be creatable");
         const auto candidateA = candidateRoot.getChildFile ("candidate-a");
         const auto candidateB = candidateRoot.getChildFile ("candidate-b");
+        const auto expectRejectedCandidate = [&] (const std::vector<ReferenceHarness::RenderResult>& results,
+                                                   const juce::String& name,
+                                                   const std::string_view code) {
+            const auto directory = candidateRoot.getChildFile (name);
+            expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
+                                  fixtures.front(), results, directory),
+                              code);
+            expect (! directory.exists(), "invalid results must be rejected before output creation");
+        };
+        auto wrongCount = *firstRun.value;
+        wrongCount.pop_back();
+        expectRejectedCandidate (wrongCount, "wrong-count", "output.result-count");
+        auto wrongPattern = *firstRun.value;
+        wrongPattern[1].blockPattern = { 999 };
+        expectRejectedCandidate (wrongPattern, "wrong-pattern", "output.pattern");
+        auto wrongInvariant = *firstRun.value;
+        wrongInvariant[1].sampleRate = 44100.0;
+        expectRejectedCandidate (wrongInvariant, "wrong-invariant", "output.invariant");
+        auto divergent = *firstRun.value;
+        divergent[1].reproducibility.outputHashes["main"] = std::string (64, '0');
+        expectRejectedCandidate (divergent, "divergent", "output.divergence");
+        auto nonFinite = *firstRun.value;
+        nonFinite[1].main[0] = std::numeric_limits<float>::infinity();
+        expectRejectedCandidate (nonFinite, "non-finite", "output.non-finite");
         const auto writtenA = ReferenceHarness::writeCandidateArtifacts (
             fixtures.front(), *firstRun.value, candidateA);
-        const auto writtenB = secondRun.value.has_value()
+        const auto writtenB = nativeSecondRun.has_value()
+                                  && nativeSecondRun->value.has_value()
                             ? ReferenceHarness::writeCandidateArtifacts (
-                                  fixtures.front(), *secondRun.value, candidateB)
+                                  fixtures.front(), *nativeSecondRun->value, candidateB)
                             : ReferenceHarness::LoadResult<std::vector<juce::File>> {};
         expect (writtenA.ok() && writtenB.ok(), "both fresh candidate directories must be written");
         for (const auto name : { "render.json", "control-trace.json", "event-trace.json" })
@@ -496,9 +552,12 @@ private:
             return;
         const auto stateDirectory = fixtureRoot.directory.getChildFile ("Tests/fixtures/state");
         stateDirectory.createDirectory();
-        expect (sourceRoot.getChildFile ("Tests/fixtures/state/native-default-state-v2.xml")
-                    .copyFileTo (stateDirectory.getChildFile ("native-default-state-v2.xml")),
-                "negative fixture must copy its state");
+        for (const auto stateName : { "native-default-state-v2.xml",
+                                      "migrated-default-state-v2.xml",
+                                      "migrated-representative-state-v2.xml" })
+            expect (sourceRoot.getChildFile ("Tests/fixtures/state").getChildFile (stateName)
+                        .copyFileTo (stateDirectory.getChildFile (stateName)),
+                    "negative fixture must copy each referenced state");
         const auto fixtureFile = fixtureRoot.directory.getChildFile ("fixture.json");
         fixtureFile.replaceWithText (contents);
         expectDiagnostic (ReferenceHarness::loadRenderFixture (fixtureRoot.directory, fixtureFile), code);

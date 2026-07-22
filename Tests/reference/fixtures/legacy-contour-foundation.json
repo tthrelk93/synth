@@ -11,17 +11,20 @@
   "render": {
     "sampleRate": 48000,
     "totalSamples": 2048,
-    "seed": 212791958372932,
+    "seed": 0,
     "blockPatterns": [[128], [17, 31, 64, 127], [512]]
   },
   "automation": [
     {"sample": 0, "sequence": 0, "parameterId": "outputVolKnob", "normalizedValue": 1.0},
     {"sample": 0, "sequence": 1, "parameterId": "a440HzOnOff", "normalizedValue": 1.0},
-    {"sample": 512, "sequence": 3, "parameterId": "filterCutoff", "normalizedValue": 0.25}
+    {"sample": 0, "sequence": 2, "parameterId": "noiseOnOffSwitch", "normalizedValue": 0.0},
+    {"sample": 0, "sequence": 3, "parameterId": "oscModSwitch", "normalizedValue": 0.0},
+    {"sample": 0, "sequence": 4, "parameterId": "filterModSwitch", "normalizedValue": 0.0},
+    {"sample": 512, "sequence": 6, "parameterId": "filterCutoff", "normalizedValue": 0.25}
   ],
   "midi": [
-    {"sample": 0, "sequence": 2, "bytes": [144, 60, 100]},
-    {"sample": 1024, "sequence": 4, "bytes": [128, 60, 0]}
+    {"sample": 0, "sequence": 5, "bytes": [144, 60, 100]},
+    {"sample": 1024, "sequence": 7, "bytes": [128, 60, 0]}
   ],
   "input": {"kind": "silence"},
   "analyzers": ["exact-control-trace", "exact-event-trace"],

@@ -285,23 +285,44 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
                 subBlockSize);
             buffer.clear();
             auto externalInput = processor.getBusBuffer (buffer, true, 0);
+            bool nonFiniteInput = false;
             for (int sample = 0; sample < subBlockSize; ++sample)
                 for (int channel = 0; channel < externalInput.getNumChannels(); ++channel) {
                     const auto value = inputSample (
                         fixture, preparedInput, channel,
                         position + static_cast<std::uint64_t> (sample));
+                    nonFiniteInput = nonFiniteInput || ! std::isfinite (value);
                     externalInput.setSample (channel, sample, value);
                     renderedInput.push_back (value);
                 }
+            if (nonFiniteInput) {
+                processor.releaseResources();
+                processor.reset();
+                return failure<RenderResult> ("render.non-finite-input",
+                                              "render input contains a non-finite sample");
+            }
 
             processor.processBlock (buffer, midiBuffer);
             const auto main = processor.getBusBuffer (buffer, false, 0);
             const auto phones = processor.getBusBuffer (buffer, false, 1);
+            bool nonFiniteOutput = false;
             for (int sample = 0; sample < subBlockSize; ++sample) {
-                for (int channel = 0; channel < main.getNumChannels(); ++channel)
-                    result.main.push_back (main.getSample (channel, sample));
-                for (int channel = 0; channel < phones.getNumChannels(); ++channel)
-                    result.phones.push_back (phones.getSample (channel, sample));
+                for (int channel = 0; channel < main.getNumChannels(); ++channel) {
+                    const auto value = main.getSample (channel, sample);
+                    nonFiniteOutput = nonFiniteOutput || ! std::isfinite (value);
+                    result.main.push_back (value);
+                }
+                for (int channel = 0; channel < phones.getNumChannels(); ++channel) {
+                    const auto value = phones.getSample (channel, sample);
+                    nonFiniteOutput = nonFiniteOutput || ! std::isfinite (value);
+                    result.phones.push_back (value);
+                }
+            }
+            if (nonFiniteOutput) {
+                processor.releaseResources();
+                processor.reset();
+                return failure<RenderResult> ("render.non-finite-output",
+                                              "processor output contains a non-finite sample");
             }
             position = boundary;
         }
@@ -319,6 +340,98 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
     result.reproducibility.outputHashes.emplace (
         "event", hashBytes (event.toRawUTF8(), static_cast<size_t> (event.getNumBytesAsUTF8())));
     return { std::move (result), {} };
+}
+
+bool hasNonFiniteValues (const RenderResult& result)
+{
+    const auto nonFinite = [] (const auto value) { return ! std::isfinite (value); };
+    if (std::any_of (result.main.begin(), result.main.end(), nonFinite)
+        || std::any_of (result.phones.begin(), result.phones.end(), nonFinite))
+        return true;
+    return std::any_of (result.controlTrace.begin(), result.controlTrace.end(), [] (const auto& point) {
+        return ! std::isfinite (point.normalizedValue) || ! std::isfinite (point.physicalValue);
+    });
+}
+
+bool sameControlTrace (const std::vector<ControlTracePoint>& left,
+                       const std::vector<ControlTracePoint>& right)
+{
+    return left.size() == right.size()
+        && std::equal (left.begin(), left.end(), right.begin(), [] (const auto& a, const auto& b) {
+               return a.sample == b.sample && a.key == b.key
+                   && a.normalizedValue == b.normalizedValue
+                   && a.physicalValue == b.physicalValue;
+           });
+}
+
+std::optional<Diagnostic> validateCandidateResults (
+    const RenderFixture& fixture,
+    const std::span<const RenderResult> results)
+{
+    if (results.size() != fixture.config.blockPatterns.size())
+        return Diagnostic { "output.result-count",
+                            "candidate results must cover every declared block pattern" };
+    if (results.empty())
+        return Diagnostic { "output.results", "candidate render results are empty" };
+
+    const auto fixtureHash = sha256File (fixture.fixtureFile);
+    const auto& canonical = results.front();
+    for (size_t index = 0; index < results.size(); ++index) {
+        const auto& result = results[index];
+        if (result.blockPattern != fixture.config.blockPatterns[index])
+            return Diagnostic { "output.pattern",
+                                "candidate result block patterns must match fixture order" };
+        const auto mainSize = static_cast<size_t> (fixture.config.totalSamples)
+                            * static_cast<size_t> (std::max (result.mainChannels, 0));
+        const auto phonesSize = static_cast<size_t> (fixture.config.totalSamples)
+                              * static_cast<size_t> (std::max (result.phonesChannels, 0));
+        if (result.sampleRate != fixture.config.sampleRate
+            || result.mainChannels <= 0 || result.phonesChannels <= 0
+            || result.main.size() != mainSize || result.phones.size() != phonesSize
+            || result.reproducibility.seed != fixture.config.seed
+            || result.reproducibility.fixtureSha256 != fixtureHash)
+            return Diagnostic { "output.invariant",
+                                "candidate result metadata and channel sizes must match the fixture" };
+        if (hasNonFiniteValues (result))
+            return Diagnostic { "output.non-finite",
+                                "candidate results must contain only finite audio and control values" };
+    }
+
+    for (size_t index = 1; index < results.size(); ++index) {
+        const auto& result = results[index];
+        if (result.main != canonical.main || result.phones != canonical.phones
+            || ! sameControlTrace (result.controlTrace, canonical.controlTrace)
+            || result.eventTrace != canonical.eventTrace
+            || result.reproducibility.inputHashes != canonical.reproducibility.inputHashes
+            || result.reproducibility.outputHashes != canonical.reproducibility.outputHashes
+            || result.reproducibility.sourceCommit != canonical.reproducibility.sourceCommit
+            || result.reproducibility.juceCommit != canonical.reproducibility.juceCommit
+            || result.reproducibility.buildType != canonical.reproducibility.buildType
+            || result.reproducibility.platform != canonical.reproducibility.platform
+            || result.reproducibility.architecture != canonical.reproducibility.architecture)
+            return Diagnostic { "output.divergence",
+                                "candidate results diverge across declared block patterns" };
+    }
+
+    for (const auto& result : results) {
+        const auto control = canonicalJson (controlTraceJson (result));
+        const auto event = canonicalJson (eventTraceJson (result));
+        const std::map<std::string, std::string> expectedHashes {
+            { "main", hashFloats (result.main) },
+            { "phones", hashFloats (result.phones) },
+            { "control", hashBytes (control.toRawUTF8(),
+                                     static_cast<size_t> (control.getNumBytesAsUTF8())) },
+            { "event", hashBytes (event.toRawUTF8(),
+                                   static_cast<size_t> (event.getNumBytesAsUTF8())) },
+        };
+        for (const auto& [name, expected] : expectedHashes) {
+            const auto actual = result.reproducibility.outputHashes.find (name);
+            if (actual == result.reproducibility.outputHashes.end() || actual->second != expected)
+                return Diagnostic { "output.hash",
+                                    "candidate result hashes must match their exact bytes" };
+        }
+    }
+    return std::nullopt;
 }
 
 bool writeFloatWav (const juce::File& file,
@@ -399,8 +512,9 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     if (newDirectory.exists())
         return failure<std::vector<juce::File>> ("output.exists",
                                                  "candidate output directory already exists");
-    if (results.empty())
-        return failure<std::vector<juce::File>> ("output.results", "candidate render results are empty");
+    if (const auto diagnostic = validateCandidateResults (fixture, results);
+        diagnostic.has_value())
+        return { std::nullopt, { *diagnostic } };
     if (! newDirectory.createDirectory())
         return failure<std::vector<juce::File>> ("output.create",
                                                  "candidate output directory cannot be created");

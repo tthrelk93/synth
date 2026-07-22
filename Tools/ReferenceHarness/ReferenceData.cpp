@@ -10,6 +10,7 @@
 #include <cctype>
 #include <cmath>
 #include <filesystem>
+#include <iterator>
 #include <limits>
 #include <set>
 #include <utility>
@@ -22,6 +23,10 @@ constexpr auto fixtureVersion = 1;
 constexpr auto frozenArtifactCount = 9;
 constexpr auto renderFixtureSchema = "model-d.render-fixture.v1";
 constexpr std::uint64_t maximumRenderSamples = 96'000u * 60u;
+// The renderer must never ask the processor for a block larger than its public
+// fixed-capacity stage-buffer contract.
+constexpr int maximumRenderBlockSize = 2048;
+constexpr double maximumInputMagnitude = 1.0;
 
 struct ExpectedFrozenArtifact {
     const char* id;
@@ -205,6 +210,19 @@ std::optional<ParameterRegistry::Key> parameterKeyForId (const std::string_view 
     for (size_t index = 0; index < descriptors.size(); ++index)
         if (descriptors[index].id == id)
             return static_cast<ParameterRegistry::Key> (index);
+    return std::nullopt;
+}
+
+std::optional<double> stateParameterValue (const juce::XmlElement& state,
+                                           const std::string_view id)
+{
+    const auto* parameters = state.getChildByName ("parameters");
+    for (auto* parameter = parameters == nullptr ? nullptr
+                                                  : parameters->getFirstChildElement();
+         parameter != nullptr; parameter = parameter->getNextElement())
+        if (parameter->hasTagName ("PARAM")
+            && parameter->getStringAttribute ("id").toStdString() == id)
+            return parameter->getDoubleAttribute ("value");
     return std::nullopt;
 }
 
@@ -644,8 +662,11 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         || fixture.config.totalSamples > maximumRenderSamples)
         return failure<RenderFixture> ("fixture.total-samples",
                                        "render length must be positive and bounded");
-    if (! readUnsignedInteger (*render, "seed", fixture.config.seed))
-        return failure<RenderFixture> ("fixture.seed", "render seed must be an unsigned integer");
+    if (! readUnsignedInteger (*render, "seed", fixture.config.seed)
+        || fixture.config.seed != 0)
+        return failure<RenderFixture> (
+            "fixture.seed",
+            "render-fixture v1 requires seed zero because it has no stochastic input generator");
 
     const auto* patternsValue = requiredProperty (*render, "blockPatterns");
     const auto* patterns = patternsValue == nullptr ? nullptr : patternsValue->getArray();
@@ -660,9 +681,10 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         std::vector<int> parsedPattern;
         parsedPattern.reserve (static_cast<size_t> (pattern->size()));
         for (const auto& size : *pattern) {
-            if (! size.isInt() || static_cast<int> (size) <= 0)
+            if (! size.isInt() || static_cast<int> (size) <= 0
+                || static_cast<int> (size) > maximumRenderBlockSize)
                 return failure<RenderFixture> ("fixture.block-size",
-                                               "render block sizes must be positive integers");
+                                               "render block sizes must be within one stage buffer");
             parsedPattern.push_back (static_cast<int> (size));
         }
         fixture.config.blockPatterns.push_back (std::move (parsedPattern));
@@ -712,6 +734,27 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         fixture.automation.push_back (event);
     }
 
+    const auto stochasticConsumerEnabled = [&] (const ParameterRegistry::Key key) {
+        auto enabled = stateParameterValue (*stateXml, ParameterRegistry::descriptor (key).id)
+                           .value_or (0.0) >= 0.5;
+        std::vector<const AutomationEvent*> sampleZero;
+        for (const auto& event : fixture.automation)
+            if (event.sample == 0 && event.key == key)
+                sampleZero.push_back (&event);
+        std::sort (sampleZero.begin(), sampleZero.end(), [] (const auto* left, const auto* right) {
+            return left->sequence < right->sequence;
+        });
+        for (const auto* event : sampleZero)
+            enabled = event->normalizedValue >= 0.5f;
+        return enabled;
+    };
+    if (stochasticConsumerEnabled (ParameterRegistry::Key::noiseOnOffSwitch)
+        || stochasticConsumerEnabled (ParameterRegistry::Key::oscModSwitch)
+        || stochasticConsumerEnabled (ParameterRegistry::Key::filterModSwitch))
+        return failure<RenderFixture> (
+            "fixture.stochastic-state",
+            "production random consumers must be disabled by final sample-zero automation");
+
     const auto* midiValue = requiredProperty (*root, "midi");
     const auto* midi = midiValue == nullptr ? nullptr : midiValue->getArray();
     if (midi == nullptr)
@@ -737,6 +780,10 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
             || juce::MidiMessage::getMessageLengthFromFirstByte (event.bytes.front())
                 != static_cast<int> (event.bytes.size()))
             return failure<RenderFixture> ("fixture.midi", "MIDI bytes must form a complete JUCE message");
+        if (std::any_of (std::next (event.bytes.begin()), event.bytes.end(), [] (const auto byte) {
+                return byte >= 0x80;
+            }))
+            return failure<RenderFixture> ("fixture.midi", "MIDI data bytes must be seven-bit values");
         const juce::MidiMessage message { event.bytes.data(), static_cast<int> (event.bytes.size()), 0.0 };
         if (message.getRawDataSize() != static_cast<int> (event.bytes.size()))
             return failure<RenderFixture> ("fixture.midi", "MIDI bytes are not accepted by JUCE");
@@ -752,15 +799,20 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         fixture.input.kind = InputKind::silence;
     } else if (inputKind == "dc") {
         fixture.input.kind = InputKind::dc;
-        if (! readFiniteNumber (*input, "value", fixture.input.value))
-            return failure<RenderFixture> ("fixture.input", "DC input requires a finite value");
+        if (! readFiniteNumber (*input, "value", fixture.input.value)
+            || std::abs (fixture.input.value) > maximumInputMagnitude)
+            return failure<RenderFixture> (
+                "fixture.input-value", "DC input must be within full-scale float audio range");
     } else if (inputKind == "sine") {
         fixture.input.kind = InputKind::sine;
         if (! readFiniteNumber (*input, "value", fixture.input.value)
-            || ! readFiniteNumber (*input, "frequencyHz", fixture.input.frequencyHz)
+            || std::abs (fixture.input.value) > maximumInputMagnitude)
+            return failure<RenderFixture> (
+                "fixture.input-value", "sine amplitude must be within full-scale float audio range");
+        if (! readFiniteNumber (*input, "frequencyHz", fixture.input.frequencyHz)
             || fixture.input.frequencyHz <= 0.0
             || fixture.input.frequencyHz >= fixture.config.sampleRate * 0.5)
-            return failure<RenderFixture> ("fixture.input", "sine input requires finite amplitude and frequency");
+            return failure<RenderFixture> ("fixture.input", "sine input requires a valid frequency");
     } else if (inputKind == "wav") {
         fixture.input.kind = InputKind::wav;
         std::string path;
