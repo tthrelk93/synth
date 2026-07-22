@@ -219,9 +219,9 @@ struct SmoothingCase : SmoothingFixture {
 
 struct SmoothingEvidence {
     std::string parameterId;
+    RenderFixture fixture;
     RenderResult render;
-    std::string candidateArtifactPath;
-    std::string candidateArtifactSha256;
+    juce::File candidateDirectory;
 };
 
 } // namespace ReferenceHarness

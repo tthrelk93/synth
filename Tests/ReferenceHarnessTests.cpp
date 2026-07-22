@@ -604,6 +604,55 @@ public:
                                         R"("status": "not-run")", R"("status": "pass")"),
                                     "acceptance.pass-artifact");
 
+        beginTest ("reviewed policies may execute while global approval requires complete evidence");
+        const auto artifactPath = juce::String { "Tests/reference/acceptance-v1.json" };
+        const auto artifactHash = juce::String { sha256File (acceptanceFile) };
+        const auto passArtifact = juce::String {
+            R"("status": "pass", "artifactPath": ")" }
+                                + artifactPath + R"(", "artifactSha256": ")"
+                                + artifactHash + R"(")";
+        const auto completeApproved = acceptanceText
+            .replaceFirstOccurrenceOf (R"("status": "draft")", R"("status": "approved")")
+            .replace (R"("status": "not-run")", passArtifact)
+            .replaceFirstOccurrenceOf (
+                R"("published": [])",
+                juce::String { R"("published": [{"id":"published.probe","classification":"published",)" }
+                    + passArtifact
+                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","page":"1"}])")
+            .replaceFirstOccurrenceOf (
+                R"("measuredHardware": [])",
+                juce::String { R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware",)" }
+                    + passArtifact
+                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceSet":"approved set","bandArtifact":"band.json","rawSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","uncertainty":"approved method"}])")
+            .replaceFirstOccurrenceOf (
+                R"("performance": [])",
+                juce::String { R"("performance": [{"id":"performance.probe","classification":"performance",)" }
+                    + passArtifact
+                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"targetSystem":"approved system","budgetBasis":"approved budget","rationale":"approved rationale"}])");
+        const TemporaryDirectory approvedRoot { "model-d-acceptance-approved" };
+        expect (approvedRoot.isOwned(), "approved manifest root must be owned");
+        if (! approvedRoot.isOwned())
+            return;
+        const auto approvedFile = approvedRoot.directory.getChildFile ("acceptance.json");
+        approvedFile.replaceWithText (completeApproved);
+        const auto approvedManifest = loadAcceptanceManifest (sourceRoot, approvedFile, registry);
+        expect (approvedManifest.ok(),
+                "all five complete evidence sections may produce a globally approved manifest");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            completeApproved.replaceFirstOccurrenceOf (passArtifact, R"("status": "not-run")"),
+            "acceptance.incomplete");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            completeApproved.replaceFirstOccurrenceOf (
+                R"("id": "par006.gain-control.duration",
+      "classification": "derived-software",
+      "status": "pass")",
+                R"("id": "par006.gain-control.duration",
+      "classification": "derived-software",
+      "status": "fail")"),
+            "acceptance.derived-policy");
+
         beginTest ("seven templates expand from the live registry without a duplicate ID inventory");
         const auto index = loadFixtureIndex (
             sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
@@ -695,35 +744,98 @@ public:
         expectEquals (declarationPassCount, 0,
                       "fixture declarations and fixture hashes must never fabricate a pass");
 
-        beginTest ("only supplied analyzer-valid none trace evidence can pass");
+        beginTest ("a declared manifest pass is not executable evidence");
+        const auto declaredPassText = acceptanceText.replaceFirstOccurrenceOf (
+            R"("status": "not-run",
+      "requirements": ["PAR-001", "TST-006"])",
+            juce::String { R"("status": "pass",
+      "artifactPath": ")" }
+                + artifactPath + R"(",
+      "artifactSha256": ")" + artifactHash + R"(",
+      "requirements": ["PAR-001", "TST-006"])");
+        const TemporaryDirectory declaredPassRoot { "model-d-acceptance-declared-pass" };
+        expect (declaredPassRoot.isOwned(), "declared-pass manifest root must be owned");
+        if (! declaredPassRoot.isOwned())
+            return;
+        const auto declaredPassFile = declaredPassRoot.directory.getChildFile ("acceptance.json");
+        declaredPassFile.replaceWithText (declaredPassText);
+        const auto declaredPassManifest = loadAcceptanceManifest (
+            sourceRoot, declaredPassFile, registry);
+        expect (declaredPassManifest.ok(), "draft declared-pass probe must validate structurally");
+        if (declaredPassManifest.value.has_value()) {
+            const auto declarationEvaluation = evaluateAcceptance (
+                *declaredPassManifest.value, *expanded.value, {}, registry);
+            expect (declarationEvaluation.ok(), "declared-pass probe must evaluate deterministically");
+            if (declarationEvaluation.value.has_value()) {
+                const auto* hardGate = findGate (*declarationEvaluation.value,
+                                                 "hard.registry.count");
+                expect (hardGate != nullptr && hardGate->status == Status::notRun
+                            && hardGate->reasonCode == "acceptance.evidence-missing"
+                            && ! hardGate->metric.has_value()
+                            && hardGate->artifactPath.empty()
+                            && hardGate->artifactSha256.empty(),
+                        "a declaration-only pass must become evidence-missing without a pass claim");
+                const auto metriclessPasses = std::count_if (
+                    declarationEvaluation.value->begin(), declarationEvaluation.value->end(),
+                    [] (const auto& gate) {
+                        return gate.status == Status::pass && ! gate.metric.has_value();
+                    });
+                expectEquals (static_cast<int> (metriclessPasses), 0,
+                              "evaluation must emit zero metricless passes");
+            }
+        }
+
+        beginTest ("only a bound Task 2 candidate trace can pass");
         const TemporaryDirectory candidateRoot { "model-d-acceptance-evidence" };
         expect (candidateRoot.isOwned(), "evidence candidate root must be owned");
         if (! candidateRoot.isOwned())
             return;
-        const auto candidateTrace = candidateRoot.directory.getChildFile ("control-trace.json");
-        candidateTrace.replaceWithText (R"({"schema":"candidate-control-trace"}\n)");
+        const auto stateFile = candidateRoot.directory.getChildFile ("state.xml");
+        expect (sourceRoot.getChildFile ("Tests/fixtures/state/native-default-state-v2.xml")
+                    .copyFileTo (stateFile),
+                "real smoothing evidence must copy the validated v2 state");
+        const auto fixtureFile = candidateRoot.directory.getChildFile ("fixture.json");
+        fixtureFile.replaceWithText (
+            juce::String { R"({"schema":"model-d.render-fixture.v1","id":"none-step-evidence","state":{"kind":"hostState","path":"state.xml","sha256":")" }
+            + sha256File (stateFile)
+            + R"(","version":2,"contourContract":"canonicalContours"},"render":{"sampleRate":48000,"totalSamples":512,"seed":0,"blockPatterns":[[64],[17,31]]},"automation":[{"sample":0,"sequence":0,"parameterId":"a440HzOnOff","normalizedValue":0.0},{"sample":256,"sequence":1,"parameterId":"a440HzOnOff","normalizedValue":1.0}],"midi":[],"input":{"kind":"silence"},"analyzers":["exact-control-trace","exact-event-trace"],"requirements":["PAR-006"]})");
+        const auto evidenceFixture = loadRenderFixture (candidateRoot.directory, fixtureFile);
+        expect (evidenceFixture.ok(), "smoothing evidence fixture must load through Task 2");
+        if (! evidenceFixture.value.has_value())
+            return;
+        const auto realRenders = renderFixture (*evidenceFixture.value);
+        expect (realRenders.ok(), "smoothing evidence must render through Task 2");
+        if (! realRenders.value.has_value())
+            return;
+        expect (realRenders.value->front().reproducibility.outputHashes.contains ("control")
+                    && realRenders.value->front().reproducibility.outputHashes.contains ("event")
+                    && ! realRenders.value->front().reproducibility.outputHashes.contains (
+                        "control-trace.json"),
+                "real Task 2 render hashes must retain their producer-defined internal keys");
+        const auto candidateDirectory = candidateRoot.directory.getChildFile ("candidate");
+        const auto written = writeCandidateArtifacts (
+            *evidenceFixture.value, *realRenders.value, candidateDirectory);
+        expect (written.ok(), "smoothing evidence must use Task 2 candidate artifacts");
+        if (! written.value.has_value())
+            return;
+        const auto candidateTrace = candidateDirectory.getChildFile ("control-trace.json");
         const auto candidateHash = sha256File (candidateTrace);
-        const auto& noneCase = expanded.value->front();
-        expect (noneCase.smoothingClass == ParameterRegistry::SmoothingClass::none,
-                "first frozen descriptor must use class none");
+        const auto noneCaseFound = std::find_if (
+            expanded.value->begin(), expanded.value->end(), [] (const auto& smoothingCase) {
+                return smoothingCase.parameterId == "a440HzOnOff";
+            });
+        expect (noneCaseFound != expanded.value->end()
+                    && noneCaseFound->smoothingClass == ParameterRegistry::SmoothingClass::none,
+                "real evidence parameter must use class none");
+        if (noneCaseFound == expanded.value->end())
+            return;
+        const auto& noneCase = *noneCaseFound;
 
         SmoothingEvidence validEvidence;
         validEvidence.parameterId = noneCase.parameterId;
-        validEvidence.render.sampleRate = 48000.0;
-        validEvidence.render.controlTrace = {
-            { 0, noneCase.key, 0.0f, 0.0f },
-            { noneCase.eventSample, noneCase.key, 1.0f, 1.0f },
-        };
-        validEvidence.render.eventTrace = {
-            "automation:0:0:" + noneCase.parameterId + ":0",
-            "automation:" + std::to_string (noneCase.eventSample) + ":1:"
-                + noneCase.parameterId + ":1",
-        };
-        validEvidence.render.reproducibility.outputHashes = {
-            { "control-trace.json", candidateHash },
-        };
-        validEvidence.candidateArtifactPath = candidateTrace.getFullPathName().toStdString();
-        validEvidence.candidateArtifactSha256 = candidateHash;
+        validEvidence.fixture = *evidenceFixture.value;
+        validEvidence.render = realRenders.value->front();
+        validEvidence.candidateDirectory = candidateDirectory;
 
         const auto evaluated = evaluateAcceptance (
             *manifest.value, *expanded.value,
@@ -742,7 +854,7 @@ public:
         const auto passed = findGate (*evaluated.value,
                                       "par006." + noneCase.parameterId + ".control");
         expect (passed != nullptr && passed->metric.has_value()
-                    && passed->artifactPath == validEvidence.candidateArtifactPath
+                    && passed->artifactPath == candidateTrace.getFullPathName().toStdString()
                     && passed->artifactSha256 == candidateHash,
                 "a pass must carry its executed metric and real candidate artifact");
 
@@ -762,17 +874,36 @@ public:
                         && gate->artifactPath.empty() && gate->artifactSha256.empty(),
                     "invalid evidence must fail without an artifact pass claim");
         };
-        auto invalidTrace = validEvidence;
-        invalidTrace.render.controlTrace.insert (
-            invalidTrace.render.controlTrace.begin() + 1,
-            { noneCase.eventSample - 1, noneCase.key, 0.5f, 0.5f });
-        expectEvidenceFailure (std::move (invalidTrace), "smoothing.trace-mismatch");
-        auto invalidMetric = validEvidence;
-        invalidMetric.render.controlTrace.back().normalizedValue = 0.5f;
-        expectEvidenceFailure (std::move (invalidMetric), "smoothing.metric-mismatch");
-        auto invalidHash = validEvidence;
-        invalidHash.candidateArtifactSha256 = std::string (64, '0');
-        expectEvidenceFailure (std::move (invalidHash), "smoothing.artifact-hash");
+        auto mismatchedRender = validEvidence;
+        mismatchedRender.render.controlTrace.back().normalizedValue = 0.5f;
+        expectEvidenceFailure (std::move (mismatchedRender), "smoothing.trace-mismatch");
+        auto mismatchedEvent = validEvidence;
+        mismatchedEvent.render.eventTrace.back() += ":mismatch";
+        expectEvidenceFailure (std::move (mismatchedEvent), "smoothing.trace-mismatch");
+        auto mismatchedProvenance = validEvidence;
+        mismatchedProvenance.render.reproducibility.sourceCommit = "mismatch";
+        expectEvidenceFailure (std::move (mismatchedProvenance), "smoothing.trace-mismatch");
+        auto mismatchedFixture = validEvidence;
+        mismatchedFixture.fixture.id = "mismatch";
+        expectEvidenceFailure (std::move (mismatchedFixture), "smoothing.trace-mismatch");
+
+        const auto tamperedDirectory = candidateRoot.directory.getChildFile ("tampered-candidate");
+        expect (candidateDirectory.copyDirectoryTo (tamperedDirectory),
+                "candidate must be copied for a tamper probe");
+        const auto tamperedTrace = tamperedDirectory.getChildFile ("control-trace.json");
+        tamperedTrace.replaceWithText (tamperedTrace.loadFileAsString() + " ");
+        auto tamperedEvidence = validEvidence;
+        tamperedEvidence.candidateDirectory = tamperedDirectory;
+        expectEvidenceFailure (std::move (tamperedEvidence), "smoothing.artifact-hash");
+
+        const auto missingDirectory = candidateRoot.directory.getChildFile ("missing-candidate");
+        expect (candidateDirectory.copyDirectoryTo (missingDirectory),
+                "candidate must be copied for a missing-file probe");
+        expect (missingDirectory.getChildFile ("control-trace.json").deleteFile(),
+                "missing-file probe must remove the copied control trace");
+        auto missingEvidence = validEvidence;
+        missingEvidence.candidateDirectory = missingDirectory;
+        expectEvidenceFailure (std::move (missingEvidence), "smoothing.artifact-hash");
     }
 
 private:

@@ -2,6 +2,8 @@
 
 #include "ReferenceData.h"
 
+#include <juce_cryptography/juce_cryptography.h>
+
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -40,6 +42,29 @@ bool readNumber (const juce::DynamicObject& object, const char* name, double& de
     return std::isfinite (destination);
 }
 
+bool readUnsignedInteger (const juce::DynamicObject& object,
+                          const char* name,
+                          std::uint64_t& destination)
+{
+    const auto* value = property (object, name);
+    if (value == nullptr || (! value->isInt() && ! value->isInt64()))
+        return false;
+    const auto parsed = static_cast<juce::int64> (*value);
+    if (parsed < 0)
+        return false;
+    destination = static_cast<std::uint64_t> (parsed);
+    return true;
+}
+
+bool readInteger (const juce::DynamicObject& object, const char* name, int& destination)
+{
+    const auto* value = property (object, name);
+    if (value == nullptr || ! value->isInt())
+        return false;
+    destination = static_cast<int> (*value);
+    return true;
+}
+
 bool readRequirements (const juce::DynamicObject& object, std::vector<std::string>& destination)
 {
     const auto* value = property (object, "requirements");
@@ -65,6 +90,291 @@ bool lowercaseSha256 (const std::string& hash)
                return std::isdigit (character) != 0
                    || (character >= 'a' && character <= 'f');
            });
+}
+
+bool exactStringArray (const juce::var* value, const std::vector<std::string>& expected)
+{
+    const auto* array = value == nullptr ? nullptr : value->getArray();
+    if (array == nullptr || static_cast<size_t> (array->size()) != expected.size())
+        return false;
+    for (int index = 0; index < array->size(); ++index)
+        if (! (*array)[index].isString()
+            || (*array)[index].toString().toStdString() != expected[static_cast<size_t> (index)])
+            return false;
+    return true;
+}
+
+bool exactBlockPatterns (const juce::var* value,
+                         const std::vector<std::vector<int>>& expected)
+{
+    const auto* patterns = value == nullptr ? nullptr : value->getArray();
+    if (patterns == nullptr || static_cast<size_t> (patterns->size()) != expected.size())
+        return false;
+    for (int patternIndex = 0; patternIndex < patterns->size(); ++patternIndex) {
+        const auto* pattern = (*patterns)[patternIndex].getArray();
+        const auto& expectedPattern = expected[static_cast<size_t> (patternIndex)];
+        if (pattern == nullptr || static_cast<size_t> (pattern->size()) != expectedPattern.size())
+            return false;
+        for (int sizeIndex = 0; sizeIndex < pattern->size(); ++sizeIndex)
+            if (! (*pattern)[sizeIndex].isInt()
+                || static_cast<int> ((*pattern)[sizeIndex])
+                       != expectedPattern[static_cast<size_t> (sizeIndex)])
+                return false;
+    }
+    return true;
+}
+
+bool exactStringMap (const juce::var* value,
+                     const std::map<std::string, std::string>& expected)
+{
+    const auto* object = value == nullptr ? nullptr : value->getDynamicObject();
+    if (object == nullptr
+        || static_cast<size_t> (object->getProperties().size()) != expected.size())
+        return false;
+    for (const auto& [name, expectedValue] : expected) {
+        const auto* actual = property (*object, name.c_str());
+        if (actual == nullptr || ! actual->isString()
+            || actual->toString().toStdString() != expectedValue)
+            return false;
+    }
+    return true;
+}
+
+std::optional<ParameterRegistry::Key> keyForParameterId (const std::string_view id)
+{
+    const auto descriptors = ParameterRegistry::descriptors();
+    const auto found = std::find_if (descriptors.begin(), descriptors.end(), [&] (const auto& item) {
+        return item.id == id;
+    });
+    if (found == descriptors.end())
+        return std::nullopt;
+    return static_cast<ParameterRegistry::Key> (std::distance (descriptors.begin(), found));
+}
+
+bool sameControlTrace (const std::vector<ControlTracePoint>& left,
+                       const std::vector<ControlTracePoint>& right)
+{
+    return left.size() == right.size()
+        && std::equal (left.begin(), left.end(), right.begin(), [] (const auto& a, const auto& b) {
+               return a.sample == b.sample && a.key == b.key
+                   && a.normalizedValue == b.normalizedValue
+                   && a.physicalValue == b.physicalValue;
+           });
+}
+
+std::string sha256Bytes (const void* data, const size_t size)
+{
+    return juce::SHA256 { data, size }.toHexString().toStdString();
+}
+
+struct BoundCandidate {
+    std::vector<ControlTracePoint> controlTrace;
+    std::vector<std::string> eventTrace;
+    juce::File controlFile;
+    std::string controlSha256;
+};
+
+LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence)
+{
+    const auto& directory = evidence.candidateDirectory;
+    const auto renderFile = directory.getChildFile ("render.json");
+    const auto controlFile = directory.getChildFile ("control-trace.json");
+    const auto eventFile = directory.getChildFile ("event-trace.json");
+    const auto mainFile = directory.getChildFile ("main.wav");
+    const auto phonesFile = directory.getChildFile ("phones.wav");
+    const std::array files { controlFile, eventFile, mainFile, phonesFile };
+    if (! directory.isDirectory() || ! renderFile.existsAsFile()
+        || std::any_of (files.begin(), files.end(), [] (const auto& file) {
+               return ! file.existsAsFile();
+           }))
+        return failure<BoundCandidate> (
+            "smoothing.artifact-hash", "candidate evidence files must all exist");
+
+    juce::var parsedRender;
+    if (juce::JSON::parse (renderFile.loadFileAsString(), parsedRender).failed())
+        return failure<BoundCandidate> (
+            "smoothing.artifact-hash", "candidate render manifest must be valid JSON");
+    const auto* root = parsedRender.getDynamicObject();
+    const auto* reproducibilityValue = root == nullptr ? nullptr : property (*root, "reproducibility");
+    const auto* reproducibility = reproducibilityValue == nullptr
+                                    ? nullptr : reproducibilityValue->getDynamicObject();
+    const auto* outputHashesValue = reproducibility == nullptr
+                                      ? nullptr : property (*reproducibility, "outputHashes");
+    const auto* outputHashes = outputHashesValue == nullptr
+                                 ? nullptr : outputHashesValue->getDynamicObject();
+    if (root == nullptr || root->getProperties().size() != 10
+        || reproducibility == nullptr || reproducibility->getProperties().size() != 9
+        || outputHashes == nullptr
+        || outputHashes->getProperties().size() != 4)
+        return failure<BoundCandidate> (
+            "smoothing.artifact-hash", "candidate render hashes are missing or malformed");
+
+    const std::array<std::pair<const char*, juce::File>, 4> hashedFiles {
+        std::pair { "control-trace.json", controlFile },
+        std::pair { "event-trace.json", eventFile },
+        std::pair { "main.wav", mainFile },
+        std::pair { "phones.wav", phonesFile },
+    };
+    for (const auto& [name, file] : hashedFiles) {
+        const auto* declared = property (*outputHashes, name);
+        if (declared == nullptr || ! declared->isString()
+            || ! lowercaseSha256 (declared->toString().toStdString())
+            || declared->toString().toStdString() != sha256File (file))
+            return failure<BoundCandidate> (
+                "smoothing.artifact-hash",
+                "candidate render hashes must bind every output artifact byte-for-byte");
+    }
+
+    std::string schema;
+    std::string fixtureId;
+    double sampleRate = 0.0;
+    int mainChannels = 0;
+    int phonesChannels = 0;
+    std::uint64_t totalSamples = 0;
+    if (! readString (*root, "schema", schema) || schema != "model-d.render-result.v1"
+        || ! readString (*root, "fixtureId", fixtureId)
+        || fixtureId != evidence.fixture.id
+        || ! readNumber (*root, "sampleRate", sampleRate)
+        || sampleRate != evidence.fixture.config.sampleRate
+        || sampleRate != evidence.render.sampleRate
+        || ! readInteger (*root, "mainChannels", mainChannels)
+        || mainChannels != evidence.render.mainChannels
+        || ! readInteger (*root, "phonesChannels", phonesChannels)
+        || phonesChannels != evidence.render.phonesChannels
+        || ! readUnsignedInteger (*root, "totalSamples", totalSamples)
+        || totalSamples != evidence.fixture.config.totalSamples
+        || ! exactStringArray (property (*root, "analyzers"), evidence.fixture.analyzers)
+        || ! exactStringArray (property (*root, "requirements"), evidence.fixture.requirements)
+        || ! exactBlockPatterns (property (*root, "blockPatterns"),
+                                 evidence.fixture.config.blockPatterns)
+        || evidence.fixture.config.blockPatterns.empty()
+        || evidence.render.blockPattern != evidence.fixture.config.blockPatterns.front())
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch",
+            "candidate render identity and configuration must match the supplied fixture and render");
+
+    std::string sourceCommit;
+    std::string juceCommit;
+    std::string buildType;
+    std::string platform;
+    std::string architecture;
+    std::string fixtureSha256;
+    std::uint64_t seed = 0;
+    std::map<std::string, std::string> expectedInputHashes {
+        { "state", evidence.fixture.stateSha256 },
+    };
+    if (evidence.fixture.input.kind == InputKind::wav)
+        expectedInputHashes.emplace ("audio", evidence.fixture.input.sha256);
+    if (! readString (*reproducibility, "sourceCommit", sourceCommit)
+        || sourceCommit != evidence.render.reproducibility.sourceCommit
+        || ! readString (*reproducibility, "juceCommit", juceCommit)
+        || juceCommit != evidence.render.reproducibility.juceCommit
+        || ! readString (*reproducibility, "buildType", buildType)
+        || buildType != evidence.render.reproducibility.buildType
+        || ! readString (*reproducibility, "platform", platform)
+        || platform != evidence.render.reproducibility.platform
+        || ! readString (*reproducibility, "architecture", architecture)
+        || architecture != evidence.render.reproducibility.architecture
+        || ! readString (*reproducibility, "fixtureSha256", fixtureSha256)
+        || fixtureSha256 != evidence.render.reproducibility.fixtureSha256
+        || ! evidence.fixture.fixtureFile.existsAsFile()
+        || fixtureSha256 != sha256File (evidence.fixture.fixtureFile)
+        || ! evidence.fixture.stateFile.existsAsFile()
+        || evidence.fixture.stateSha256 != sha256File (evidence.fixture.stateFile)
+        || (evidence.fixture.input.kind == InputKind::wav
+            && (! evidence.fixture.input.file.existsAsFile()
+                || evidence.fixture.input.sha256 != sha256File (evidence.fixture.input.file)))
+        || ! readUnsignedInteger (*reproducibility, "seed", seed)
+        || seed != evidence.render.reproducibility.seed
+        || seed != evidence.fixture.config.seed
+        || evidence.render.reproducibility.inputHashes != expectedInputHashes
+        || ! exactStringMap (property (*reproducibility, "inputHashes"),
+                             expectedInputHashes))
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch",
+            "candidate provenance must match the supplied fixture and render");
+
+    juce::var parsedControl;
+    if (juce::JSON::parse (controlFile.loadFileAsString(), parsedControl).failed())
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch", "candidate control trace must be valid JSON");
+    const auto* controlRoot = parsedControl.getDynamicObject();
+    std::string controlSchema;
+    const auto* pointsValue = controlRoot == nullptr ? nullptr : property (*controlRoot, "points");
+    const auto* points = pointsValue == nullptr ? nullptr : pointsValue->getArray();
+    BoundCandidate bound;
+    bound.controlFile = controlFile;
+    bound.controlSha256 = sha256File (controlFile);
+    if (controlRoot == nullptr || controlRoot->getProperties().size() != 2
+        || ! readString (*controlRoot, "schema", controlSchema)
+        || controlSchema != "model-d.control-trace.v1" || points == nullptr)
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch", "candidate control trace schema is unsupported");
+    bound.controlTrace.reserve (static_cast<size_t> (points->size()));
+    for (const auto& value : *points) {
+        const auto* point = value.getDynamicObject();
+        std::uint64_t sample = 0;
+        std::string parameterId;
+        double normalized = 0.0;
+        double physical = 0.0;
+        if (point == nullptr || point->getProperties().size() != 4
+            || ! readUnsignedInteger (*point, "sample", sample)
+            || ! readString (*point, "parameterId", parameterId)
+            || ! readNumber (*point, "normalizedValue", normalized)
+            || ! readNumber (*point, "physicalValue", physical))
+            return failure<BoundCandidate> (
+                "smoothing.trace-mismatch", "candidate control trace point is malformed");
+        const auto key = keyForParameterId (parameterId);
+        const auto normalizedFloat = static_cast<float> (normalized);
+        const auto physicalFloat = static_cast<float> (physical);
+        if (! key.has_value()
+            || static_cast<double> (normalizedFloat) != normalized
+            || static_cast<double> (physicalFloat) != physical)
+            return failure<BoundCandidate> (
+                "smoothing.trace-mismatch", "candidate control trace point is not renderer-exact");
+        bound.controlTrace.push_back ({ sample, *key, normalizedFloat, physicalFloat });
+    }
+    if (! sameControlTrace (bound.controlTrace, evidence.render.controlTrace))
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch",
+            "complete candidate control trace must match the supplied render result");
+
+    juce::var parsedEvent;
+    if (juce::JSON::parse (eventFile.loadFileAsString(), parsedEvent).failed())
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch", "candidate event trace must be valid JSON");
+    const auto* eventRoot = parsedEvent.getDynamicObject();
+    std::string eventSchema;
+    if (eventRoot == nullptr || eventRoot->getProperties().size() != 2
+        || ! readString (*eventRoot, "schema", eventSchema)
+        || eventSchema != "model-d.event-trace.v1"
+        || ! exactStringArray (property (*eventRoot, "events"), evidence.render.eventTrace))
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch",
+            "complete candidate event trace must match the supplied render result");
+    bound.eventTrace = evidence.render.eventTrace;
+
+    const auto controlOutput = evidence.render.reproducibility.outputHashes.find ("control");
+    const auto eventOutput = evidence.render.reproducibility.outputHashes.find ("event");
+    const auto mainOutput = evidence.render.reproducibility.outputHashes.find ("main");
+    const auto phonesOutput = evidence.render.reproducibility.outputHashes.find ("phones");
+    if (evidence.render.reproducibility.outputHashes.size() != 4
+        || controlOutput == evidence.render.reproducibility.outputHashes.end()
+        || eventOutput == evidence.render.reproducibility.outputHashes.end()
+        || mainOutput == evidence.render.reproducibility.outputHashes.end()
+        || phonesOutput == evidence.render.reproducibility.outputHashes.end()
+        || controlOutput->second != bound.controlSha256
+        || eventOutput->second != sha256File (eventFile)
+        || mainOutput->second
+               != sha256Bytes (evidence.render.main.data(),
+                               evidence.render.main.size() * sizeof (float))
+        || phonesOutput->second
+               != sha256Bytes (evidence.render.phones.data(),
+                               evidence.render.phones.size() * sizeof (float)))
+        return failure<BoundCandidate> (
+            "smoothing.trace-mismatch",
+            "supplied render trace hashes must match the Task 2 candidate trace bytes");
+    return { std::move (bound), {} };
 }
 
 std::optional<Status> parseStatus (const std::string_view name)
@@ -274,7 +584,7 @@ LoadResult<std::vector<GateDefinition>> readSection (
 
 bool exactDerivedPolicy (const GateDefinition& gate)
 {
-    if (gate.status != Status::notRun
+    if ((gate.status != Status::notRun && gate.status != Status::pass)
         || gate.requirements != std::vector<std::string> { "PAR-006", "TST-006" }
         || gate.analyzer.id != "control.step.v1" || gate.analyzer.version != 1
         || gate.allowance != 0.0
@@ -521,11 +831,14 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
 {
     std::vector<GateResult> results;
     const auto appendManifestSection = [&] (const std::vector<GateDefinition>& gates) {
-        for (const auto& gate : gates)
-            results.push_back ({ gate.id, gate.status,
-                                 gate.status == Status::notRun ? "manifest-draft" : "declared-status",
-                                 gate.requirements, std::nullopt,
-                                 gate.artifactPath, gate.artifactSha256 });
+        for (const auto& gate : gates) {
+            const auto awaiting = gate.status == Status::awaitingApprovedReference;
+            results.push_back ({ gate.id,
+                                 awaiting ? Status::awaitingApprovedReference : Status::notRun,
+                                 awaiting ? "acceptance.reference-awaiting"
+                                          : "acceptance.evidence-missing",
+                                 gate.requirements, std::nullopt, {}, {} });
+        }
     };
     appendManifestSection (manifest.hardSoftware);
     appendManifestSection (manifest.published);
@@ -564,18 +877,12 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
         if (smoothingCase.smoothingClass == ParameterRegistry::SmoothingClass::none
             && supplied != evidenceByParameter.end()) {
             const auto& item = *supplied->second;
-            const auto artifact = juce::File { item.candidateArtifactPath };
-            const auto outputHash = item.render.reproducibility.outputHashes.find (
-                "control-trace.json");
-            if (item.candidateArtifactPath.empty()
-                || artifact.getFileName() != "control-trace.json"
-                || ! lowercaseSha256 (item.candidateArtifactSha256)
-                || ! artifact.existsAsFile()
-                || sha256File (artifact) != item.candidateArtifactSha256
-                || outputHash == item.render.reproducibility.outputHashes.end()
-                || outputHash->second != item.candidateArtifactSha256) {
+            const auto bound = loadBoundCandidate (item);
+            if (! bound.ok()) {
                 control.status = Status::fail;
-                control.reasonCode = "smoothing.artifact-hash";
+                control.reasonCode = bound.diagnostics.empty()
+                                       ? "smoothing.trace-mismatch"
+                                       : bound.diagnostics.front().code;
             } else if (std::find (smoothingCase.sampleRates.begin(),
                                  smoothingCase.sampleRates.end(),
                                  static_cast<int> (item.render.sampleRate))
@@ -586,7 +893,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
                 control.reasonCode = "smoothing.trace-mismatch";
             } else {
                 std::vector<const ControlTracePoint*> points;
-                for (const auto& point : item.render.controlTrace)
+                for (const auto& point : bound.value->controlTrace)
                     if (point.key == smoothingCase.key)
                         points.push_back (&point);
                 std::sort (points.begin(), points.end(), [] (const auto* left, const auto* right) {
@@ -596,7 +903,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
                                        + std::to_string (smoothingCase.eventSample) + ":";
                 const auto parameterToken = ":" + smoothingCase.parameterId + ":";
                 const auto hasEvent = std::any_of (
-                    item.render.eventTrace.begin(), item.render.eventTrace.end(),
+                    bound.value->eventTrace.begin(), bound.value->eventTrace.end(),
                     [&] (const auto& event) {
                         return event.starts_with (eventPrefix)
                             && event.find (parameterToken) != std::string::npos;
@@ -657,8 +964,9 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
                         control.status = Status::pass;
                         control.reasonCode = "smoothing.exact-step-pass";
                         control.metric = *settled;
-                        control.artifactPath = item.candidateArtifactPath;
-                        control.artifactSha256 = item.candidateArtifactSha256;
+                        control.artifactPath = bound.value->controlFile
+                                                   .getFullPathName().toStdString();
+                        control.artifactSha256 = bound.value->controlSha256;
                     }
                 }
             }
