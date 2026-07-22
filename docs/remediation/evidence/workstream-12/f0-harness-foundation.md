@@ -144,7 +144,9 @@ post-commit SHA is intentionally recorded in the package's generated
 `repository-context/GIT-STATE.md`, avoiding a self-referential tracked file.
 
 Exact copyable reproduction commands for the successful default-generator
-path are below. Candidate directories must not already exist. `validate`, both
+path are below. Every invocation allocates a new bounded parent under
+`/private/tmp`; its two candidate children are distinct and asserted absent
+before either run. `validate`, both
 `run` commands, every build/CTest command, every `cmp`, and every hash command
 are expected to exit 0. `verify-release` is expected to exit 3 with the exact
 open BLD-006 diagnostic asserted at the end.
@@ -152,15 +154,20 @@ open BLD-006 diagnostic asserted at the end.
 ```sh
 set -eu
 SOURCE='/Users/agentt/.openclaw/workspace/Developer/synth/.worktrees/workstream-12-f0'
-FINAL_ROOT='/private/tmp/model-d-task5-final.cUgN5c'
+FINAL_ROOT=$(mktemp -d /private/tmp/model-d-task5-reproduction.XXXXXX)
 FINAL_BUILD="$FINAL_ROOT/Release build with spaces"
 EXACT_JUCE='/private/tmp/model-d-agent03-final.NECHVL/Release build with spaces/_deps/juce-src'
 BIN="$FINAL_BUILD/ModelDOfflineRenderer"
 INDEX="$SOURCE/Tests/reference/fixture-index-v1.json"
 ACCEPTANCE="$SOURCE/Tests/reference/acceptance-v1.json"
 REQUIREMENTS="$SOURCE/Tests/reference/requirement-map.json"
-CANDIDATE_A="$FINAL_ROOT/review-candidate-a"
-CANDIDATE_B="$FINAL_ROOT/review-candidate-b"
+CANDIDATE_A="$FINAL_ROOT/candidate-a"
+CANDIDATE_B="$FINAL_ROOT/candidate-b"
+
+printf 'FINAL_ROOT=%s\n' "$FINAL_ROOT"
+test "$CANDIDATE_A" != "$CANDIDATE_B"
+test ! -e "$CANDIDATE_A"
+test ! -e "$CANDIDATE_B"
 
 cmake -S "$SOURCE" -B "$FINAL_BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
@@ -224,6 +231,10 @@ manifest hashes, safe paths, zero symlinks, committed-file equality, final
 candidate equality, and semantic spot checks passed. Review then identified
 the non-executable recipe above as an Important tracked-evidence defect. The
 `96a48dd` archive is therefore superseded rather than represented as final.
+The first correction still fixed the temporary parent to an already-used
+path, making its otherwise complete recipe one-shot. This correction replaces
+that fixed path with a fresh `mktemp -d` parent on every invocation and checks
+both distinct candidate destinations before running the renderer.
 
 Task 5 package Steps 6–7 are checked only after that real construction and
 verification. This tracked correction creates a new exact commit, so the
