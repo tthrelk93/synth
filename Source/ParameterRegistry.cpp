@@ -144,6 +144,7 @@ constexpr std::array registryDescriptors {
     boolDescriptor ("output.mainEnabled", "main_output_enabled", "Main Output Enabled", 1.0f, UnitKey::boolean, 1),
     boolDescriptor ("output.phonesEnabled", "phones_output_enabled", "Phones Output Enabled", 1.0f, UnitKey::boolean, 1)
 };
+static_assert (registryDescriptors.size() == parameterCount);
 
 juce::StringArray makeChoices (std::span<const std::string_view> values)
 {
@@ -169,6 +170,12 @@ juce::String makeString (std::string_view value)
 std::span<const Descriptor> descriptors() noexcept
 {
     return registryDescriptors;
+}
+
+const Descriptor& descriptor (Key key) noexcept
+{
+    jassert (index (key) < registryDescriptors.size());
+    return registryDescriptors[index (key)];
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()

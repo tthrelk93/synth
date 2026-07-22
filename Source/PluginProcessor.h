@@ -14,9 +14,8 @@
 #include "ContourRouting.h"
 #include "LadderFilter.h"
 #include "ModWheel.h"
+#include "ParameterRegistry.h"
 #include "StateContract.h"
-
-
 
 //==============================================================================
 /**
@@ -70,6 +69,54 @@ public:
     StateContract::RestoreResult restoreState (const void* data, int sizeInBytes);
     StateContract::ContourContract getContourContract() const noexcept;
 
+    enum class PriorityMode : std::uint8_t { low, high, last };
+    enum class TriggerMode : std::uint8_t { single, multi };
+
+    struct OscillatorSnapshot {
+        int waveform = 0;
+        int range = 0;
+        int level = 0;
+        int detune = 8;
+        bool enabled = false;
+    };
+
+    struct ParameterSnapshot {
+        OscillatorSnapshot oscillator1, oscillator2, oscillator3;
+        int masterTune = 5;
+        float filterCutoff = 0.5f;
+        int filterEmphasis = 0;
+        int filterContour = 0;
+        ContourRouting::ContourControls contours;
+        int noiseLevel = 0;
+        int externalInputLevel = 0;
+        int outputLevel = 0;
+        int phonesLevel = 0;
+        int glide = 0;
+        int modulationMix = 0;
+        float feedback = 0.0f;
+        float modulationWheel = 0.0f;
+        float pitchWheel = 0.5f;
+        bool a440Enabled = false;
+        bool oscillator3KeyboardControl = false;
+        bool oscillatorModulationEnabled = false;
+        bool noiseEnabled = false;
+        bool externalInputEnabled = false;
+        bool pinkNoise = false;
+        bool filterModulationEnabled = false;
+        bool keyboardControl1 = false;
+        bool keyboardControl2 = false;
+        bool glideEnabled = false;
+        PriorityMode priority = PriorityMode::low;
+        TriggerMode trigger = TriggerMode::single;
+        bool mainOutputEnabled = true;
+        bool phonesOutputEnabled = true;
+        StateContract::ContourContract contourContract =
+            StateContract::ContourContract::canonicalContours;
+        std::uint64_t generation = 0;
+        bool usedFallback = false;
+        bool coherent = false;
+    };
+
     struct ContourSnapshot {
         ContourRouting::ContourControls controls;
         StateContract::ContourContract contract = StateContract::ContourContract::canonicalContours;
@@ -100,6 +147,9 @@ public:
     };
 
     ContourSnapshot captureContourSnapshot (const ContourSnapshot& fallback) const noexcept;
+    ParameterSnapshot captureParameterSnapshot (const ParameterSnapshot& fallback) const noexcept;
+    juce::RangedAudioParameter* getPreparedParameter (ParameterRegistry::Key key) const noexcept;
+    std::uint64_t getInvalidParameterValueCount() const noexcept;
     ContourSnapshot getSignalFlowContourSnapshot (const ContourSnapshot& fallback) const noexcept;
     void setSignalFlowContourControl (ContourRouting::SemanticContour contour,
                                       ContourRouting::Stage stage,
@@ -245,13 +295,13 @@ private:
         StateContract::ContourContract::canonicalContours
     };
     std::atomic<std::uint64_t> stateGeneration { 0 };
-    std::array<std::atomic<float>*, static_cast<std::size_t> (ContourRouting::Parameter::count)>
-        contourParameterHandles {};
-    std::array<juce::RangedAudioParameter*, static_cast<std::size_t> (ContourRouting::Parameter::count)>
-        contourParameters {};
-    std::atomic<float>* decayEnabledHandle = nullptr;
-    ContourSnapshot lastCoherentContourSnapshot;
-    ContourSnapshot initialCoherentContourSnapshot;
+    std::array<std::atomic<float>*, ParameterRegistry::parameterCount>
+        preparedParameterHandles {};
+    std::array<juce::RangedAudioParameter*, ParameterRegistry::parameterCount>
+        preparedParameters {};
+    mutable std::atomic<std::uint64_t> invalidParameterValueCount { 0 };
+    ParameterSnapshot lastCoherentParameterSnapshot;
+    ParameterSnapshot initialCoherentParameterSnapshot;
     juce::MemoryBlock contourConversionUndoState;
     bool contourConversionUndoLifecycle = false;
     juce::ValueTree canonicalState;
@@ -268,7 +318,13 @@ private:
     
     float targetFrequency = 0.0f;
        float currentGlideFrequency = 440.0f;
-       bool isGlideActive = false;
+    bool isGlideActive = false;
+
+    float sanitizeParameterValue (ParameterRegistry::Key key, float value) const noexcept;
+    ParameterSnapshot buildTypedSnapshot (
+        const std::array<float, ParameterRegistry::parameterCount>& values,
+        StateContract::ContourContract contract,
+        std::uint64_t generation) const noexcept;
 
     // ...
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MoogMiniAudioProcessor)

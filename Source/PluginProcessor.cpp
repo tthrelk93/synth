@@ -40,11 +40,6 @@ Oscillator::Waveform mapOsc3Waveform(int selection) {
     }
 }
 
-constexpr std::array<const char*, static_cast<std::size_t> (ContourRouting::Parameter::count)>
-    contourParameterIds {
-        "filterAttackTimeKnob", "filterDecayTimeKnob", "filterSustainKnob",
-        "loudnessAttackTimeKnob", "loudnessDecayTimeKnob", "loudnessSustainLevelKnob"
-    };
 } // namespace
 
 
@@ -71,21 +66,21 @@ circularBuffer(1024)
     
     currentNoteNumber = -1; // Initialize current note number
     canonicalState = StateContract::makeNativeState (apvts.copyState());
-    for (std::size_t index = 0; index < contourParameterIds.size(); ++index)
+    std::array<float, ParameterRegistry::parameterCount> initialValues {};
+    for (std::size_t index = 0; index < preparedParameterHandles.size(); ++index)
     {
-        contourParameterHandles[index] = apvts.getRawParameterValue (contourParameterIds[index]);
-        contourParameters[index] = apvts.getParameter (contourParameterIds[index]);
+        const auto& descriptor = ParameterRegistry::descriptor (
+            static_cast<ParameterRegistry::Key> (index));
+        const auto id = juce::String { descriptor.id.data(), descriptor.id.size() };
+        preparedParameterHandles[index] = apvts.getRawParameterValue (id);
+        preparedParameters[index] = apvts.getParameter (id);
+        jassert (preparedParameterHandles[index] != nullptr);
+        jassert (preparedParameters[index] != nullptr);
+        initialValues[index] = preparedParameterHandles[index]->load (std::memory_order_relaxed);
     }
-    decayEnabledHandle = apvts.getRawParameterValue ("decaySwitch");
-    lastCoherentContourSnapshot.controls = {
-        contourParameterHandles[0]->load(), contourParameterHandles[1]->load(),
-        contourParameterHandles[2]->load() / 10.0f,
-        contourParameterHandles[3]->load(), contourParameterHandles[4]->load(),
-        contourParameterHandles[5]->load() / 10.0f,
-        decayEnabledHandle->load() > 0.5f
-    };
-    lastCoherentContourSnapshot.coherent = true;
-    initialCoherentContourSnapshot = lastCoherentContourSnapshot;
+    initialCoherentParameterSnapshot = buildTypedSnapshot (
+        initialValues, StateContract::ContourContract::canonicalContours, 0);
+    lastCoherentParameterSnapshot = initialCoherentParameterSnapshot;
     
 }
 
@@ -332,60 +327,51 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         static_cast<double>(buffer.getNumSamples()) / getSampleRate());
     logTimer += elapsedTime;
     
-    // Retrieve parameter values
-    const int waveformSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("osc1Waveform")->load());
-    const int waveformSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Waveform")->load());
-    const int waveformSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Waveform")->load());
-    const int rangeSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("osc1Range")->load());
-    const int rangeSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Range")->load());
-    const int rangeSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Range")->load());
-    const int freqSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Freq")->load());
-    const int freqSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Freq")->load());
-    const int volSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("osc1Vol")->load());
-    const int volSelectionOsc2 = static_cast<int>(apvts.getRawParameterValue("osc2Vol")->load());
-    const int volSelectionOsc3 = static_cast<int>(apvts.getRawParameterValue("osc3Vol")->load());
-    const int tuneSelectionOsc1 = static_cast<int>(apvts.getRawParameterValue("tune")->load());
+    // Retrieve one complete prepared parameter snapshot for this render block.
+    const auto parameterSnapshot = captureParameterSnapshot (lastCoherentParameterSnapshot);
+    if (! parameterSnapshot.usedFallback)
+        lastCoherentParameterSnapshot = parameterSnapshot;
+    const int waveformSelectionOsc1 = parameterSnapshot.oscillator1.waveform;
+    const int waveformSelectionOsc2 = parameterSnapshot.oscillator2.waveform;
+    const int waveformSelectionOsc3 = parameterSnapshot.oscillator3.waveform;
+    const int rangeSelectionOsc1 = parameterSnapshot.oscillator1.range;
+    const int rangeSelectionOsc2 = parameterSnapshot.oscillator2.range;
+    const int rangeSelectionOsc3 = parameterSnapshot.oscillator3.range;
+    const int freqSelectionOsc2 = parameterSnapshot.oscillator2.detune;
+    const int freqSelectionOsc3 = parameterSnapshot.oscillator3.detune;
+    const int volSelectionOsc1 = parameterSnapshot.oscillator1.level;
+    const int volSelectionOsc2 = parameterSnapshot.oscillator2.level;
+    const int volSelectionOsc3 = parameterSnapshot.oscillator3.level;
+    const int tuneSelectionOsc1 = parameterSnapshot.masterTune;
+    const bool osc1OnOff = parameterSnapshot.oscillator1.enabled;
+    const bool osc2OnOff = parameterSnapshot.oscillator2.enabled;
+    const bool osc3OnOff = parameterSnapshot.oscillator3.enabled;
+    const bool a440HzOnOff = parameterSnapshot.a440Enabled;
+    const bool whitePink = parameterSnapshot.pinkNoise;
+    const bool noiseOnOff = parameterSnapshot.noiseEnabled;
+    const int noiseVolume = parameterSnapshot.noiseLevel;
+    const bool extInputOn = parameterSnapshot.externalInputEnabled;
+    const int extInputVolLevel = parameterSnapshot.externalInputLevel;
+    const float filterCutoffValue = mapFilterCutoffValueToFrequency (
+        parameterSnapshot.filterCutoff);
+    const int filterEmphasisValue = parameterSnapshot.filterEmphasis;
+    const int filterContourValue = parameterSnapshot.filterContour;
+    const auto routed = ContourRouting::route (parameterSnapshot.contourContract,
+                                               parameterSnapshot.contours);
+    const bool keyboardCtrlSwitch1Value = parameterSnapshot.keyboardControl1;
+    const bool keyboardCtrlSwitch2Value = parameterSnapshot.keyboardControl2;
+    const bool filterModSwitchValue = parameterSnapshot.filterModulationEnabled;
+    const bool osc3CtrlMode = parameterSnapshot.oscillator3KeyboardControl;
+    const float osc3ModulationValue = parameterSnapshot.modulationWheel;
+    const bool oscModSwitchValue = parameterSnapshot.oscillatorModulationEnabled;
+    const int modulationMixLevel = parameterSnapshot.modulationMix;
+    const int outputVolLevel = parameterSnapshot.outputLevel;
+    const bool glideSwitchValue = parameterSnapshot.glideEnabled;
+    const int glideValue = parameterSnapshot.glide;
+    const float pitchWheelValue = parameterSnapshot.pitchWheel;
+    const float feedbackValue = parameterSnapshot.feedback;
     
-    bool osc1OnOff = *apvts.getRawParameterValue("osc1OnOff");
-    bool osc2OnOff = *apvts.getRawParameterValue("osc2OnOff");
-    bool osc3OnOff = *apvts.getRawParameterValue("osc3OnOff");
-    bool a440HzOnOff = *apvts.getRawParameterValue("a440HzOnOff");
-    
-    bool whitePink = *apvts.getRawParameterValue("whitePinkSwitch");
-    bool noiseOnOff = *apvts.getRawParameterValue("noiseOnOffSwitch");
-    const int noiseVolume = static_cast<int>(apvts.getRawParameterValue("noiseVolKnob")->load());
-    bool extInputOn = *apvts.getRawParameterValue("extInputVolSwitch");
-    const int extInputVolLevel = static_cast<int>(apvts.getRawParameterValue("extInputVolKnob")->load());
-    
-    float filterCutoffValue = mapFilterCutoffValueToFrequency(*apvts.getRawParameterValue("filterCutoff"));
-    const int filterEmphasisValue = static_cast<int>(apvts.getRawParameterValue("filterEmphasis")->load());
-    const int filterContourValue = static_cast<int>(apvts.getRawParameterValue("filterContour")->load());
-    const auto contourSnapshot = captureContourSnapshot (lastCoherentContourSnapshot);
-    if (! contourSnapshot.usedFallback)
-        lastCoherentContourSnapshot = contourSnapshot;
-    const auto routed = ContourRouting::route (contourSnapshot.contract,
-                                               contourSnapshot.controls);
-    
-    bool keyboardCtrlSwitch1Value = *apvts.getRawParameterValue("keyboardCtrlSwitch1");
-    bool keyboardCtrlSwitch2Value = *apvts.getRawParameterValue("keyboardCtrlSwitch2");
-    bool filterModSwitchValue =*apvts.getRawParameterValue("filterModSwitch");
-    
-    bool osc3CtrlMode = *apvts.getRawParameterValue("osc3CtrlMode");
-    float osc3ModulationValue = *apvts.getRawParameterValue("modWheelValue");
-    bool oscModSwitchValue = *apvts.getRawParameterValue("oscModSwitch");
-    
-    const int modulationMixLevel = static_cast<int>(apvts.getRawParameterValue("ctrlModMixKnob")->load());
-    const int outputVolLevel = static_cast<int>(apvts.getRawParameterValue("outputVolKnob")->load());
-    
-    bool glideSwitchValue = *apvts.getRawParameterValue("glideSwitch");
-    const int glideValue = static_cast<int>(apvts.getRawParameterValue("ctrlGlideKnob")->load());
-    
-    float pitchWheelValue = *apvts.getRawParameterValue("pitchWheelValue");
-    
-    float feedbackValue = *apvts.getRawParameterValue("feedbackKnob");
-    
-    // Set the ladder filter parameters based on your UI control values
-    // juce::Logger::writeToLog("filterCutoff: " + juce::String(filterCutoffValue));
+    // Set the ladder filter parameters based on the prepared physical values.
     ladderFilter.setCutoffFrequency(filterCutoffValue);
     ladderFilter.setResonance(static_cast<float>(filterEmphasisValue) / 10.0f); // Assuming range 0-10
     ladderFilter.setEnvelopeAmount(static_cast<float>(filterContourValue) / 10.0f); // Assuming range 0-10
@@ -846,37 +832,151 @@ bool MoogMiniAudioProcessor::shouldAutoLoadLastPreset() const {
     return ! restoredStateFromHost.load (std::memory_order_acquire);
 }
 
-MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::captureContourSnapshot (
-    const ContourSnapshot& fallback) const noexcept
+float MoogMiniAudioProcessor::sanitizeParameterValue (ParameterRegistry::Key key,
+                                                       float value) const noexcept
 {
-    constexpr int maximumAttempts = 3;
-    for (int attempt = 0; attempt < maximumAttempts; ++attempt)
+    const auto& metadata = ParameterRegistry::descriptor (key);
+    if (! std::isfinite (value))
+    {
+        value = metadata.physicalDefault;
+        invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+    }
+
+    value = std::clamp (value, metadata.rangeStart, metadata.rangeEnd);
+    if (metadata.kind == ParameterRegistry::Kind::choice)
+        return std::round (value);
+    if (metadata.kind == ParameterRegistry::Kind::boolean)
+        return value >= 0.5f ? 1.0f : 0.0f;
+    return value;
+}
+
+MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::buildTypedSnapshot (
+    const std::array<float, ParameterRegistry::parameterCount>& values,
+    StateContract::ContourContract contract,
+    std::uint64_t generation) const noexcept
+{
+    std::array<float, ParameterRegistry::parameterCount> sanitized {};
+    for (std::size_t index = 0; index < sanitized.size(); ++index)
+        sanitized[index] = sanitizeParameterValue (
+            static_cast<ParameterRegistry::Key> (index), values[index]);
+
+    const auto value = [&sanitized] (ParameterRegistry::Key key) noexcept
+    {
+        return sanitized[ParameterRegistry::index (key)];
+    };
+    const auto integer = [&value] (ParameterRegistry::Key key) noexcept
+    {
+        return static_cast<int> (value (key));
+    };
+    const auto enabled = [&value] (ParameterRegistry::Key key) noexcept
+    {
+        return value (key) >= 0.5f;
+    };
+
+    ParameterSnapshot snapshot;
+    snapshot.oscillator1 = { integer (ParameterRegistry::Key::osc1Waveform),
+                             integer (ParameterRegistry::Key::osc1Range),
+                             integer (ParameterRegistry::Key::osc1Vol), 8,
+                             enabled (ParameterRegistry::Key::osc1OnOff) };
+    snapshot.oscillator2 = { integer (ParameterRegistry::Key::osc2Waveform),
+                             integer (ParameterRegistry::Key::osc2Range),
+                             integer (ParameterRegistry::Key::osc2Vol),
+                             integer (ParameterRegistry::Key::osc2Freq),
+                             enabled (ParameterRegistry::Key::osc2OnOff) };
+    snapshot.oscillator3 = { integer (ParameterRegistry::Key::osc3Waveform),
+                             integer (ParameterRegistry::Key::osc3Range),
+                             integer (ParameterRegistry::Key::osc3Vol),
+                             integer (ParameterRegistry::Key::osc3Freq),
+                             enabled (ParameterRegistry::Key::osc3OnOff) };
+    snapshot.masterTune = integer (ParameterRegistry::Key::tune);
+    snapshot.filterCutoff = value (ParameterRegistry::Key::filterCutoff);
+    snapshot.filterEmphasis = integer (ParameterRegistry::Key::filterEmphasis);
+    snapshot.filterContour = integer (ParameterRegistry::Key::filterContour);
+    snapshot.contours = {
+        value (ParameterRegistry::Key::filterAttackTimeKnob),
+        value (ParameterRegistry::Key::filterDecayTimeKnob),
+        value (ParameterRegistry::Key::filterSustainKnob) / 10.0f,
+        value (ParameterRegistry::Key::loudnessAttackTimeKnob),
+        value (ParameterRegistry::Key::loudnessDecayTimeKnob),
+        value (ParameterRegistry::Key::loudnessSustainLevelKnob) / 10.0f,
+        enabled (ParameterRegistry::Key::decaySwitch)
+    };
+    snapshot.noiseLevel = integer (ParameterRegistry::Key::noiseVolKnob);
+    snapshot.externalInputLevel = integer (ParameterRegistry::Key::extInputVolKnob);
+    snapshot.outputLevel = integer (ParameterRegistry::Key::outputVolKnob);
+    snapshot.phonesLevel = integer (ParameterRegistry::Key::outputPhonesVolKnob);
+    snapshot.glide = integer (ParameterRegistry::Key::ctrlGlideKnob);
+    snapshot.modulationMix = integer (ParameterRegistry::Key::ctrlModMixKnob);
+    snapshot.feedback = value (ParameterRegistry::Key::feedbackKnob);
+    snapshot.modulationWheel = value (ParameterRegistry::Key::modWheelValue);
+    snapshot.pitchWheel = value (ParameterRegistry::Key::pitchWheelValue);
+    snapshot.a440Enabled = enabled (ParameterRegistry::Key::a440HzOnOff);
+    snapshot.oscillator3KeyboardControl = enabled (ParameterRegistry::Key::osc3CtrlMode);
+    snapshot.oscillatorModulationEnabled = enabled (ParameterRegistry::Key::oscModSwitch);
+    snapshot.noiseEnabled = enabled (ParameterRegistry::Key::noiseOnOffSwitch);
+    snapshot.externalInputEnabled = enabled (ParameterRegistry::Key::extInputVolSwitch);
+    snapshot.pinkNoise = enabled (ParameterRegistry::Key::whitePinkSwitch);
+    snapshot.filterModulationEnabled = enabled (ParameterRegistry::Key::filterModSwitch);
+    snapshot.keyboardControl1 = enabled (ParameterRegistry::Key::keyboardCtrlSwitch1);
+    snapshot.keyboardControl2 = enabled (ParameterRegistry::Key::keyboardCtrlSwitch2);
+    snapshot.glideEnabled = enabled (ParameterRegistry::Key::glideSwitch);
+    snapshot.priority = static_cast<PriorityMode> (
+        integer (ParameterRegistry::Key::keyboardPriorityMode));
+    snapshot.trigger = static_cast<TriggerMode> (
+        integer (ParameterRegistry::Key::keyboardTriggerMode));
+    snapshot.mainOutputEnabled = enabled (ParameterRegistry::Key::outputMainEnabled);
+    snapshot.phonesOutputEnabled = enabled (ParameterRegistry::Key::outputPhonesEnabled);
+    snapshot.contourContract = contract;
+    snapshot.generation = generation;
+    snapshot.coherent = true;
+    return snapshot;
+}
+
+MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::captureParameterSnapshot (
+    const ParameterSnapshot& fallback) const noexcept
+{
+    constexpr int maximumSnapshotAttempts = 3;
+    for (int attempt = 0; attempt < maximumSnapshotAttempts; ++attempt)
     {
         const auto before = stateGeneration.load (std::memory_order_acquire);
         if ((before & 1u) != 0u)
             continue;
-        ContourSnapshot snapshot;
-        snapshot.generation = before;
-        snapshot.controls = {
-            contourParameterHandles[0]->load (std::memory_order_relaxed),
-            contourParameterHandles[1]->load (std::memory_order_relaxed),
-            contourParameterHandles[2]->load (std::memory_order_relaxed) / 10.0f,
-            contourParameterHandles[3]->load (std::memory_order_relaxed),
-            contourParameterHandles[4]->load (std::memory_order_relaxed),
-            contourParameterHandles[5]->load (std::memory_order_relaxed) / 10.0f,
-            decayEnabledHandle->load (std::memory_order_relaxed) > 0.5f
-        };
-        snapshot.contract = contourContractCache.load (std::memory_order_acquire);
+        std::array<float, ParameterRegistry::parameterCount> values {};
+        for (std::size_t index = 0; index < values.size(); ++index)
+            values[index] = preparedParameterHandles[index]->load (std::memory_order_relaxed);
+        const auto contract = contourContractCache.load (std::memory_order_acquire);
         const auto after = stateGeneration.load (std::memory_order_acquire);
         if (before == after && (after & 1u) == 0u)
-        {
-            snapshot.coherent = true;
-            return snapshot;
-        }
+            return buildTypedSnapshot (values, contract, after);
     }
-    auto result = fallback.coherent ? fallback : initialCoherentContourSnapshot;
+    auto result = fallback.coherent ? fallback : initialCoherentParameterSnapshot;
     result.usedFallback = true;
     return result;
+}
+
+juce::RangedAudioParameter* MoogMiniAudioProcessor::getPreparedParameter (
+    ParameterRegistry::Key key) const noexcept
+{
+    return preparedParameters[ParameterRegistry::index (key)];
+}
+
+std::uint64_t MoogMiniAudioProcessor::getInvalidParameterValueCount() const noexcept
+{
+    return invalidParameterValueCount.load (std::memory_order_relaxed);
+}
+
+MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::captureContourSnapshot (
+    const ContourSnapshot& fallback) const noexcept
+{
+    const auto complete = captureParameterSnapshot (initialCoherentParameterSnapshot);
+    if (complete.usedFallback && fallback.coherent)
+    {
+        auto result = fallback;
+        result.usedFallback = true;
+        return result;
+    }
+    return { complete.contours, complete.contourContract, complete.generation,
+             complete.usedFallback, complete.coherent };
 }
 
 MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::getSignalFlowContourSnapshot (
@@ -890,7 +990,21 @@ void MoogMiniAudioProcessor::setSignalFlowContourControl (
     float normalisedValue)
 {
     const auto parameter = ContourRouting::parameterFor (getContourContract(), contour, stage);
-    if (auto* ranged = contourParameters[ContourRouting::index (parameter)])
+    const auto key = [&]
+    {
+        switch (parameter)
+        {
+            case ContourRouting::Parameter::filterAttack: return ParameterRegistry::Key::filterAttackTimeKnob;
+            case ContourRouting::Parameter::filterDecay: return ParameterRegistry::Key::filterDecayTimeKnob;
+            case ContourRouting::Parameter::filterSustain: return ParameterRegistry::Key::filterSustainKnob;
+            case ContourRouting::Parameter::loudnessAttack: return ParameterRegistry::Key::loudnessAttackTimeKnob;
+            case ContourRouting::Parameter::loudnessDecay: return ParameterRegistry::Key::loudnessDecayTimeKnob;
+            case ContourRouting::Parameter::loudnessSustain: return ParameterRegistry::Key::loudnessSustainLevelKnob;
+            case ContourRouting::Parameter::count: break;
+        }
+        return ParameterRegistry::Key::filterAttackTimeKnob;
+    }();
+    if (auto* ranged = getPreparedParameter (key))
     {
         ranged->beginChangeGesture();
         ranged->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, normalisedValue));

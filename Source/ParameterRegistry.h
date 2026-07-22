@@ -2,11 +2,38 @@
 
 #include <JuceHeader.h>
 
+#include <cstdint>
 #include <span>
 #include <string_view>
 
 namespace ParameterRegistry
 {
+enum class Key : std::uint8_t
+{
+    osc1Waveform, osc2Waveform, osc3Waveform,
+    osc1Range, osc2Range, osc3Range,
+    osc1Vol, osc2Vol, osc3Vol, tune, osc2Freq, osc3Freq,
+    filterCutoff, filterEmphasis, filterContour, outputVolKnob,
+    extInputVolKnob, ctrlGlideKnob, ctrlModMixKnob,
+    filterAttackTimeKnob, filterDecayTimeKnob,
+    loudnessAttackTimeKnob, loudnessDecayTimeKnob,
+    filterSustainKnob, noiseVolKnob, loudnessSustainLevelKnob,
+    outputPhonesVolKnob, feedbackKnob, modWheelValue, pitchWheelValue,
+    osc1OnOff, osc2OnOff, osc3OnOff, a440HzOnOff, osc3CtrlMode,
+    oscModSwitch, noiseOnOffSwitch, extInputVolSwitch, whitePinkSwitch,
+    filterModSwitch, keyboardCtrlSwitch1, keyboardCtrlSwitch2,
+    decaySwitch, glideSwitch, keyboardPriorityMode, keyboardTriggerMode,
+    outputMainEnabled, outputPhonesEnabled, count
+};
+
+constexpr std::size_t index (Key key) noexcept
+{
+    return static_cast<std::size_t> (key);
+}
+
+inline constexpr std::size_t parameterCount = index (Key::count);
+static_assert (parameterCount == 48);
+
 enum class Kind
 {
     choice,
@@ -74,5 +101,6 @@ struct Descriptor
 };
 
 std::span<const Descriptor> descriptors() noexcept;
+const Descriptor& descriptor (Key key) noexcept;
 juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
 }

@@ -18,6 +18,7 @@
 #include <string_view>
 #include <tuple>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -471,6 +472,161 @@ float physicalParameterValue (MoogMiniAudioProcessor& processor, std::string_vie
     const auto parameterId = juce::String { id.data(), id.size() };
     const auto* value = processor.apvts.getRawParameterValue (parameterId);
     return value == nullptr ? std::numeric_limits<float>::quiet_NaN() : value->load();
+}
+
+std::atomic<float>* rawParameterForTest (MoogMiniAudioProcessor& processor,
+                                         ParameterRegistry::Key key)
+{
+    const auto id = ParameterRegistry::descriptor (key).id;
+    return processor.apvts.getRawParameterValue (
+        juce::String { id.data(), id.size() });
+}
+
+std::array<float, ParameterRegistry::parameterCount> snapshotPhysicalValues (
+    const MoogMiniAudioProcessor::ParameterSnapshot& snapshot)
+{
+    return {
+        static_cast<float> (snapshot.oscillator1.waveform),
+        static_cast<float> (snapshot.oscillator2.waveform),
+        static_cast<float> (snapshot.oscillator3.waveform),
+        static_cast<float> (snapshot.oscillator1.range),
+        static_cast<float> (snapshot.oscillator2.range),
+        static_cast<float> (snapshot.oscillator3.range),
+        static_cast<float> (snapshot.oscillator1.level),
+        static_cast<float> (snapshot.oscillator2.level),
+        static_cast<float> (snapshot.oscillator3.level),
+        static_cast<float> (snapshot.masterTune),
+        static_cast<float> (snapshot.oscillator2.detune),
+        static_cast<float> (snapshot.oscillator3.detune),
+        snapshot.filterCutoff,
+        static_cast<float> (snapshot.filterEmphasis),
+        static_cast<float> (snapshot.filterContour),
+        static_cast<float> (snapshot.outputLevel),
+        static_cast<float> (snapshot.externalInputLevel),
+        static_cast<float> (snapshot.glide),
+        static_cast<float> (snapshot.modulationMix),
+        snapshot.contours.filterAttack,
+        snapshot.contours.filterDecay,
+        snapshot.contours.loudnessAttack,
+        snapshot.contours.loudnessDecay,
+        snapshot.contours.filterSustain * 10.0f,
+        static_cast<float> (snapshot.noiseLevel),
+        snapshot.contours.loudnessSustain * 10.0f,
+        static_cast<float> (snapshot.phonesLevel),
+        snapshot.feedback,
+        snapshot.modulationWheel,
+        snapshot.pitchWheel,
+        snapshot.oscillator1.enabled ? 1.0f : 0.0f,
+        snapshot.oscillator2.enabled ? 1.0f : 0.0f,
+        snapshot.oscillator3.enabled ? 1.0f : 0.0f,
+        snapshot.a440Enabled ? 1.0f : 0.0f,
+        snapshot.oscillator3KeyboardControl ? 1.0f : 0.0f,
+        snapshot.oscillatorModulationEnabled ? 1.0f : 0.0f,
+        snapshot.noiseEnabled ? 1.0f : 0.0f,
+        snapshot.externalInputEnabled ? 1.0f : 0.0f,
+        snapshot.pinkNoise ? 1.0f : 0.0f,
+        snapshot.filterModulationEnabled ? 1.0f : 0.0f,
+        snapshot.keyboardControl1 ? 1.0f : 0.0f,
+        snapshot.keyboardControl2 ? 1.0f : 0.0f,
+        snapshot.contours.decayEnabled ? 1.0f : 0.0f,
+        snapshot.glideEnabled ? 1.0f : 0.0f,
+        static_cast<float> (snapshot.priority),
+        static_cast<float> (snapshot.trigger),
+        snapshot.mainOutputEnabled ? 1.0f : 0.0f,
+        snapshot.phonesOutputEnabled ? 1.0f : 0.0f
+    };
+}
+
+float expectedSanitizedValue (const ParameterRegistry::Descriptor& descriptor,
+                              float value)
+{
+    if (! std::isfinite (value))
+        value = descriptor.physicalDefault;
+    value = std::clamp (value, descriptor.rangeStart, descriptor.rangeEnd);
+    if (descriptor.kind == ParameterRegistry::Kind::choice)
+        return std::round (value);
+    if (descriptor.kind == ParameterRegistry::Kind::boolean)
+        return value >= 0.5f ? 1.0f : 0.0f;
+    return value;
+}
+
+std::string_view priorityModeName (MoogMiniAudioProcessor::PriorityMode mode)
+{
+    switch (mode)
+    {
+        case MoogMiniAudioProcessor::PriorityMode::low: return "low";
+        case MoogMiniAudioProcessor::PriorityMode::high: return "high";
+        case MoogMiniAudioProcessor::PriorityMode::last: return "last";
+    }
+    return "invalid";
+}
+
+std::string_view triggerModeName (MoogMiniAudioProcessor::TriggerMode mode)
+{
+    return mode == MoogMiniAudioProcessor::TriggerMode::multi ? "multi" : "single";
+}
+
+juce::String makeParameterSnapshotV2Fixture()
+{
+    MoogMiniAudioProcessor processor;
+    const auto descriptors = ParameterRegistry::descriptors();
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto key = static_cast<ParameterRegistry::Key> (index);
+        const auto& descriptor = descriptors[index];
+        float value = 0.0f;
+        if (descriptor.kind == ParameterRegistry::Kind::floating)
+            value = static_cast<float> (index + 1) / 50.0f;
+        else if (descriptor.kind == ParameterRegistry::Kind::choice)
+            value = static_cast<float> ((index * 3 + 1)
+                      % static_cast<std::size_t> (descriptor.rangeEnd + 1.0f));
+        else
+            value = (index % 2u) == 0u ? 1.0f : 0.0f;
+        rawParameterForTest (processor, key)->store (value, std::memory_order_relaxed);
+    }
+    const auto distinct = processor.captureParameterSnapshot ({});
+    const auto distinctValues = snapshotPhysicalValues (distinct);
+    const auto beforeInvalid = processor.getInvalidParameterValueCount();
+    rawParameterForTest (processor, ParameterRegistry::Key::filterCutoff)
+        ->store (std::numeric_limits<float>::quiet_NaN(), std::memory_order_relaxed);
+    rawParameterForTest (processor, ParameterRegistry::Key::keyboardPriorityMode)
+        ->store (std::numeric_limits<float>::infinity(), std::memory_order_relaxed);
+    rawParameterForTest (processor, ParameterRegistry::Key::outputMainEnabled)
+        ->store (-std::numeric_limits<float>::infinity(), std::memory_order_relaxed);
+    const auto sanitized = processor.captureParameterSnapshot (distinct);
+
+    auto root = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    root->setProperty ("schema", "model-d.parameter-snapshot.v2");
+    juce::Array<juce::var> fields;
+    fields.ensureStorageAllocated (static_cast<int> (descriptors.size()));
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        auto field = juce::DynamicObject::Ptr { new juce::DynamicObject };
+        field->setProperty ("index", static_cast<int> (index));
+        field->setProperty ("id", juce::String { descriptors[index].id.data(),
+                                                  descriptors[index].id.size() });
+        field->setProperty ("physical", distinctValues[index]);
+        fields.add (juce::var { field.get() });
+    }
+    root->setProperty ("fields", juce::var { fields });
+    root->setProperty ("priority", juce::String { priorityModeName (distinct.priority).data(),
+                                                   priorityModeName (distinct.priority).size() });
+    root->setProperty ("trigger", juce::String { triggerModeName (distinct.trigger).data(),
+                                                  triggerModeName (distinct.trigger).size() });
+    root->setProperty ("contourContract", "canonicalContours");
+    auto diagnostic = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    diagnostic->setProperty (
+        "invalidCountDelta",
+        static_cast<juce::int64> (processor.getInvalidParameterValueCount() - beforeInvalid));
+    diagnostic->setProperty ("filterCutoff", sanitized.filterCutoff);
+    diagnostic->setProperty ("priority",
+                             juce::String { priorityModeName (sanitized.priority).data(),
+                                            priorityModeName (sanitized.priority).size() });
+    diagnostic->setProperty ("mainOutputEnabled", sanitized.mainOutputEnabled);
+    root->setProperty ("sanitization", juce::var { diagnostic.get() });
+    return juce::JSON::toString (juce::var { root.get() },
+                                 juce::JSON::FormatOptions {}
+                                     .withSpacing (juce::JSON::Spacing::none)) + "\n";
 }
 
 bool fixtureMatchesXml (const juce::File& fixture, const juce::XmlElement& xml)
@@ -1075,6 +1231,11 @@ juce::String makeContourRoutingTraceFixture()
 
 int captureLegacyFixture (std::string_view mode)
 {
+    if (mode == "capture-parameter-snapshot-v2")
+    {
+        std::cout << makeParameterSnapshotV2Fixture().toStdString();
+        return 0;
+    }
     if (mode == "capture-registry-v2")
     {
         std::cout << makeRegistryV2Export().toStdString();
@@ -3107,13 +3268,13 @@ void testContourTask3BContract (TestContext& test)
         captureStart, "MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::getSignalFlowContourSnapshot");
     const auto captureSource = processorSource.substring (captureStart, captureEnd);
     test.expect (captureStart >= 0 && captureEnd > captureStart
-                     && captureSource.contains ("maximumAttempts = 3")
+                     && captureSource.contains ("captureParameterSnapshot")
                      && ! captureSource.contains ("juce::String")
                      && ! captureSource.contains ("getRawParameterValue")
                      && ! captureSource.contains ("ValueTree")
                      && ! captureSource.contains ("ScopedLock")
                      && ! captureSource.contains ("while"),
-                 "audio contour snapshot must be prepared, bounded, lock/string/tree/allocation-free");
+                 "audio contour snapshot must delegate to the complete prepared bounded reader");
 
     MoogMiniAudioProcessor nativeGenerationSource;
     setDistinct (nativeGenerationSource);
@@ -3169,6 +3330,343 @@ void testContourTask3BContract (TestContext& test)
     captureReader.join();
     test.expect (mixedSnapshots.load (std::memory_order_relaxed) == 0,
                  "bounded concurrent contour captures must return only complete generations or coherent fallback");
+}
+
+void testPreparedSnapshotContract (TestContext& test)
+{
+    const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+    const auto registryHeader = sourceRoot.getChildFile ("Source/ParameterRegistry.h")
+                                    .loadFileAsString();
+    const auto processorHeader = sourceRoot.getChildFile ("Source/PluginProcessor.h")
+                                     .loadFileAsString();
+    const auto processorSource = sourceRoot.getChildFile ("Source/PluginProcessor.cpp")
+                                     .loadFileAsString();
+
+    test.expect (registryHeader.contains ("enum class Key")
+                     && registryHeader.contains ("Key::count")
+                     && registryHeader.contains ("descriptor (Key key) noexcept"),
+                 "PAR-009 requires a checked typed key in frozen descriptor order");
+    test.expect (processorHeader.contains ("ParameterSnapshot")
+                     && processorHeader.contains ("captureParameterSnapshot")
+                     && processorHeader.contains ("preparedParameterHandles")
+                     && processorHeader.contains ("invalidParameterValueCount"),
+                 "processor must expose one complete typed prepared snapshot and diagnostic");
+    test.expect (processorSource.contains ("maximumSnapshotAttempts = 3")
+                     && processorSource.contains ("buildTypedSnapshot")
+                     && processorSource.contains ("captureParameterSnapshot"),
+                 "complete snapshot capture must use three bounded generation-bracketed attempts");
+
+    const auto processStart = processorSource.indexOf (
+        "void MoogMiniAudioProcessor::processBlock");
+    const auto processEnd = processorSource.indexOf (
+        processStart, "float MoogMiniAudioProcessor::calculateGlideRate");
+    const auto processBlockSource = processorSource.substring (processStart, processEnd);
+    const auto firstCompleteCapture = processBlockSource.indexOf ("captureParameterSnapshot");
+    test.expect (processStart >= 0 && processEnd > processStart
+                     && firstCompleteCapture >= 0
+                     && processBlockSource.indexOf (
+                            firstCompleteCapture + 1, "captureParameterSnapshot") < 0
+                     && ! processBlockSource.contains ("getRawParameterValue")
+                     && ! processBlockSource.contains ("getParameter")
+                     && ! processBlockSource.contains ("juce::String"),
+                 "processBlock must capture once and contain no render-time parameter lookup/string");
+
+    const auto fixture = sourceRoot.getChildFile (
+        "Tests/fixtures/parameters/parameter-snapshot-v2.json");
+    test.expect (fixture.existsAsFile()
+                     && fixture.loadFileAsString() == makeParameterSnapshotV2Fixture()
+                     ,
+                 "prepared snapshot production capture fixture must exist");
+
+    static_assert (ParameterRegistry::parameterCount == 48);
+    static_assert (std::is_trivially_copyable_v<MoogMiniAudioProcessor::ParameterSnapshot>);
+    const auto descriptors = ParameterRegistry::descriptors();
+    test.expect (descriptors.size() == ParameterRegistry::parameterCount,
+                 "typed snapshot must retain exact frozen 48-descriptor coverage");
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto key = static_cast<ParameterRegistry::Key> (index);
+        const auto expectedId = index < legacyParameterIds.size()
+                              ? legacyParameterIds[index]
+                              : newParameterIds[index - legacyParameterIds.size()];
+        test.expect (ParameterRegistry::index (key) == index
+                         && ParameterRegistry::descriptor (key).id == expectedId,
+                     "every Key ordinal must resolve the exact immutable fixture ID");
+    }
+
+    MoogMiniAudioProcessor processor;
+    auto fallback = processor.captureParameterSnapshot ({});
+    const auto defaults = snapshotPhysicalValues (fallback);
+    test.expect (fallback.coherent && ! fallback.usedFallback
+                     && fallback.contourContract
+                            == StateContract::ContourContract::canonicalContours,
+                 "new processor must expose one coherent canonical native snapshot");
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto key = static_cast<ParameterRegistry::Key> (index);
+        const auto* ranged = processor.getPreparedParameter (key);
+        test.expect (ranged != nullptr
+                         && equalsStringView (ranged->getParameterID(), descriptors[index].id)
+                         && std::abs (defaults[index] - descriptors[index].physicalDefault) < 1.0e-6f,
+                     "all prepared handles and native physical defaults must match the registry");
+    }
+
+    std::array<float, ParameterRegistry::parameterCount> distinctInput {};
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto& descriptor = descriptors[index];
+        float value = 0.0f;
+        if (descriptor.kind == ParameterRegistry::Kind::floating)
+            value = static_cast<float> (index + 1) / 50.0f;
+        else if (descriptor.kind == ParameterRegistry::Kind::choice)
+            value = static_cast<float> ((index * 3 + 1)
+                      % static_cast<std::size_t> (descriptor.rangeEnd + 1.0f));
+        else
+            value = (index % 2u) == 0u ? 1.0f : 0.0f;
+        distinctInput[index] = value;
+        rawParameterForTest (processor, static_cast<ParameterRegistry::Key> (index))
+            ->store (value, std::memory_order_relaxed);
+    }
+    const auto distinct = processor.captureParameterSnapshot (fallback);
+    const auto distinctOutput = snapshotPhysicalValues (distinct);
+    bool distinctMappedExactly = distinct.coherent && ! distinct.usedFallback;
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+        distinctMappedExactly = distinctMappedExactly
+            && std::abs (distinctOutput[index]
+                         - expectedSanitizedValue (descriptors[index], distinctInput[index])) < 1.0e-6f;
+    test.expect (distinctMappedExactly,
+                 "all 48 distinct physical inputs must map exactly once into typed fields");
+
+    const auto diagnosticBeforeFinite = processor.getInvalidParameterValueCount();
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+        rawParameterForTest (processor, static_cast<ParameterRegistry::Key> (index))
+            ->store (std::numeric_limits<float>::max(), std::memory_order_relaxed);
+    const auto positiveExtreme = processor.captureParameterSnapshot (distinct);
+    const auto positiveValues = snapshotPhysicalValues (positiveExtreme);
+    bool positiveClamped = true;
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+        positiveClamped = positiveClamped
+            && std::isfinite (positiveValues[index])
+            && std::abs (positiveValues[index] - descriptors[index].rangeEnd) < 1.0e-6f;
+
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+        rawParameterForTest (processor, static_cast<ParameterRegistry::Key> (index))
+            ->store (-std::numeric_limits<float>::max(), std::memory_order_relaxed);
+    const auto negativeExtreme = processor.captureParameterSnapshot (positiveExtreme);
+    const auto negativeValues = snapshotPhysicalValues (negativeExtreme);
+    bool negativeClamped = true;
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+        negativeClamped = negativeClamped
+            && std::isfinite (negativeValues[index])
+            && std::abs (negativeValues[index] - descriptors[index].rangeStart) < 1.0e-6f;
+    test.expect (positiveClamped && negativeClamped
+                     && processor.getInvalidParameterValueCount() == diagnosticBeforeFinite,
+                 "finite extremes must clamp every field without incrementing invalid diagnostics");
+
+    const auto diagnosticBeforeNonFinite = processor.getInvalidParameterValueCount();
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto invalid = index % 3u == 0u
+                           ? std::numeric_limits<float>::quiet_NaN()
+                           : index % 3u == 1u
+                               ? std::numeric_limits<float>::infinity()
+                               : -std::numeric_limits<float>::infinity();
+        rawParameterForTest (processor, static_cast<ParameterRegistry::Key> (index))
+            ->store (invalid, std::memory_order_relaxed);
+    }
+    const auto sanitized = processor.captureParameterSnapshot (negativeExtreme);
+    const auto sanitizedValues = snapshotPhysicalValues (sanitized);
+    bool defaultsRestored = true;
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+        defaultsRestored = defaultsRestored && std::isfinite (sanitizedValues[index])
+            && std::abs (sanitizedValues[index] - descriptors[index].physicalDefault) < 1.0e-6f;
+    test.expect (defaultsRestored
+                     && processor.getInvalidParameterValueCount() - diagnosticBeforeNonFinite
+                            == ParameterRegistry::parameterCount
+                     && static_cast<int> (sanitized.priority) >= 0
+                     && static_cast<int> (sanitized.priority) <= 2
+                     && static_cast<int> (sanitized.trigger) >= 0
+                     && static_cast<int> (sanitized.trigger) <= 1,
+                 "NaN and infinities must default all fields, count exactly, and keep enums valid");
+
+    const auto captureStart = processorSource.indexOf (
+        "MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::captureParameterSnapshot");
+    const auto captureEnd = processorSource.indexOf (
+        captureStart, "juce::RangedAudioParameter* MoogMiniAudioProcessor::getPreparedParameter");
+    const auto captureSource = processorSource.substring (captureStart, captureEnd);
+    const auto builderStart = processorSource.indexOf (
+        "MoogMiniAudioProcessor::ParameterSnapshot MoogMiniAudioProcessor::buildTypedSnapshot");
+    const auto builderSource = processorSource.substring (builderStart, captureStart);
+    test.expect (captureStart >= 0 && captureEnd > captureStart
+                     && captureSource.contains ("maximumSnapshotAttempts = 3")
+                     && captureSource.contains ("std::memory_order_acquire")
+                     && captureSource.contains ("std::memory_order_relaxed")
+                     && captureSource.contains ("fallback.coherent ? fallback")
+                     && captureSource.contains ("result.usedFallback = true")
+                     && ! captureSource.contains ("getRawParameterValue")
+                     && ! captureSource.contains ("getParameter (")
+                     && ! captureSource.contains ("juce::String")
+                     && ! captureSource.contains ("ValueTree")
+                     && ! captureSource.contains ("ScopedLock")
+                     && ! captureSource.contains ("while")
+                     && ! captureSource.contains ("new "),
+                 "snapshot capture must be exactly-three-attempt, prepared, bounded and realtime-safe");
+    test.expect (builderStart >= 0 && captureStart > builderStart
+                     && processorHeader.contains ("std::uint64_t generation) const noexcept")
+                     && ! builderSource.contains ("getRawParameterValue")
+                     && ! builderSource.contains ("getParameter (")
+                     && ! builderSource.contains ("juce::String")
+                     && ! builderSource.contains ("ValueTree")
+                     && ! builderSource.contains ("ScopedLock")
+                     && ! builderSource.contains ("while")
+                     && ! builderSource.contains ("new "),
+                 "typed snapshot builder must be noexcept and lookup/string/tree/allocation/lock-free");
+
+    const auto contour = processor.captureContourSnapshot ({});
+    test.expect (std::abs (contour.controls.filterAttack - sanitized.contours.filterAttack) < 1.0e-6f
+                     && contour.contract == sanitized.contourContract,
+                 "Task 3B contour snapshot must delegate to complete capture semantics");
+
+    const auto setPhysical = [] (MoogMiniAudioProcessor& target,
+                                 ParameterRegistry::Key key,
+                                 float physical)
+    {
+        auto* parameter = target.getPreparedParameter (key);
+        parameter->setValueNotifyingHost (parameter->convertTo0to1 (physical));
+    };
+    MoogMiniAudioProcessor nativeSource;
+    for (std::size_t index = 0; index < descriptors.size(); ++index)
+    {
+        const auto& descriptor = descriptors[index];
+        const auto value = descriptor.kind == ParameterRegistry::Kind::floating
+                         ? 0.83f
+                         : descriptor.kind == ParameterRegistry::Kind::choice
+                             ? descriptor.rangeEnd
+                             : descriptor.physicalDefault >= 0.5f ? 0.0f : 1.0f;
+        setPhysical (nativeSource, static_cast<ParameterRegistry::Key> (index), value);
+    }
+    const auto nativeBytes = serialiseProcessorStateBytes (nativeSource);
+    auto legacyXml = juce::parseXML (sourceRoot.getChildFile (
+        "Tests/fixtures/state/legacy-default-state.xml"));
+    test.expect (legacyXml != nullptr, "whole-state snapshot stress legacy fixture must parse");
+    if (legacyXml != nullptr)
+    {
+        for (std::size_t index = 0; index < legacyParameterIds.size(); ++index)
+        {
+            const auto& descriptor = descriptors[index];
+            const auto value = descriptor.kind == ParameterRegistry::Kind::floating
+                             ? 0.17f : 0.0f;
+            findParameterXml (*legacyXml, descriptor.id)->setAttribute ("value", value);
+        }
+        const auto legacyBytes = binaryFromXml (*legacyXml);
+        MoogMiniAudioProcessor nativeExpectedProcessor;
+        MoogMiniAudioProcessor legacyExpectedProcessor;
+        const auto nativeRestore = nativeExpectedProcessor.restoreState (
+            nativeBytes.getData(), static_cast<int> (nativeBytes.getSize()));
+        const auto legacyRestore = legacyExpectedProcessor.restoreState (
+            legacyBytes.getData(), static_cast<int> (legacyBytes.getSize()));
+        const auto nativeExpected = nativeExpectedProcessor.captureParameterSnapshot ({});
+        const auto legacyExpected = legacyExpectedProcessor.captureParameterSnapshot ({});
+        const auto nativeExpectedValues = snapshotPhysicalValues (nativeExpected);
+        const auto legacyExpectedValues = snapshotPhysicalValues (legacyExpected);
+        test.expect (nativeRestore.succeeded() && legacyRestore.succeeded()
+                         && nativeExpected.contourContract
+                                == StateContract::ContourContract::canonicalContours
+                         && legacyExpected.contourContract
+                                == StateContract::ContourContract::legacyCrossedContours,
+                     "distinct native and legacy whole-state restore vectors must prepare");
+
+        MoogMiniAudioProcessor shared;
+        shared.restoreState (nativeBytes.getData(), static_cast<int> (nativeBytes.getSize()));
+        std::atomic<bool> begin { false };
+        std::atomic<bool> writerDone { false };
+        std::atomic<int> mixed { 0 };
+        std::atomic<int> fallbackCount { 0 };
+        std::thread reader ([&]
+        {
+            auto prior = shared.captureParameterSnapshot ({});
+            while (! begin.load (std::memory_order_acquire))
+                std::this_thread::yield();
+            int captures = 0;
+            do
+            {
+                const auto previous = prior;
+                const auto snapshot = shared.captureParameterSnapshot (prior);
+                if (! snapshot.usedFallback)
+                    prior = snapshot;
+                else
+                {
+                    fallbackCount.fetch_add (1, std::memory_order_relaxed);
+                    const auto previousValues = snapshotPhysicalValues (previous);
+                    const auto fallbackValues = snapshotPhysicalValues (snapshot);
+                    bool matchesPrevious = snapshot.generation == previous.generation
+                                        && snapshot.contourContract == previous.contourContract;
+                    for (std::size_t index = 0; index < fallbackValues.size(); ++index)
+                        matchesPrevious = matchesPrevious
+                            && std::abs (fallbackValues[index] - previousValues[index]) < 1.0e-6f;
+                    if (! matchesPrevious)
+                        mixed.fetch_add (1, std::memory_order_relaxed);
+                }
+                const auto values = snapshotPhysicalValues (snapshot);
+                const auto& expected = snapshot.contourContract
+                                             == StateContract::ContourContract::canonicalContours
+                                         ? nativeExpectedValues : legacyExpectedValues;
+                bool complete = snapshot.coherent && (snapshot.generation & 1u) == 0u;
+                for (std::size_t index = 0; index < values.size(); ++index)
+                    complete = complete
+                        && std::abs (values[index] - expected[index]) < 1.0e-6f;
+                if (! complete)
+                    mixed.fetch_add (1, std::memory_order_relaxed);
+                ++captures;
+            }
+            while (! writerDone.load (std::memory_order_acquire) || captures < 5000);
+        });
+        begin.store (true, std::memory_order_release);
+        for (int iteration = 0; iteration < 500; ++iteration)
+        {
+            const auto& bytes = iteration % 2 == 0 ? legacyBytes : nativeBytes;
+            if (! shared.restoreState (bytes.getData(), static_cast<int> (bytes.getSize())).succeeded())
+                mixed.fetch_add (1, std::memory_order_relaxed);
+        }
+        writerDone.store (true, std::memory_order_release);
+        reader.join();
+        static_cast<void> (fallbackCount.load (std::memory_order_relaxed));
+        test.expect (mixed.load (std::memory_order_relaxed) == 0,
+                     "alternating native/legacy restores must yield complete generations; any observed fallback must equal the prior coherent snapshot");
+    }
+
+    MoogMiniAudioProcessor renderProcessor;
+    setPhysical (renderProcessor, ParameterRegistry::Key::osc1OnOff, 1.0f);
+    setPhysical (renderProcessor, ParameterRegistry::Key::osc1Vol, 10.0f);
+    setPhysical (renderProcessor, ParameterRegistry::Key::outputVolKnob, 10.0f);
+    rawParameterForTest (renderProcessor, ParameterRegistry::Key::filterCutoff)
+        ->store (std::numeric_limits<float>::quiet_NaN(), std::memory_order_relaxed);
+    renderProcessor.setRateAndBufferSizeDetails (48000.0, 128);
+    renderProcessor.prepareToPlay (48000.0, 128);
+    juce::AudioBuffer<float> renderBuffer (renderProcessor.getTotalNumOutputChannels(), 128);
+    renderBuffer.clear();
+    juce::MidiBuffer renderMidi;
+    renderMidi.addEvent (juce::MidiMessage::noteOn (1, 69, 1.0f), 0);
+    const auto renderDiagnosticBefore = renderProcessor.getInvalidParameterValueCount();
+    renderProcessor.processBlock (renderBuffer, renderMidi);
+    test.expect (isFinite (renderBuffer)
+                     && renderProcessor.getInvalidParameterValueCount()
+                            == renderDiagnosticBefore + 1,
+                 "actual processor rendering must consume the sanitized complete snapshot");
+    renderProcessor.releaseResources();
+
+    for (const auto& [path, hash] :
+         std::to_array<std::pair<const char*, const char*>> ({
+             { "Tests/fixtures/parameters/legacy-parameter-inventory.json", "7ade5c456c54e0822e41082558aed0c94860b6b46f9368713fc3ac103b5bc21d" },
+             { "Tests/fixtures/parameters/parameter-registry-v2.json", "2d7d6339fffb3875541aa60547f6e2f2f7b6fb8d288da109bf653291a6b7d284" },
+             { "Tests/fixtures/state/legacy-default-state.xml", "07d2069f7c3f274b83e31beab503165064d3fcffd346967281eb2e0157844b21" },
+             { "Tests/fixtures/state/legacy-representative-state.xml", "e0d769001dd411425c6dfea6c572b0f9358fdf6cf27b36731eccc3f6526ff0fa" },
+             { "Tests/fixtures/state/native-default-state-v2.xml", "ff369e874e4c786830ea51731b8849e54c44f81151313cb1ceefdcab9b8f2507" },
+             { "Tests/fixtures/state/migrated-default-state-v2.xml", "4fa0dbbfec6b9816657f41d68411285e6d4e17e176d93c596141054c7a7d4958" },
+             { "Tests/fixtures/state/migrated-representative-state-v2.xml", "f2ebb2afc79668c02ee9580f29fdc900a3545530e8175068690df5ebec8f9a40" },
+             { "Tests/fixtures/state/contour-routing-conversion-trace.json", "ce998775a66ac12a997dbfc613ee00a417c293836443fea5842b3df9d1dd8c0c" }
+         }))
+        expectFixtureHash (test, sourceRoot.getChildFile (path), hash, path);
 }
 
 void testMidiSampleZeroSmoke (TestContext& test)
@@ -3235,6 +3733,8 @@ int runMode (std::string_view mode)
     }
     else if (mode == "contours")
         testContourTask3BContract (test);
+    else if (mode == "prepared-snapshot")
+        testPreparedSnapshotContract (test);
     else if (mode == "fixtures")
         testLegacyParameterFixtures (test);
     else if (mode == "registry")
