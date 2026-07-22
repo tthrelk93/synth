@@ -195,6 +195,7 @@ LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
         { "allowance", "8*epsilon*max(1,travel)" },
         { "first-change", "first sample at/after event outside start allowance" },
         { "ideal-increment", "travel/duration-or-travel-for-zero-duration" },
+        { "ramp-origin", "first ideal increment occurs at event sample" },
         { "settled", "first sample whose suffix remains within target allowance" },
     };
 
@@ -443,6 +444,74 @@ juce::String metricResultsJson (const std::span<const MetricResult> metrics)
         array.add (juce::var { object.release() });
     }
     return canonicalJson (juce::var { array });
+}
+
+juce::String metricEvidenceJson (const std::span<const MetricEvidenceRecord> records)
+{
+    const auto stringMap = [] (const std::map<std::string, std::string>& values) {
+        auto object = std::make_unique<juce::DynamicObject>();
+        for (const auto& [name, value] : values)
+            object->setProperty (juce::Identifier { name }, juce::String { value });
+        return juce::var { object.release() };
+    };
+    const auto blockPatterns = [] (const std::vector<std::vector<int>>& patterns) {
+        juce::Array<juce::var> outer;
+        for (const auto& pattern : patterns) {
+            juce::Array<juce::var> inner;
+            for (const auto size : pattern)
+                inner.add (size);
+            outer.add (inner);
+        }
+        return juce::var { outer };
+    };
+    juce::Array<juce::var> values;
+    for (const auto& record : records) {
+        const auto& metric = record.metric;
+        auto analyzer = std::make_unique<juce::DynamicObject>();
+        analyzer->setProperty ("id", juce::String { metric.analyzer.id });
+        analyzer->setProperty ("version", metric.analyzer.version);
+        auto metricObject = std::make_unique<juce::DynamicObject>();
+        metricObject->setProperty ("allowance", metric.allowance);
+        metricObject->setProperty ("analyzer", juce::var { analyzer.release() });
+        metricObject->setProperty ("finite", metric.finite);
+        metricObject->setProperty ("metric", juce::String { metric.metric });
+        metricObject->setProperty ("settings", stringMap (metric.settings));
+        metricObject->setProperty ("unit", juce::String { metric.unit });
+        metricObject->setProperty ("value", metric.value);
+
+        const auto& source = record.provenance;
+        auto provenance = std::make_unique<juce::DynamicObject>();
+        provenance->setProperty ("kind", source.kind == MetricSubjectKind::render
+                                               ? "render" : "live-registry");
+        if (source.kind == MetricSubjectKind::render) {
+            provenance->setProperty ("architecture", juce::String { source.reproducibility.architecture });
+            provenance->setProperty ("blockPatterns", blockPatterns (source.blockPatterns));
+            provenance->setProperty ("buildType", juce::String { source.reproducibility.buildType });
+            provenance->setProperty ("fixtureId", juce::String { source.fixtureId });
+            provenance->setProperty ("fixtureSha256", juce::String { source.fixtureSha256 });
+            provenance->setProperty ("inputHashes", stringMap (source.reproducibility.inputHashes));
+            provenance->setProperty ("juceCommit", juce::String { source.reproducibility.juceCommit });
+            provenance->setProperty ("outputHashes", stringMap (source.reproducibility.outputHashes));
+            provenance->setProperty ("platform", juce::String { source.reproducibility.platform });
+            provenance->setProperty ("sampleRate", source.sampleRate);
+            provenance->setProperty ("seed", static_cast<juce::int64> (source.seed));
+            provenance->setProperty ("sourceCommit", juce::String { source.reproducibility.sourceCommit });
+            provenance->setProperty ("totalSamples", static_cast<juce::int64> (source.totalSamples));
+        } else {
+            provenance->setProperty ("registryCount", static_cast<juce::int64> (source.registryCount));
+            provenance->setProperty ("registryPath", juce::String { source.registryPath });
+            provenance->setProperty ("registrySha256", juce::String { source.registrySha256 });
+            provenance->setProperty ("sourceCommit", juce::String { source.reproducibility.sourceCommit });
+        }
+        auto object = std::make_unique<juce::DynamicObject>();
+        object->setProperty ("metric", juce::var { metricObject.release() });
+        object->setProperty ("provenance", juce::var { provenance.release() });
+        values.add (juce::var { object.release() });
+    }
+    auto root = std::make_unique<juce::DynamicObject>();
+    root->setProperty ("records", values);
+    root->setProperty ("schema", "model-d.metrics.v1");
+    return canonicalJson (juce::var { root.release() });
 }
 
 } // namespace ReferenceHarness

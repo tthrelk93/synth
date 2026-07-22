@@ -284,15 +284,27 @@ private:
 
 using CandidateEvidence = std::pair<std::string, std::string>;
 
-LoadResult<std::vector<CandidateEvidence>> buildAuthoritativeCandidateEvidence (
+struct AuthoritativeCandidate {
+    std::vector<CandidateEvidence> evidence;
+    std::vector<GateResult> gates;
+};
+
+LoadResult<AuthoritativeCandidate> buildAuthoritativeCandidateEvidence (
     const juce::File& sourceRoot,
-    const FixtureIndex& index)
+    const FixtureIndex& index,
+    const AcceptanceManifest& acceptance)
 {
     TemporaryDirectory temporary;
     if (! temporary.isOwned())
-        return failure<std::vector<CandidateEvidence>> (
+        return failure<AuthoritativeCandidate> (
             "release.candidate-evidence", "temporary candidate root could not be created");
-    std::vector<CandidateEvidence> evidence;
+    AuthoritativeCandidate candidate;
+    const auto registryEvidence = writeRegistryMetricEvidence (
+        sourceRoot, temporary.directory.getChildFile ("metrics.json"), "metrics.json");
+    if (! registryEvidence.ok())
+        return { std::nullopt, registryEvidence.diagnostics };
+    candidate.evidence.emplace_back (
+        "candidate/metrics.json", registryEvidence.value->artifactSha256);
     for (const auto& indexedFixture : index.renderFixtures) {
         const auto fixture = loadRenderFixture (
             sourceRoot, sourceRoot.getChildFile (indexedFixture.relativePath));
@@ -309,13 +321,19 @@ LoadResult<std::vector<CandidateEvidence>> buildAuthoritativeCandidateEvidence (
         for (const auto& file : *files.value) {
             const auto relative = file.getRelativePathFrom (temporary.directory).toStdString();
             if (relative.empty() || relative.starts_with (".."))
-                return failure<std::vector<CandidateEvidence>> (
+                return failure<AuthoritativeCandidate> (
                     "release.candidate-evidence",
                     "authoritative candidate artifact escaped its temporary root");
-            evidence.emplace_back ("candidate/" + relative, sha256File (file));
+            candidate.evidence.emplace_back ("candidate/" + relative, sha256File (file));
         }
     }
-    return { std::move (evidence), {} };
+    const auto gates = buildF0GateResults (
+        sourceRoot, index, acceptance,
+        std::span<const GateMetricEvidence> { &*registryEvidence.value, 1 });
+    if (! gates.ok())
+        return { std::nullopt, gates.diagnostics };
+    candidate.gates = std::move (*gates.value);
+    return { std::move (candidate), {} };
 }
 
 std::optional<std::string> boundedRelativePath (const juce::File& root,
@@ -678,7 +696,8 @@ LoadResult<std::vector<RequirementDefinition>> loadRequirementMap (
 LoadResult<std::vector<GateResult>> buildF0GateResults (
     const juce::File& sourceRoot,
     const FixtureIndex& index,
-    const AcceptanceManifest& acceptance)
+    const AcceptanceManifest& acceptance,
+    const std::span<const GateMetricEvidence> metricEvidence)
 {
     const auto smoothing = expandSmoothingFixtures (sourceRoot, index, acceptance);
     if (! smoothing.ok())
@@ -686,21 +705,12 @@ LoadResult<std::vector<GateResult>> buildF0GateResults (
     const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
     const std::span<const SmoothingEvidence> noEvidence;
     auto gates = evaluateAcceptance (
-        acceptance, *smoothing.value, noEvidence, analyzers);
+        acceptance, *smoothing.value, noEvidence, analyzers, metricEvidence);
     if (! gates.ok())
         return gates;
-    const auto registryGate = std::find_if (
-        gates.value->begin(), gates.value->end(), [] (const auto& gate) {
-            return gate.id == "hard.registry.count";
-        });
-    if (registryGate == gates.value->end() || ParameterRegistry::descriptors().size() != 48)
+    if (ParameterRegistry::descriptors().size() != 48)
         return failure<std::vector<GateResult>> (
             "requirement.registry-gate", "exact 48-descriptor registry gate is unavailable");
-    const auto registryPath = std::string { "Tests/fixtures/parameters/parameter-registry-v2.json" };
-    registryGate->status = Status::pass;
-    registryGate->reasonCode = "registry.count-pass";
-    registryGate->artifactPath = registryPath;
-    registryGate->artifactSha256 = sha256File (sourceRoot.getChildFile (registryPath));
     return gates;
 }
 
@@ -921,15 +931,20 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
         *acceptance.value);
     if (! requirements.ok())
         return { std::nullopt, requirements.diagnostics };
-    const auto authoritativeGates = buildF0GateResults (
+    const auto authoritativeCandidate = buildAuthoritativeCandidateEvidence (
         sourceRoot, *index.value, *acceptance.value);
-    if (! authoritativeGates.ok())
-        return { std::nullopt, authoritativeGates.diagnostics };
+    if (! authoritativeCandidate.ok())
+        return { std::nullopt, authoritativeCandidate.diagnostics };
+    const auto& authoritativeGates = authoritativeCandidate.value->gates;
     const auto submittedGates = parseGatePayload (root->getProperty ("gates"));
     if (! submittedGates.ok())
         return { std::nullopt, submittedGates.diagnostics };
+    auto reportFormGates = authoritativeGates;
+    for (auto& gate : reportFormGates)
+        if (gate.status == Status::pass && gate.artifactPath == "metrics.json")
+            gate.artifactPath = "candidate/metrics.json";
     if (canonicalJson (gateArrayJson (*submittedGates.value))
-        != canonicalJson (gateArrayJson (*authoritativeGates.value)))
+        != canonicalJson (gateArrayJson (reportFormGates)))
         return failure<bool> (
             "release.gate-evidence", "submitted gate evidence is not authoritative");
 
@@ -969,10 +984,11 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
     };
     bool submittedAllPass = true;
     std::vector<std::string> expectedCandidatePaths;
+    expectedCandidatePaths.push_back ("candidate/metrics.json");
     for (const auto& fixture : index.value->renderFixtures) {
         const auto prefix = "candidate/renders/" + fixture.id + "/";
         for (const auto* name : { "render.json", "control-trace.json", "event-trace.json",
-                                  "main.wav", "phones.wav" })
+                                  "main.wav", "phones.wav", "metrics.json" })
             expectedCandidatePaths.push_back (prefix + name);
     }
     std::vector<CandidateEvidence> submittedCandidateEvidence;
@@ -1016,13 +1032,20 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
             if (path.starts_with ("candidate/")) {
                 const auto candidate = resolveBoundedRegularFile (
                     reportFile.getParentDirectory(), path.substr (10));
-                if (! candidate.ok() || id != "TST-001"
-                    || ! uniqueCandidatePaths.insert (path).second)
+                const auto isCandidateInventory = id == "TST-001";
+                const auto isRegistryGateArtifact = path == "candidate/metrics.json"
+                    && std::find (gateIds.begin(), gateIds.end(), "hard.registry.count")
+                           != gateIds.end();
+                if (! candidate.ok()
+                    || (! isCandidateInventory && ! isRegistryGateArtifact)
+                    || (isCandidateInventory
+                        && ! uniqueCandidatePaths.insert (path).second))
                     return failure<bool> (
                         "release.report-mismatch",
                         "candidate evidence placement is not authoritative");
                 resolved = *candidate.value;
-                submittedCandidateEvidence.emplace_back (path, hash);
+                if (isCandidateInventory)
+                    submittedCandidateEvidence.emplace_back (path, hash);
             } else {
                 const auto source = resolveBoundedRegularFile (sourceRoot, path);
                 if (! source.ok())
@@ -1046,23 +1069,19 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
             "release.report-mismatch",
             "candidate evidence, counts, or readiness disagree with authoritative inputs");
 
-    const auto authoritativeCandidateEvidence = buildAuthoritativeCandidateEvidence (
-        sourceRoot, *index.value);
-    if (! authoritativeCandidateEvidence.ok())
-        return { std::nullopt, authoritativeCandidateEvidence.diagnostics };
-    if (submittedCandidateEvidence != *authoritativeCandidateEvidence.value)
+    if (submittedCandidateEvidence != authoritativeCandidate.value->evidence)
         return failure<bool> (
             "release.report-mismatch",
             "candidate evidence does not match an authoritative renderer replay");
     auto* candidateDefinition = definitionsById.at ("TST-001");
-    for (const auto& [path, hash] : *authoritativeCandidateEvidence.value) {
+    for (const auto& [path, hash] : authoritativeCandidate.value->evidence) {
         candidateDefinition->artifactPaths.push_back (path);
         candidateDefinition->artifactSha256.push_back (hash);
     }
 
     const auto rebuilt = buildRequirementReport (
         sourceRoot, reportFile.getParentDirectory(), *requirements.value,
-        *authoritativeGates.value, *acceptance.value);
+        authoritativeGates, *acceptance.value);
     if (! rebuilt.ok())
         return { std::nullopt, rebuilt.diagnostics };
     if (text != canonicalJson (reportJson (*rebuilt.value)))

@@ -27,6 +27,6 @@
     {"sample": 1024, "sequence": 7, "bytes": [128, 60, 0]}
   ],
   "input": {"kind": "silence"},
-  "analyzers": ["exact-control-trace", "exact-event-trace"],
+  "analyzers": ["signal.stats.v1"],
   "requirements": ["PAR-004", "PAR-006"]
 }

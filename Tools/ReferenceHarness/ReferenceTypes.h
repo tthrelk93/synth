@@ -144,12 +144,72 @@ struct MetricResult {
     std::map<std::string, std::string> settings;
 };
 
+enum class MetricSubjectKind { render, liveRegistry };
+
+struct MetricProvenance {
+    MetricSubjectKind kind = MetricSubjectKind::render;
+    std::string fixtureId;
+    std::string fixtureSha256;
+    double sampleRate = 0.0;
+    std::uint64_t totalSamples = 0;
+    std::uint64_t seed = 0;
+    std::vector<std::vector<int>> blockPatterns;
+    ReproducibilityInfo reproducibility;
+    std::string registryPath;
+    std::string registrySha256;
+    std::uint64_t registryCount = 0;
+};
+
+struct MetricEvidenceRecord {
+    MetricResult metric;
+    MetricProvenance provenance;
+};
+
+struct GateMetricEvidence {
+    std::string gateId;
+    MetricEvidenceRecord record;
+    juce::File artifactFile;
+    std::string artifactPath;
+    std::string artifactSha256;
+};
+
 enum class GateClassification {
     hardSoftware,
     published,
     derivedSoftware,
     measuredHardware,
     performance
+};
+
+struct PublishedProvenance {
+    std::string source;
+    std::string sourceVersion;
+    std::string page;
+};
+
+struct MeasuredHardwareProvenance {
+    std::string referenceStatus;
+    std::string referenceSet;
+    std::string bandArtifact;
+    std::vector<std::string> rawSha256;
+    std::string instrument;
+    std::string environment;
+    std::string captureChain;
+    int repetitionCount = 0;
+    std::string repetitionStatistic;
+    std::string uncertaintyMethod;
+    double uncertaintyValue = 0.0;
+    std::string approver;
+    std::string approvalDate;
+};
+
+struct PerformanceProvenance {
+    std::string targetSystem;
+    std::string budgetBasis;
+    std::string rationale;
+    std::string reviewStatus;
+    std::string reviewer;
+    std::string reviewDate;
 };
 
 struct GateDefinition {
@@ -163,6 +223,9 @@ struct GateDefinition {
     double value = 0.0;
     double allowance = 0.0;
     std::map<std::string, std::string> provenance;
+    std::optional<PublishedProvenance> published;
+    std::optional<MeasuredHardwareProvenance> measuredHardware;
+    std::optional<PerformanceProvenance> performance;
     std::string artifactPath;
     std::string artifactSha256;
 };

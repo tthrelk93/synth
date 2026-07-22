@@ -19,5 +19,6 @@ private:
 };
 
 juce::String metricResultsJson (std::span<const MetricResult> metrics);
+juce::String metricEvidenceJson (std::span<const MetricEvidenceRecord> records);
 
 } // namespace ReferenceHarness

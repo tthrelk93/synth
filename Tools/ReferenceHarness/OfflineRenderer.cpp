@@ -483,6 +483,65 @@ bool writeFloatWav (const juce::File& file,
     return writer->writeFromAudioSampleBuffer (audio, 0, frames);
 }
 
+LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetrics (
+    const RenderFixture& fixture,
+    const std::span<const RenderResult> results)
+{
+    if (results.empty())
+        return failure<std::vector<MetricEvidenceRecord>> (
+            "metrics.render-empty", "render metrics require at least one immutable result");
+    const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
+    std::vector<MetricEvidenceRecord> records;
+    for (const auto& analyzerId : fixture.analyzers) {
+        std::optional<juce::String> expected;
+        std::vector<MetricResult> canonicalMetrics;
+        for (const auto& result : results) {
+            std::vector<double> control;
+            control.reserve (result.controlTrace.size());
+            for (const auto& point : result.controlTrace)
+                control.push_back (point.normalizedValue);
+            AnalysisRequest request;
+            if (analyzerId == "signal.stats.v1") {
+                request.audio = result.main;
+            } else if (analyzerId == "audio.click.v1") {
+                request.audio = result.main;
+                request.eventSample = 0;
+                request.durationSamples = fixture.config.totalSamples - 1;
+            } else {
+                request.control = control;
+                request.eventSample = 0;
+                request.start = control.empty() ? 0.0 : control.front();
+                request.target = control.empty() ? 0.0 : control.back();
+                request.durationSamples = control.size() > 1 ? control.size() - 1 : 0;
+            }
+            const auto analyzed = analyzers.analyze (analyzerId, request);
+            if (! analyzed.ok() || ! analyzed.value.has_value())
+                return { std::nullopt, analyzed.diagnostics };
+            const auto serialized = metricResultsJson (*analyzed.value);
+            if (expected.has_value() && serialized != *expected)
+                return failure<std::vector<MetricEvidenceRecord>> (
+                    "metrics.block-divergence",
+                    "declared analyzer metrics must be identical across block patterns");
+            expected = serialized;
+            if (canonicalMetrics.empty())
+                canonicalMetrics = *analyzed.value;
+        }
+
+        MetricProvenance provenance;
+        provenance.kind = MetricSubjectKind::render;
+        provenance.fixtureId = fixture.id;
+        provenance.fixtureSha256 = sha256File (fixture.fixtureFile);
+        provenance.sampleRate = fixture.config.sampleRate;
+        provenance.totalSamples = fixture.config.totalSamples;
+        provenance.seed = fixture.config.seed;
+        provenance.blockPatterns = fixture.config.blockPatterns;
+        provenance.reproducibility = results.front().reproducibility;
+        for (auto& metric : canonicalMetrics)
+            records.push_back ({ std::move (metric), provenance });
+    }
+    return { std::move (records), {} };
+}
+
 LoadResult<FixtureIndex> validateIndexAndRenderFixtures (const juce::File& indexPath)
 {
     const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
@@ -600,6 +659,7 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     const auto eventFile = newDirectory.getChildFile ("event-trace.json");
     const auto mainFile = newDirectory.getChildFile ("main.wav");
     const auto phonesFile = newDirectory.getChildFile ("phones.wav");
+    const auto metricsFile = newDirectory.getChildFile ("metrics.json");
     const auto renderFile = newDirectory.getChildFile ("render.json");
 
     if (! controlFile.replaceWithText (canonicalJson (controlTraceJson (canonical)), false, false, "\n")
@@ -611,10 +671,20 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
         return failure<std::vector<juce::File>> ("output.write",
                                                  "candidate artifact could not be written");
 
+    const auto metrics = analyzeFixtureMetrics (fixture, results);
+    if (! metrics.ok()
+        || ! metricsFile.replaceWithText (
+            metricEvidenceJson (*metrics.value), false, false, "\n"))
+        return failure<std::vector<juce::File>> (
+            metrics.ok() ? "output.write" : metrics.diagnostics.front().code,
+            metrics.ok() ? "candidate metric artifact could not be written"
+                         : metrics.diagnostics.front().message);
+
     std::map<std::string, std::string> outputHashes {
         { "control-trace.json", sha256File (controlFile) },
         { "event-trace.json", sha256File (eventFile) },
         { "main.wav", sha256File (mainFile) },
+        { "metrics.json", sha256File (metricsFile) },
         { "phones.wav", sha256File (phonesFile) },
     };
     juce::Array<juce::var> patterns;
@@ -648,7 +718,53 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
         return failure<std::vector<juce::File>> ("output.write",
                                                  "candidate render manifest could not be written");
 
-    return { std::vector<juce::File> { renderFile, controlFile, eventFile, mainFile, phonesFile }, {} };
+    return { std::vector<juce::File> {
+                 renderFile, controlFile, eventFile, mainFile, phonesFile, metricsFile,
+             }, {} };
+}
+
+LoadResult<GateMetricEvidence> writeRegistryMetricEvidence (
+    const juce::File& sourceRoot,
+    const juce::File& metricsFile,
+    std::string artifactPath)
+{
+    if (metricsFile.existsAsFile())
+        return failure<GateMetricEvidence> (
+            "metrics.exists", "registry metric artifact must not already exist");
+    const auto registryPath = std::string {
+        "Tests/fixtures/parameters/parameter-registry-v2.json"
+    };
+    const auto registryFile = resolveBoundedRegularFile (sourceRoot, registryPath);
+    if (! registryFile.ok())
+        return { std::nullopt, registryFile.diagnostics };
+    std::vector<double> immutableRegistry;
+    immutableRegistry.reserve (ParameterRegistry::descriptors().size());
+    for (size_t index = 0; index < ParameterRegistry::descriptors().size(); ++index)
+        immutableRegistry.push_back (static_cast<double> (index));
+    const auto analyzed = AnalyzerRegistry::withFoundationAnalyzers().analyze (
+        "signal.stats.v1", AnalysisRequest {
+            .metric = "sample-count", .control = immutableRegistry,
+        });
+    if (! analyzed.ok() || ! analyzed.value.has_value() || analyzed.value->size() != 1)
+        return { std::nullopt, analyzed.diagnostics };
+    MetricProvenance provenance;
+    provenance.kind = MetricSubjectKind::liveRegistry;
+    provenance.registryPath = registryPath;
+    provenance.registrySha256 = sha256File (*registryFile.value);
+    provenance.registryCount = ParameterRegistry::descriptors().size();
+    provenance.reproducibility.sourceCommit = SYNTH_SOURCE_COMMIT;
+    GateMetricEvidence evidence;
+    evidence.gateId = "hard.registry.count";
+    evidence.record = { analyzed.value->front(), std::move (provenance) };
+    evidence.artifactFile = metricsFile;
+    evidence.artifactPath = std::move (artifactPath);
+    if (! metricsFile.replaceWithText (
+            metricEvidenceJson (std::span<const MetricEvidenceRecord> { &evidence.record, 1 }),
+            false, false, "\n"))
+        return failure<GateMetricEvidence> (
+            "output.write", "registry metric artifact could not be written");
+    evidence.artifactSha256 = sha256File (metricsFile);
+    return { std::move (evidence), {} };
 }
 
 int runOfflineRendererCommand (const std::span<const std::string> arguments)
@@ -707,6 +823,14 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
         }
         const auto discardStaging = [&] { staging.deleteRecursively(); };
         std::vector<juce::File> candidateFiles;
+        const auto registryEvidence = writeRegistryMetricEvidence (
+            sourceRoot, staging.getChildFile ("metrics.json"), "metrics.json");
+        if (! registryEvidence.ok()) {
+            discardStaging();
+            printDiagnostic (registryEvidence.diagnostics.front());
+            return 1;
+        }
+        candidateFiles.push_back (registryEvidence.value->artifactFile);
         const auto rendersRoot = staging.getChildFile ("renders");
         if (! rendersRoot.createDirectory()) {
             discardStaging();
@@ -744,7 +868,8 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             return 1;
         }
         const auto gates = buildF0GateResults (
-            sourceRoot, inputs.value->index, inputs.value->acceptance);
+            sourceRoot, inputs.value->index, inputs.value->acceptance,
+            std::span<const GateMetricEvidence> { &*registryEvidence.value, 1 });
         if (! gates.ok()) {
             discardStaging();
             printDiagnostic (gates.diagnostics.front());
@@ -763,7 +888,9 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             printDiagnostic (writtenReport.diagnostics.front());
             return 1;
         }
-        if (! rendersRoot.copyDirectoryTo (output.getChildFile ("renders"))) {
+        if (! registryEvidence.value->artifactFile.copyFileTo (
+                output.getChildFile ("metrics.json"))
+            || ! rendersRoot.copyDirectoryTo (output.getChildFile ("renders"))) {
             discardStaging();
             output.deleteRecursively();
             std::cerr << "output.write: candidate render artifacts could not be finalized\n";

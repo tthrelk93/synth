@@ -41,7 +41,8 @@ struct RequirementReport {
 LoadResult<std::vector<GateResult>> buildF0GateResults (
     const juce::File& sourceRoot,
     const FixtureIndex& index,
-    const AcceptanceManifest& acceptance);
+    const AcceptanceManifest& acceptance,
+    std::span<const GateMetricEvidence> metricEvidence = {});
 
 LoadResult<std::vector<RequirementDefinition>> loadRequirementMap (
     const juce::File& sourceRoot,

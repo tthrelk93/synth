@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <set>
 
@@ -181,8 +182,9 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
     const auto controlFile = directory.getChildFile ("control-trace.json");
     const auto eventFile = directory.getChildFile ("event-trace.json");
     const auto mainFile = directory.getChildFile ("main.wav");
+    const auto metricsFile = directory.getChildFile ("metrics.json");
     const auto phonesFile = directory.getChildFile ("phones.wav");
-    const std::array files { controlFile, eventFile, mainFile, phonesFile };
+    const std::array files { controlFile, eventFile, mainFile, metricsFile, phonesFile };
     if (! directory.isDirectory() || ! renderFile.existsAsFile()
         || std::any_of (files.begin(), files.end(), [] (const auto& file) {
                return ! file.existsAsFile();
@@ -205,14 +207,15 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
     if (root == nullptr || root->getProperties().size() != 10
         || reproducibility == nullptr || reproducibility->getProperties().size() != 9
         || outputHashes == nullptr
-        || outputHashes->getProperties().size() != 4)
+        || outputHashes->getProperties().size() != 5)
         return failure<BoundCandidate> (
             "smoothing.artifact-hash", "candidate render hashes are missing or malformed");
 
-    const std::array<std::pair<const char*, juce::File>, 4> hashedFiles {
+    const std::array<std::pair<const char*, juce::File>, 5> hashedFiles {
         std::pair { "control-trace.json", controlFile },
         std::pair { "event-trace.json", eventFile },
         std::pair { "main.wav", mainFile },
+        std::pair { "metrics.json", metricsFile },
         std::pair { "phones.wav", phonesFile },
     };
     for (const auto& [name, file] : hashedFiles) {
@@ -483,7 +486,8 @@ LoadResult<GateDefinition> readGate (const juce::DynamicObject& object,
 
     if (const auto* allowance = property (object, "allowance"); allowance != nullptr) {
         if ((! allowance->isInt() && ! allowance->isInt64() && ! allowance->isDouble())
-            || ! std::isfinite (static_cast<double> (*allowance)))
+            || ! std::isfinite (static_cast<double> (*allowance))
+            || static_cast<double> (*allowance) < 0.0)
             return failure<GateDefinition> (
                 "acceptance.value", "acceptance allowance must be finite");
         gate.allowance = static_cast<double> (*allowance);
@@ -510,6 +514,84 @@ bool readProvenance (const juce::DynamicObject& object,
             return false;
         gate.provenance.emplace (name, std::move (value));
     }
+    return true;
+}
+
+bool validIsoDate (const std::string& value)
+{
+    if (value.size() != 10 || value[4] != '-' || value[7] != '-')
+        return false;
+    for (size_t index = 0; index < value.size(); ++index)
+        if (index != 4 && index != 7
+            && std::isdigit (static_cast<unsigned char> (value[index])) == 0)
+            return false;
+    const auto year = std::stoi (value.substr (0, 4));
+    const auto month = static_cast<unsigned> (std::stoi (value.substr (5, 2)));
+    const auto day = static_cast<unsigned> (std::stoi (value.substr (8, 2)));
+    return std::chrono::year_month_day { std::chrono::year { year },
+                                         std::chrono::month { month },
+                                         std::chrono::day { day } }.ok();
+}
+
+bool readPublishedProvenance (const juce::DynamicObject& object, GateDefinition& gate)
+{
+    PublishedProvenance provenance;
+    if (! readString (object, "source", provenance.source)
+        || ! readString (object, "sourceVersion", provenance.sourceVersion)
+        || ! readString (object, "page", provenance.page))
+        return false;
+    gate.published = std::move (provenance);
+    return true;
+}
+
+bool readMeasuredHardwareProvenance (const juce::DynamicObject& object,
+                                     GateDefinition& gate)
+{
+    MeasuredHardwareProvenance provenance;
+    const auto* rawHashesValue = property (object, "rawSha256");
+    const auto* rawHashes = rawHashesValue == nullptr ? nullptr : rawHashesValue->getArray();
+    const auto* repetitionCount = property (object, "repetitionCount");
+    if (! readString (object, "referenceStatus", provenance.referenceStatus)
+        || provenance.referenceStatus != "approved"
+        || ! readString (object, "referenceSet", provenance.referenceSet)
+        || ! readString (object, "bandArtifact", provenance.bandArtifact)
+        || rawHashes == nullptr || rawHashes->isEmpty()
+        || ! readString (object, "instrument", provenance.instrument)
+        || ! readString (object, "environment", provenance.environment)
+        || ! readString (object, "captureChain", provenance.captureChain)
+        || repetitionCount == nullptr || ! repetitionCount->isInt()
+        || static_cast<int> (*repetitionCount) <= 0
+        || ! readString (object, "repetitionStatistic", provenance.repetitionStatistic)
+        || ! readString (object, "uncertaintyMethod", provenance.uncertaintyMethod)
+        || ! readNumber (object, "uncertaintyValue", provenance.uncertaintyValue)
+        || provenance.uncertaintyValue < 0.0
+        || ! readString (object, "approver", provenance.approver)
+        || ! readString (object, "approvalDate", provenance.approvalDate)
+        || ! validIsoDate (provenance.approvalDate))
+        return false;
+    provenance.repetitionCount = static_cast<int> (*repetitionCount);
+    for (const auto& hash : *rawHashes) {
+        if (! hash.isString() || ! lowercaseSha256 (hash.toString().toStdString()))
+            return false;
+        provenance.rawSha256.push_back (hash.toString().toStdString());
+    }
+    gate.measuredHardware = std::move (provenance);
+    return true;
+}
+
+bool readPerformanceProvenance (const juce::DynamicObject& object, GateDefinition& gate)
+{
+    PerformanceProvenance provenance;
+    if (! readString (object, "targetSystem", provenance.targetSystem)
+        || ! readString (object, "budgetBasis", provenance.budgetBasis)
+        || ! readString (object, "rationale", provenance.rationale)
+        || ! readString (object, "reviewStatus", provenance.reviewStatus)
+        || provenance.reviewStatus != "approved"
+        || ! readString (object, "reviewer", provenance.reviewer)
+        || ! readString (object, "reviewDate", provenance.reviewDate)
+        || ! validIsoDate (provenance.reviewDate))
+        return false;
+    gate.performance = std::move (provenance);
     return true;
 }
 
@@ -542,9 +624,9 @@ LoadResult<std::vector<GateDefinition>> readSection (
                         "acceptance.hard-provenance", "hard software gates require provenance");
                 break;
             case GateClassification::published:
-                if (! readProvenance (*object, *gate.value, { "source", "page" }))
+                if (! readPublishedProvenance (*object, *gate.value))
                     return failure<std::vector<GateDefinition>> (
-                        "acceptance.source", "published gates require source and page provenance");
+                        "acceptance.source", "published gates require source, source version, and page provenance");
                 break;
             case GateClassification::derivedSoftware: {
                 if (! readProvenance (*object, *gate.value,
@@ -565,16 +647,14 @@ LoadResult<std::vector<GateDefinition>> readSection (
                 break;
             }
             case GateClassification::measuredHardware:
-                if (! readProvenance (*object, *gate.value,
-                                     { "referenceSet", "bandArtifact", "rawSha256", "uncertainty" }))
+                if (! readMeasuredHardwareProvenance (*object, *gate.value))
                     return failure<std::vector<GateDefinition>> (
-                        "acceptance.reference", "measured gates require reference and uncertainty provenance");
+                        "acceptance.reference", "measured gates require approved typed capture provenance");
                 break;
             case GateClassification::performance:
-                if (! readProvenance (*object, *gate.value,
-                                     { "targetSystem", "budgetBasis", "rationale" }))
+                if (! readPerformanceProvenance (*object, *gate.value))
                     return failure<std::vector<GateDefinition>> (
-                        "acceptance.performance", "performance gates require target and budget provenance");
+                        "acceptance.performance", "performance gates require approved typed review provenance");
                 break;
         }
         gates.push_back (std::move (*gate.value));
@@ -827,7 +907,8 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
     const AcceptanceManifest& manifest,
     const std::span<const SmoothingCase> smoothingCases,
     const std::span<const SmoothingEvidence> evidence,
-    const AnalyzerRegistry& analyzers)
+    const AnalyzerRegistry& analyzers,
+    const std::span<const GateMetricEvidence> metricEvidence)
 {
     std::vector<GateResult> results;
     const auto appendManifestSection = [&] (const std::vector<GateDefinition>& gates) {
@@ -845,6 +926,98 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
     appendManifestSection (manifest.derivedSoftware);
     appendManifestSection (manifest.measuredHardware);
     appendManifestSection (manifest.performance);
+
+    std::map<std::string, const GateDefinition*> manifestGates;
+    const auto indexManifestSection = [&] (const std::vector<GateDefinition>& gates) {
+        for (const auto& gate : gates)
+            manifestGates.emplace (gate.id, &gate);
+    };
+    indexManifestSection (manifest.hardSoftware);
+    indexManifestSection (manifest.published);
+    indexManifestSection (manifest.derivedSoftware);
+    indexManifestSection (manifest.measuredHardware);
+    indexManifestSection (manifest.performance);
+    std::set<std::string> metricEvidenceIds;
+    for (const auto& evidenceItem : metricEvidence) {
+        const auto definition = manifestGates.find (evidenceItem.gateId);
+        if (definition == manifestGates.end()
+            || ! metricEvidenceIds.insert (evidenceItem.gateId).second)
+            return failure<std::vector<GateResult>> (
+                "acceptance.metric-evidence-identity",
+                "metric evidence gate IDs must be unique declared manifest gates");
+        const auto result = std::find_if (results.begin(), results.end(), [&] (const auto& gate) {
+            return gate.id == evidenceItem.gateId;
+        });
+        const auto& gate = *definition->second;
+        const auto& metric = evidenceItem.record.metric;
+        const auto registered = analyzers.find (metric.analyzer.id);
+        auto validProvenance = false;
+        auto authoritativeMetric = true;
+        const auto& provenance = evidenceItem.record.provenance;
+        if (provenance.kind == MetricSubjectKind::liveRegistry) {
+            const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+            const auto registryFile = resolveBoundedRegularFile (
+                sourceRoot, provenance.registryPath);
+            validProvenance = provenance.registryPath
+                                    == "Tests/fixtures/parameters/parameter-registry-v2.json"
+                           && provenance.registryCount == ParameterRegistry::descriptors().size()
+                           && provenance.registryCount == 48
+                           && provenance.reproducibility.sourceCommit == SYNTH_SOURCE_COMMIT
+                           && registryFile.ok()
+                           && provenance.registrySha256 == sha256File (*registryFile.value);
+            std::vector<double> immutableRegistry;
+            immutableRegistry.reserve (ParameterRegistry::descriptors().size());
+            for (size_t index = 0; index < ParameterRegistry::descriptors().size(); ++index)
+                immutableRegistry.push_back (static_cast<double> (index));
+            const auto rerun = analyzers.analyze (
+                gate.analyzer.id, AnalysisRequest {
+                    .metric = gate.metric, .control = immutableRegistry,
+                });
+            authoritativeMetric = rerun.ok() && rerun.value.has_value()
+                && rerun.value->size() == 1
+                && metricResultsJson (*rerun.value)
+                       == metricResultsJson (
+                           std::span<const MetricResult> { &metric, 1 });
+        } else {
+            validProvenance = ! provenance.fixtureId.empty()
+                           && lowercaseSha256 (provenance.fixtureSha256)
+                           && provenance.sampleRate > 0.0 && provenance.totalSamples > 0
+                           && ! provenance.blockPatterns.empty()
+                           && provenance.reproducibility.fixtureSha256
+                                  == provenance.fixtureSha256
+                           && provenance.reproducibility.sourceCommit == SYNTH_SOURCE_COMMIT;
+        }
+        const auto exactArtifact = evidenceItem.artifactFile.existsAsFile()
+            && lowercaseSha256 (evidenceItem.artifactSha256)
+            && sha256File (evidenceItem.artifactFile) == evidenceItem.artifactSha256
+            && evidenceItem.artifactFile.loadFileAsString()
+                   == metricEvidenceJson (
+                       std::span<const MetricEvidenceRecord> { &evidenceItem.record, 1 });
+        const auto validMetric = registered.ok()
+            && metric.analyzer.id == gate.analyzer.id
+            && metric.analyzer.version == gate.analyzer.version
+            && registered.value->version == metric.analyzer.version
+            && metric.metric == gate.metric && metric.unit == gate.unit
+            && metric.finite && std::isfinite (metric.value)
+            && std::isfinite (metric.allowance) && metric.allowance >= 0.0
+            && metric.allowance == gate.allowance && authoritativeMetric;
+        if (! exactArtifact || evidenceItem.artifactPath.empty()
+            || ! validProvenance || ! validMetric) {
+            result->status = Status::fail;
+            result->reasonCode = "acceptance.metric-evidence-invalid";
+            continue;
+        }
+        if (std::abs (metric.value - gate.value) > gate.allowance) {
+            result->status = Status::fail;
+            result->reasonCode = "acceptance.metric-out-of-bound";
+            continue;
+        }
+        result->status = Status::pass;
+        result->reasonCode = "acceptance.metric-pass";
+        result->metric = metric;
+        result->artifactPath = evidenceItem.artifactPath;
+        result->artifactSha256 = evidenceItem.artifactSha256;
+    }
 
     std::map<std::string, const SmoothingEvidence*> evidenceByParameter;
     for (const auto& item : evidence) {

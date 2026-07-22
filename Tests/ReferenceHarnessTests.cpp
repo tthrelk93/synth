@@ -328,8 +328,8 @@ public:
             "control.step.v1", AnalysisRequest { .eventSample = 10, .durationSamples = 240,
                                                    .start = 0.0, .target = 1.0,
                                                    .control = fiveMs });
-        expectMetric (five, "first-change-sample", "samples", 11.0);
-        expectMetric (five, "settled-sample", "samples", 250.0);
+        expectMetric (five, "first-change-sample", "samples", 10.0);
+        expectMetric (five, "settled-sample", "samples", 249.0);
         expectMetric (five, "monotonic", "boolean", 1.0);
 
         const auto tenMs = makeRamp (10, 480, false);
@@ -337,7 +337,8 @@ public:
             "control.step.v1", AnalysisRequest { .eventSample = 10, .durationSamples = 480,
                                                    .start = 0.0, .target = 1.0,
                                                    .control = tenMs });
-        expectMetric (ten, "settled-sample", "samples", 490.0);
+        expectMetric (ten, "first-change-sample", "samples", 10.0);
+        expectMetric (ten, "settled-sample", "samples", 489.0);
 
         const std::array<double, 6> overshoot { 0.0, 0.0, 0.5, 1.1, 1.0, 1.0 };
         const auto over = registry.analyze (
@@ -359,6 +360,7 @@ public:
                         { "allowance", "8*epsilon*max(1,travel)" },
                         { "first-change", "first sample at/after event outside start allowance" },
                         { "ideal-increment", "travel/duration-or-travel-for-zero-duration" },
+                        { "ramp-origin", "first ideal increment occurs at event sample" },
                         { "settled", "first sample whose suffix remains within target allowance" },
                     },
                     "control-step settings must be exact and explicit");
@@ -626,13 +628,13 @@ public:
             .replaceFirstOccurrenceOf (R"("status": "draft")", R"("status": "approved")")
             .replaceFirstOccurrenceOf (
                 R"("published": [])",
-                R"("published": [{"id":"published.probe","classification":"published","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","page":"1"}])")
+                R"("published": [{"id":"published.probe","classification":"published","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","sourceVersion":"revision 2","page":"1"}])")
             .replaceFirstOccurrenceOf (
                 R"("measuredHardware": [])",
-                R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware","status":"awaiting-approved-reference","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceSet":"approved set","bandArtifact":"band.json","rawSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","uncertainty":"approved method"}])")
+                R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware","status":"awaiting-approved-reference","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceStatus":"approved","referenceSet":"approved set","bandArtifact":"band.json","rawSha256":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],"instrument":"calibrated interface","environment":"controlled studio","captureChain":"synth to interface","repetitionCount":3,"repetitionStatistic":"arithmetic mean","uncertaintyMethod":"sample standard deviation","uncertaintyValue":0.25,"approver":"Hardware Reviewer","approvalDate":"2026-07-22"}])")
             .replaceFirstOccurrenceOf (
                 R"("performance": [])",
-                R"("performance": [{"id":"performance.probe","classification":"performance","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"targetSystem":"approved system","budgetBasis":"approved budget","rationale":"approved rationale"}])");
+                R"("performance": [{"id":"performance.probe","classification":"performance","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"targetSystem":"approved system","budgetBasis":"approved budget","rationale":"approved rationale","reviewStatus":"approved","reviewer":"Performance Reviewer","reviewDate":"2026-07-22"}])");
         expectAcceptanceDiagnostic (sourceRoot, registry, approvedWithOpenEvidence,
                                     "acceptance.incomplete");
         expectAcceptanceDiagnostic (
@@ -738,17 +740,17 @@ public:
                 R"("published": [])",
                 juce::String { R"("published": [{"id":"published.probe","classification":"published",)" }
                     + passArtifact
-                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","page":"1"}])")
+                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","sourceVersion":"revision 2","page":"1"}])")
             .replaceFirstOccurrenceOf (
                 R"("measuredHardware": [])",
                 juce::String { R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware",)" }
                     + passArtifact
-                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceSet":"approved set","bandArtifact":"band.json","rawSha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","uncertainty":"approved method"}])")
+                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceStatus":"approved","referenceSet":"approved set","bandArtifact":"band.json","rawSha256":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],"instrument":"calibrated interface","environment":"controlled studio","captureChain":"synth to interface","repetitionCount":3,"repetitionStatistic":"arithmetic mean","uncertaintyMethod":"sample standard deviation","uncertaintyValue":0.25,"approver":"Hardware Reviewer","approvalDate":"2026-07-22"}])")
             .replaceFirstOccurrenceOf (
                 R"("performance": [])",
                 juce::String { R"("performance": [{"id":"performance.probe","classification":"performance",)" }
                     + passArtifact
-                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"targetSystem":"approved system","budgetBasis":"approved budget","rationale":"approved rationale"}])");
+                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"targetSystem":"approved system","budgetBasis":"approved budget","rationale":"approved rationale","reviewStatus":"approved","reviewer":"Performance Reviewer","reviewDate":"2026-07-22"}])");
         const TemporaryDirectory approvedRoot { "model-d-acceptance-approved" };
         expect (approvedRoot.isOwned(), "approved manifest root must be owned");
         if (! approvedRoot.isOwned())
@@ -758,6 +760,60 @@ public:
         const auto approvedManifest = loadAcceptanceManifest (sourceRoot, approvedFile, registry);
         expect (approvedManifest.ok(),
                 "all five complete evidence sections may produce a globally approved manifest");
+        if (approvedManifest.value.has_value()) {
+            expect (approvedManifest.value->published.front().published.has_value()
+                        && approvedManifest.value->published.front().published->sourceVersion
+                               == "revision 2",
+                    "published provenance must load into its typed record");
+            expect (approvedManifest.value->measuredHardware.front().measuredHardware.has_value()
+                        && approvedManifest.value->measuredHardware.front()
+                               .measuredHardware->rawSha256.size() == 1,
+                    "hardware provenance must load typed raw capture hashes");
+            expect (approvedManifest.value->performance.front().performance.has_value()
+                        && approvedManifest.value->performance.front().performance->reviewStatus
+                               == "approved",
+                    "performance provenance must load its typed review record");
+        }
+
+        const auto expectTypedProvenanceFailure = [&] (const juce::String& needle,
+                                                       const juce::String& replacement,
+                                                       const std::string_view code) {
+            expectAcceptanceDiagnostic (
+                sourceRoot, registry,
+                completeApproved.replaceFirstOccurrenceOf (needle, replacement), code);
+        };
+        for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 3> {{
+                 { R"("source":"approved primary source",)", R"("source":"",)" },
+                 { R"("sourceVersion":"revision 2",)", R"("sourceVersion":"",)" },
+                 { R"("page":"1")", R"("page":"")" },
+             }})
+            expectTypedProvenanceFailure (needle, replacement, "acceptance.source");
+        for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 14> {{
+                 { R"("referenceStatus":"approved",)", R"("referenceStatus":"pending",)" },
+                 { R"("referenceSet":"approved set",)", R"("referenceSet":"",)" },
+                 { R"("bandArtifact":"band.json",)", R"("bandArtifact":"",)" },
+                 { R"("rawSha256":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],)", R"("rawSha256":[],)" },
+                 { R"("instrument":"calibrated interface",)", R"("instrument":"",)" },
+                 { R"("environment":"controlled studio",)", R"("environment":"",)" },
+                 { R"("captureChain":"synth to interface",)", R"("captureChain":"",)" },
+                 { R"("repetitionCount":3,)", R"("repetitionCount":0,)" },
+                 { R"("repetitionStatistic":"arithmetic mean",)", R"("repetitionStatistic":"",)" },
+                 { R"("uncertaintyMethod":"sample standard deviation",)", R"("uncertaintyMethod":"",)" },
+                 { R"("uncertaintyValue":0.25,)", R"("uncertaintyValue":-0.25,)" },
+                 { R"("approver":"Hardware Reviewer",)", R"("approver":"",)" },
+                 { R"("approvalDate":"2026-07-22")", R"("approvalDate":"2026-02-30")" },
+                 { R"("rawSha256":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],)", R"("rawSha256":["ABC"],)" },
+             }})
+            expectTypedProvenanceFailure (needle, replacement, "acceptance.reference");
+        for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 6> {{
+                 { R"("targetSystem":"approved system",)", R"("targetSystem":"",)" },
+                 { R"("budgetBasis":"approved budget",)", R"("budgetBasis":"",)" },
+                 { R"("rationale":"approved rationale",)", R"("rationale":"",)" },
+                 { R"("reviewStatus":"approved",)", R"("reviewStatus":"pending",)" },
+                 { R"("reviewer":"Performance Reviewer",)", R"("reviewer":"",)" },
+                 { R"("reviewDate":"2026-07-22")", R"("reviewDate":"not-a-date")" },
+             }})
+            expectTypedProvenanceFailure (needle, replacement, "acceptance.performance");
         expectAcceptanceDiagnostic (
             sourceRoot, registry,
             completeApproved.replaceFirstOccurrenceOf (passArtifact, R"("status": "not-run")"),
@@ -918,7 +974,7 @@ public:
         fixtureFile.replaceWithText (
             juce::String { R"({"schema":"model-d.render-fixture.v1","id":"none-step-evidence","state":{"kind":"hostState","path":"state.xml","sha256":")" }
             + sha256File (stateFile)
-            + R"(","version":2,"contourContract":"canonicalContours"},"render":{"sampleRate":48000,"totalSamples":512,"seed":0,"blockPatterns":[[64],[17,31]]},"automation":[{"sample":0,"sequence":0,"parameterId":"a440HzOnOff","normalizedValue":0.0},{"sample":256,"sequence":1,"parameterId":"a440HzOnOff","normalizedValue":1.0}],"midi":[],"input":{"kind":"silence"},"analyzers":["exact-control-trace","exact-event-trace"],"requirements":["PAR-006"]})");
+            + R"(","version":2,"contourContract":"canonicalContours"},"render":{"sampleRate":48000,"totalSamples":512,"seed":0,"blockPatterns":[[64],[17,31]]},"automation":[{"sample":0,"sequence":0,"parameterId":"a440HzOnOff","normalizedValue":0.0},{"sample":256,"sequence":1,"parameterId":"a440HzOnOff","normalizedValue":1.0}],"midi":[],"input":{"kind":"silence"},"analyzers":["signal.stats.v1"],"requirements":["PAR-006"]})");
         const auto evidenceFixture = loadRenderFixture (candidateRoot.directory, fixtureFile);
         expect (evidenceFixture.ok(), "smoothing evidence fixture must load through Task 2");
         if (! evidenceFixture.value.has_value())
@@ -1065,12 +1121,12 @@ private:
     {
         std::vector<double> values (eventSample + durationSamples + 3,
                                     downward ? 1.0 : 0.0);
-        for (size_t offset = 1; offset <= durationSamples; ++offset) {
-            const auto normalized = static_cast<double> (offset)
+        for (size_t offset = 0; offset < durationSamples; ++offset) {
+            const auto normalized = static_cast<double> (offset + 1)
                                   / static_cast<double> (durationSamples);
             values[eventSample + offset] = downward ? 1.0 - normalized : normalized;
         }
-        std::fill (values.begin() + static_cast<std::ptrdiff_t> (eventSample + durationSamples),
+        std::fill (values.begin() + static_cast<std::ptrdiff_t> (eventSample + durationSamples - 1),
                    values.end(), downward ? 0.0 : 1.0);
         return values;
     }
@@ -1340,6 +1396,10 @@ public:
                                     R"("input": {"kind": "silence"})",
                                     R"("input": {"kind": "sine", "value": -1e300, "frequencyHz": 440})"),
                                 "fixture.input-value");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("signal.stats.v1")",
+                                    R"("signal.stats.v2")"),
+                                "fixture.analyzer");
 
         const auto legacyText = sourceRoot.getChildFile (fixturePaths.back()).loadFileAsString();
         expectFixtureDiagnostic (sourceRoot, legacyText.replaceFirstOccurrenceOf (
@@ -1517,7 +1577,8 @@ public:
                                   fixtures.front(), *nativeSecondRun->value, candidateB)
                             : ReferenceHarness::LoadResult<std::vector<juce::File>> {};
         expect (writtenA.ok() && writtenB.ok(), "both fresh candidate directories must be written");
-        for (const auto name : { "render.json", "control-trace.json", "event-trace.json" })
+        for (const auto name : { "render.json", "control-trace.json", "event-trace.json",
+                                 "metrics.json" })
             expect (candidateA.getChildFile (name).hasIdenticalContentTo (
                         candidateB.getChildFile (name)),
                     juce::String { name } + " must be byte-identical across repeated renders");
@@ -1709,9 +1770,93 @@ public:
                                        sourceRoot, *index.value, *acceptance.value)
                                  : LoadResult<std::vector<SmoothingCase>> {};
         const std::span<const SmoothingEvidence> noEvidence;
+        const TemporaryDirectory candidateRoot { "model-d-requirement-candidate-root" };
+        expect (candidateRoot.isOwned(), "candidate root must be owned");
+        if (! candidateRoot.isOwned())
+            return;
+        const auto registryEvidence = writeRegistryMetricEvidence (
+            sourceRoot, candidateRoot.directory.getChildFile ("metrics.json"),
+            candidateRoot.directory.getChildFile ("metrics.json")
+                .getFullPathName().toStdString());
+        expect (registryEvidence.ok(), "registry gate evidence must be produced by its analyzer");
+        if (! registryEvidence.ok())
+            return;
+        beginTest ("generic metric evidence validates identity, values, provenance, and bytes");
+        const auto expectMetricEvidenceFailure = [&] (
+            GateMetricEvidence mutation, const juce::String& name,
+            const std::string_view expectedReason,
+            const AcceptanceManifest* evidenceManifest = nullptr) {
+            mutation.artifactFile = candidateRoot.directory.getChildFile (
+                "metric-negative-" + name + ".json");
+            mutation.artifactPath = mutation.artifactFile.getFullPathName().toStdString();
+            expect (mutation.artifactFile.replaceWithText (
+                        metricEvidenceJson (std::span<const MetricEvidenceRecord> {
+                            &mutation.record, 1 }), false, false, "\n"),
+                    name + " metric mutation must be written canonically");
+            mutation.artifactSha256 = sha256File (mutation.artifactFile);
+            const auto result = evaluateAcceptance (
+                evidenceManifest == nullptr ? *acceptance.value : *evidenceManifest,
+                *smoothing.value, noEvidence, registry,
+                std::span<const GateMetricEvidence> { &mutation, 1 });
+            expect (result.ok(), name + " must reduce to an honest gate failure");
+            if (! result.value.has_value())
+                return;
+            const auto gate = std::find_if (
+                result.value->begin(), result.value->end(), [] (const auto& item) {
+                    return item.id == "hard.registry.count";
+                });
+            expect (gate != result.value->end() && gate->status == Status::fail
+                        && gate->reasonCode == expectedReason && ! gate->metric.has_value()
+                        && gate->artifactPath.empty() && gate->artifactSha256.empty(),
+                    name + " must fail without a false artifact claim");
+        };
+        auto staleMetric = *registryEvidence.value;
+        staleMetric.record.metric.analyzer.version = 2;
+        expectMetricEvidenceFailure (std::move (staleMetric), "stale-analyzer",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongMetric = *registryEvidence.value;
+        wrongMetric.record.metric.metric = "finite-count";
+        expectMetricEvidenceFailure (std::move (wrongMetric), "wrong-metric",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongUnit = *registryEvidence.value;
+        wrongUnit.record.metric.unit = "samples";
+        expectMetricEvidenceFailure (std::move (wrongUnit), "wrong-unit",
+                                     "acceptance.metric-evidence-invalid");
+        auto invalidFinite = *registryEvidence.value;
+        invalidFinite.record.metric.finite = false;
+        expectMetricEvidenceFailure (std::move (invalidFinite), "invalid-finite",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongSettings = *registryEvidence.value;
+        wrongSettings.record.metric.settings["input"] = "audio";
+        expectMetricEvidenceFailure (std::move (wrongSettings), "wrong-settings",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongMetricProvenance = *registryEvidence.value;
+        wrongMetricProvenance.record.provenance.registryCount = 47;
+        expectMetricEvidenceFailure (std::move (wrongMetricProvenance), "wrong-provenance",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongArtifactHash = *registryEvidence.value;
+        wrongArtifactHash.artifactSha256 = std::string (64, '0');
+        const auto wrongHashResult = evaluateAcceptance (
+            *acceptance.value, *smoothing.value, noEvidence, registry,
+            std::span<const GateMetricEvidence> { &wrongArtifactHash, 1 });
+        const auto wrongHashGate = std::find_if (
+            wrongHashResult.value->begin(), wrongHashResult.value->end(), [] (const auto& item) {
+                return item.id == "hard.registry.count";
+            });
+        expect (wrongHashResult.ok() && wrongHashGate != wrongHashResult.value->end()
+                    && wrongHashGate->status == Status::fail
+                    && wrongHashGate->reasonCode == "acceptance.metric-evidence-invalid"
+                    && wrongHashGate->artifactPath.empty(),
+                "a changed artifact hash must fail without an artifact claim");
+        auto outOfBoundManifest = *acceptance.value;
+        outOfBoundManifest.hardSoftware.front().value = 47.0;
+        expectMetricEvidenceFailure (*registryEvidence.value, "out-of-bound",
+                                     "acceptance.metric-out-of-bound", &outOfBoundManifest);
         const auto evaluated = smoothing.ok()
                                  ? evaluateAcceptance (
-                                       *acceptance.value, *smoothing.value, noEvidence, registry)
+                                       *acceptance.value, *smoothing.value, noEvidence, registry,
+                                       std::span<const GateMetricEvidence> {
+                                           &*registryEvidence.value, 1 })
                                  : LoadResult<std::vector<GateResult>> {};
         expect (index.ok() && smoothing.ok() && evaluated.ok(),
                 "authoritative F0 gate expansion must validate");
@@ -1736,17 +1881,11 @@ public:
         expect (hardGate != gateResults.end(), "hard registry gate must exist");
         if (hardGate == gateResults.end())
             return;
-        hardGate->status = Status::pass;
-        hardGate->reasonCode = "registry.count-pass";
-        hardGate->artifactPath = "Tests/fixtures/parameters/parameter-registry-v2.json";
-        hardGate->artifactSha256 = sha256File (sourceRoot.getChildFile (
-            "Tests/fixtures/parameters/parameter-registry-v2.json"));
+        expect (hardGate->status == Status::pass && hardGate->metric.has_value()
+                    && hardGate->reasonCode == "acceptance.metric-pass",
+                "hard registry gate must pass through typed metric evidence");
 
         beginTest ("requirement reduction preserves honest mixed statuses");
-        const TemporaryDirectory candidateRoot { "model-d-requirement-candidate-root" };
-        expect (candidateRoot.isOwned(), "candidate root must be owned");
-        if (! candidateRoot.isOwned())
-            return;
         const auto report = buildRequirementReport (
             sourceRoot, candidateRoot.directory, *requirements.value, gateResults,
             *acceptance.value);
@@ -1797,11 +1936,14 @@ public:
 
         beginTest ("one dynamic unrun gate prevents a gate-complete requirement pass");
         auto oneUnrunGate = gateResults;
+        const auto sharedTestArtifact = sourceRoot.getChildFile (
+            "Tests/fixtures/parameters/parameter-registry-v2.json");
+        const auto sharedTestHash = sha256File (sharedTestArtifact);
         for (auto& gate : oneUnrunGate) {
             gate.status = Status::pass;
             gate.reasonCode = "test.gate-pass";
             gate.artifactPath = "Tests/fixtures/parameters/parameter-registry-v2.json";
-            gate.artifactSha256 = hardGate->artifactSha256;
+            gate.artifactSha256 = sharedTestHash;
         }
         const auto unrunGate = std::find_if (
             oneUnrunGate.begin(), oneUnrunGate.end(), [] (const auto& gate) {
@@ -1895,6 +2037,16 @@ public:
         };
         expectEquals (runOfflineRendererCommand (validateArguments), 0,
                       "validate must succeed without rendering");
+        const auto staleAcceptance = reportRoot.directory.getChildFile (
+            "stale-analyzer-acceptance.json");
+        expect (staleAcceptance.replaceWithText (
+            sourceRoot.getChildFile ("Tests/reference/acceptance-v1.json")
+                .loadFileAsString().replaceFirstOccurrenceOf (
+                    R"("analyzerVersion": 1)", R"("analyzerVersion": 2)")));
+        auto staleValidateArguments = validateArguments;
+        staleValidateArguments[4] = staleAcceptance.getFullPathName().toStdString();
+        expectEquals (runOfflineRendererCommand (staleValidateArguments), 1,
+                      "validate must reject a stale declared analyzer version");
         const auto cliA = reportRoot.directory.getChildFile ("cli-a");
         const auto cliB = reportRoot.directory.getChildFile ("cli-b");
         const auto runArguments = [&] (const juce::File& output) {
@@ -1913,6 +2065,32 @@ public:
         const auto cliReportB = cliB.getChildFile ("requirements-report.json");
         expect (cliReportA.hasIdenticalContentTo (cliReportB),
                 "complete CLI reports must be byte-identical");
+        expect (cliA.getChildFile ("metrics.json").existsAsFile()
+                    && cliA.getChildFile ("metrics.json").hasIdenticalContentTo (
+                        cliB.getChildFile ("metrics.json")),
+                "run must emit a canonical byte-repeatable live-registry metrics artifact");
+        for (const auto fixtureId : { "native-v2-foundation", "migrated-v2-foundation",
+                                      "legacy-contour-foundation" })
+            expect (cliA.getChildFile ("renders").getChildFile (fixtureId)
+                        .getChildFile ("metrics.json").hasIdenticalContentTo (
+                            cliB.getChildFile ("renders").getChildFile (fixtureId)
+                                .getChildFile ("metrics.json")),
+                    juce::String { fixtureId } + " metrics must be byte-repeatable");
+        const auto cliReportPayload = juce::JSON::fromString (cliReportA.loadFileAsString());
+        const auto* cliHardGate = std::find_if (
+            cliReportPayload.getDynamicObject()->getProperty ("gates").getArray()->begin(),
+            cliReportPayload.getDynamicObject()->getProperty ("gates").getArray()->end(),
+            [] (const auto& gate) {
+                return gate.getDynamicObject()->getProperty ("id").toString()
+                    == "hard.registry.count";
+            });
+        expect (cliHardGate != cliReportPayload.getDynamicObject()
+                                      ->getProperty ("gates").getArray()->end()
+                    && cliHardGate->getDynamicObject()->getProperty ("status").toString() == "pass"
+                    && ! cliHardGate->getDynamicObject()->getProperty ("metric").isVoid()
+                    && cliHardGate->getDynamicObject()->getProperty ("artifactPath").toString()
+                           == "candidate/metrics.json",
+                "hard.registry.count must pass only through typed metric evidence");
 
         beginTest ("release verification rejects coordinated report forgery");
         expectDiagnostic (verifyReleaseReady (cliReportA), "release.not-ready");
@@ -2062,6 +2240,39 @@ public:
         expect (forgedCandidateReport.replaceWithText (
             canonicalJson (forgedCandidateJson), false, false, "\n"));
         expectDiagnostic (verifyReleaseReady (forgedCandidateReport), "release.report-mismatch");
+
+        const auto tamperedMetricsRoot = reportRoot.directory.getChildFile (
+            "cli-tampered-metrics");
+        expect (cliA.copyDirectoryTo (tamperedMetricsRoot),
+                "metrics tamper fixture must copy");
+        const auto tamperedMetrics = tamperedMetricsRoot.getChildFile ("metrics.json");
+        expect (tamperedMetrics.replaceWithText (
+            tamperedMetrics.loadFileAsString() + " ", false, false, "\n"));
+        expectDiagnostic (verifyReleaseReady (tamperedMetricsRoot.getChildFile (
+                              "requirements-report.json")),
+                          "release.report-artifact");
+
+        const auto missingMetricsRoot = reportRoot.directory.getChildFile (
+            "cli-missing-metrics");
+        expect (cliA.copyDirectoryTo (missingMetricsRoot),
+                "metrics missing-file fixture must copy");
+        expect (missingMetricsRoot.getChildFile ("metrics.json").deleteFile(),
+                "metrics missing-file fixture must remove the artifact");
+        expectDiagnostic (verifyReleaseReady (missingMetricsRoot.getChildFile (
+                              "requirements-report.json")),
+                          "release.report-mismatch");
+
+        const auto tamperedRenderMetricsRoot = reportRoot.directory.getChildFile (
+            "cli-tampered-render-metrics");
+        expect (cliA.copyDirectoryTo (tamperedRenderMetricsRoot),
+                "render metrics tamper fixture must copy");
+        const auto tamperedRenderMetrics = tamperedRenderMetricsRoot.getChildFile (
+            "renders/native-v2-foundation/metrics.json");
+        expect (tamperedRenderMetrics.replaceWithText (
+            tamperedRenderMetrics.loadFileAsString() + " ", false, false, "\n"));
+        expectDiagnostic (verifyReleaseReady (tamperedRenderMetricsRoot.getChildFile (
+                              "requirements-report.json")),
+                          "release.report-artifact");
 
         const std::vector<std::string> verifyArguments {
             "verify-release", "--report", cliReportA.getFullPathName().toStdString(),

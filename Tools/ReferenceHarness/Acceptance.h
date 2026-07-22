@@ -18,6 +18,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
     const AcceptanceManifest& manifest,
     std::span<const SmoothingCase> smoothingCases,
     std::span<const SmoothingEvidence> evidence,
-    const AnalyzerRegistry& analyzers);
+    const AnalyzerRegistry& analyzers,
+    std::span<const GateMetricEvidence> metricEvidence = {});
 
 } // namespace ReferenceHarness

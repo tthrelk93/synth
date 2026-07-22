@@ -861,6 +861,17 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
 
     if (! readNonemptyStringArray (*root, "analyzers", fixture.analyzers))
         return failure<RenderFixture> ("fixture.analyzers", "render analyzers must be nonempty");
+    static const std::set<std::string> registeredAnalyzers {
+        "signal.stats.v1", "control.step.v1", "audio.click.v1",
+    };
+    std::set<std::string> uniqueAnalyzers;
+    if (std::any_of (fixture.analyzers.begin(), fixture.analyzers.end(), [&] (const auto& analyzer) {
+            return ! registeredAnalyzers.contains (analyzer)
+                || ! uniqueAnalyzers.insert (analyzer).second;
+        }))
+        return failure<RenderFixture> (
+            "fixture.analyzer",
+            "render analyzers must be unique exact registered foundation IDs and versions");
     if (! readNonemptyStringArray (*root, "requirements", fixture.requirements))
         return failure<RenderFixture> ("fixture.requirements", "render requirements must be nonempty");
 
