@@ -869,7 +869,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
             Status::notRun,
             smoothingCase.smoothingClass == ParameterRegistry::SmoothingClass::none
                 ? "smoothing.evidence-missing" : smoothingCase.reasonCode,
-            { "PAR-006" },
+            { "PAR-006", "TST-006" },
             std::nullopt, {}, {},
         };
 
@@ -975,7 +975,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
         results.push_back ({ "par006." + smoothingCase.parameterId + ".reference",
                              smoothingCase.referenceStatus,
                              smoothingCase.referenceReasonCode,
-                             { "PAR-006" }, std::nullopt, {}, {} });
+                             { "PAR-006", "TST-006" }, std::nullopt, {}, {} });
     }
     return { std::move (results), {} };
 }

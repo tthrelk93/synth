@@ -536,32 +536,6 @@ LoadResult<ValidatedInputs> validateInputs (const juce::File& indexPath,
                                *requirements.value, *smoothing.value }, {} };
 }
 
-LoadResult<std::vector<GateResult>> evaluateF0Gates (
-    const ValidatedInputs& inputs,
-    const juce::File& sourceRoot)
-{
-    const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
-    const std::span<const SmoothingEvidence> noEvidence;
-    auto gates = evaluateAcceptance (
-        inputs.acceptance, inputs.smoothing, noEvidence, analyzers);
-    if (! gates.ok())
-        return gates;
-    const auto registryGate = std::find_if (
-        gates.value->begin(), gates.value->end(), [] (const auto& gate) {
-            return gate.id == "hard.registry.count";
-        });
-    if (registryGate == gates.value->end() || ParameterRegistry::descriptors().size() != 48)
-        return failure<std::vector<GateResult>> (
-            "requirement.registry-gate", "exact 48-descriptor registry gate is unavailable");
-    const auto registryPath = std::string { "Tests/fixtures/parameters/parameter-registry-v2.json" };
-    const auto registryArtifact = sourceRoot.getChildFile (registryPath);
-    registryGate->status = Status::pass;
-    registryGate->reasonCode = "registry.count-pass";
-    registryGate->artifactPath = registryPath;
-    registryGate->artifactSha256 = sha256File (registryArtifact);
-    return gates;
-}
-
 bool appendCandidateEvidence (std::vector<RequirementDefinition>& requirements,
                               const juce::File& candidateRoot,
                               const std::vector<juce::File>& files)
@@ -769,7 +743,8 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             std::cerr << "requirement.candidate-evidence: F0 artifact mapping failed\n";
             return 1;
         }
-        const auto gates = evaluateF0Gates (*inputs.value, sourceRoot);
+        const auto gates = buildF0GateResults (
+            sourceRoot, inputs.value->index, inputs.value->acceptance);
         if (! gates.ok()) {
             discardStaging();
             printDiagnostic (gates.diagnostics.front());

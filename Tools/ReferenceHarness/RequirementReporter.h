@@ -35,7 +35,13 @@ struct RequirementReport {
     std::string buildType;
     std::string platform;
     std::string architecture;
+    std::vector<GateResult> gateResults;
 };
+
+LoadResult<std::vector<GateResult>> buildF0GateResults (
+    const juce::File& sourceRoot,
+    const FixtureIndex& index,
+    const AcceptanceManifest& acceptance);
 
 LoadResult<std::vector<RequirementDefinition>> loadRequirementMap (
     const juce::File& sourceRoot,

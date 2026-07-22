@@ -1652,6 +1652,30 @@ public:
                                  R"("hard.registry.count")", R"("unknown.gate")"),
                              "requirement.gate-mapping");
 
+        beginTest ("requirement map fields exactly match matrix owners and verification order");
+        expectMapDiagnostic (
+            sourceRoot, *acceptance.value,
+            mapText.replaceFirstOccurrenceOf (
+                R"OWNER("owner": "[02 Build](02-build-packaging-host-validation.md)")OWNER",
+                R"OWNER("owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)")OWNER"),
+            "requirement.matrix-fields");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (R"("HV")", R"("UT")"),
+                             "requirement.matrix-fields");
+
+        beginTest ("static acceptance gate ownership is exact and reciprocal");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (
+                                 R"("gateIds": [
+        "hard.registry.count"
+      ])",
+                                 R"("gateIds": [])"),
+                             "requirement.gate-reciprocity");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (
+                                 R"("gateIds": [])", R"("gateIds": ["hard.registry.count"])"),
+                             "requirement.gate-reciprocity");
+
         beginTest ("requirement map rejects duplicate identities and multiple owners");
         expectMapDiagnostic (sourceRoot, *acceptance.value,
                              mapText.replaceFirstOccurrenceOf (
@@ -1678,22 +1702,45 @@ public:
 
         if (! requirements.ok())
             return;
-        std::vector<GateResult> gateResults;
-        for (const auto& gate : acceptance.value->hardSoftware)
-            gateResults.push_back ({ gate.id, Status::pass, "registry.count-pass",
-                                     gate.requirements, std::nullopt,
-                                     "Tests/fixtures/parameters/parameter-registry-v2.json",
-                                     sha256File (sourceRoot.getChildFile (
-                                         "Tests/fixtures/parameters/parameter-registry-v2.json")) });
-        const auto appendOpenGates = [&] (const std::vector<GateDefinition>& gates) {
-            for (const auto& gate : gates)
-                gateResults.push_back ({ gate.id, gate.status, "acceptance.evidence-missing",
-                                         gate.requirements, std::nullopt, {}, {} });
-        };
-        appendOpenGates (acceptance.value->published);
-        appendOpenGates (acceptance.value->derivedSoftware);
-        appendOpenGates (acceptance.value->measuredHardware);
-        appendOpenGates (acceptance.value->performance);
+        const auto index = loadFixtureIndex (
+            sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
+        const auto smoothing = index.ok()
+                                 ? expandSmoothingFixtures (
+                                       sourceRoot, *index.value, *acceptance.value)
+                                 : LoadResult<std::vector<SmoothingCase>> {};
+        const std::span<const SmoothingEvidence> noEvidence;
+        const auto evaluated = smoothing.ok()
+                                 ? evaluateAcceptance (
+                                       *acceptance.value, *smoothing.value, noEvidence, registry)
+                                 : LoadResult<std::vector<GateResult>> {};
+        expect (index.ok() && smoothing.ok() && evaluated.ok(),
+                "authoritative F0 gate expansion must validate");
+        if (! evaluated.ok())
+            return;
+        std::vector<GateResult> gateResults = *evaluated.value;
+        for (const auto& gate : gateResults) {
+            const auto isStaticDerived = std::any_of (
+                acceptance.value->derivedSoftware.begin(),
+                acceptance.value->derivedSoftware.end(), [&] (const auto& definition) {
+                    return definition.id == gate.id;
+                });
+            if (gate.id.starts_with ("par006.")
+                && ! isStaticDerived)
+                expect (gate.requirements == std::vector<std::string> ({ "PAR-006", "TST-006" }),
+                        gate.id + " must declare complete dynamic ownership");
+        }
+        const auto hardGate = std::find_if (
+            gateResults.begin(), gateResults.end(), [] (const auto& gate) {
+                return gate.id == "hard.registry.count";
+            });
+        expect (hardGate != gateResults.end(), "hard registry gate must exist");
+        if (hardGate == gateResults.end())
+            return;
+        hardGate->status = Status::pass;
+        hardGate->reasonCode = "registry.count-pass";
+        hardGate->artifactPath = "Tests/fixtures/parameters/parameter-registry-v2.json";
+        hardGate->artifactSha256 = sha256File (sourceRoot.getChildFile (
+            "Tests/fixtures/parameters/parameter-registry-v2.json"));
 
         beginTest ("requirement reduction preserves honest mixed statuses");
         const TemporaryDirectory candidateRoot { "model-d-requirement-candidate-root" };
@@ -1711,14 +1758,27 @@ public:
         expectRequirement (*report.value, "BLD-001", Status::pass);
         expectRequirement (*report.value, "BLD-006", Status::notRun);
         expectRequirement (*report.value, "PAR-001", Status::pass);
-        expectRequirement (*report.value, "PAR-006", Status::notRun);
+        expectRequirement (*report.value, "PAR-006", Status::awaitingApprovedReference);
+        expectRequirement (*report.value, "TST-006", Status::awaitingApprovedReference);
         expectRequirement (*report.value, "PIT-003", Status::awaitingApprovedReference);
+
+        beginTest ("report building validates and restores matrix order");
+        auto reversedRequirements = *requirements.value;
+        std::reverse (reversedRequirements.begin(), reversedRequirements.end());
+        const auto reorderedReport = buildRequirementReport (
+            sourceRoot, candidateRoot.directory, reversedRequirements, gateResults,
+            *acceptance.value);
+        expect (reorderedReport.ok(), "valid reordered input must build");
+        if (reorderedReport.ok())
+            expect (reorderedReport.value->requirements.front().definition.id == "BLD-001"
+                        && reorderedReport.value->requirements.back().definition.id == "IMG-008",
+                    "report rows must always restore matrix order");
 
         beginTest ("failing gates dominate open and awaiting statuses");
         auto failingGates = gateResults;
         const auto failingGate = std::find_if (
             failingGates.begin(), failingGates.end(), [] (const auto& gate) {
-                return gate.id == "par006.gain-control.duration";
+                return gate.id == "par006.a440HzOnOff.control";
             });
         expect (failingGate != failingGates.end(), "PAR-006 gate must exist");
         if (failingGate != failingGates.end()) {
@@ -1729,12 +1789,46 @@ public:
                 *acceptance.value);
             expect (failingReport.ok(), "numerical failure belongs in a valid report");
             if (failingReport.ok())
+            {
                 expectRequirement (*failingReport.value, "PAR-006", Status::fail);
+                expectRequirement (*failingReport.value, "TST-006", Status::fail);
+            }
+        }
+
+        beginTest ("one dynamic unrun gate prevents a gate-complete requirement pass");
+        auto oneUnrunGate = gateResults;
+        for (auto& gate : oneUnrunGate) {
+            gate.status = Status::pass;
+            gate.reasonCode = "test.gate-pass";
+            gate.artifactPath = "Tests/fixtures/parameters/parameter-registry-v2.json";
+            gate.artifactSha256 = hardGate->artifactSha256;
+        }
+        const auto unrunGate = std::find_if (
+            oneUnrunGate.begin(), oneUnrunGate.end(), [] (const auto& gate) {
+                return gate.id == "par006.a440HzOnOff.control";
+            });
+        expect (unrunGate != oneUnrunGate.end(), "dynamic control gate must exist");
+        if (unrunGate != oneUnrunGate.end()) {
+            unrunGate->status = Status::notRun;
+            unrunGate->reasonCode = "test.dynamic-not-run";
+            unrunGate->artifactPath.clear();
+            unrunGate->artifactSha256.clear();
+            const auto unrunReport = buildRequirementReport (
+                sourceRoot, candidateRoot.directory, *requirements.value, oneUnrunGate,
+                *acceptance.value);
+            expect (unrunReport.ok(), "dynamic not-run belongs in a valid report");
+            if (unrunReport.ok()) {
+                expectRequirement (*unrunReport.value, "PAR-006", Status::notRun);
+                expectRequirement (*unrunReport.value, "TST-006", Status::notRun);
+            }
         }
 
         beginTest ("report building rejects missing gate results and changed evidence");
         auto missingGate = gateResults;
-        missingGate.pop_back();
+        missingGate.erase (std::find_if (
+            missingGate.begin(), missingGate.end(), [] (const auto& gate) {
+                return gate.id == "hard.registry.count";
+            }));
         expectDiagnostic (buildRequirementReport (
                               sourceRoot, candidateRoot.directory, *requirements.value,
                               missingGate, *acceptance.value),
@@ -1760,10 +1854,12 @@ public:
             return;
         expect (reportA.value->hasIdenticalContentTo (*reportB.value),
                 "same-commit reports must be byte-identical");
-        expectDiagnostic (verifyReleaseReady (*reportA.value), "release.not-ready");
-        expect (verifyReleaseReady (*reportA.value).diagnostics.front().message.starts_with (
-                    "BLD-006 not-run requirement.not-run"),
-                "release failure must identify the first open row and reason");
+        const auto writtenJson = juce::JSON::fromString (reportA.value->loadFileAsString());
+        const auto* writtenGates = writtenJson.getDynamicObject()->getProperty ("gates").getArray();
+        expect (writtenGates != nullptr
+                    && writtenGates->size() == static_cast<int> (gateResults.size()),
+                "canonical report must retain every static and dynamic gate result");
+        expectDiagnostic (verifyReleaseReady (*reportA.value), "release.report-mismatch");
 
         auto falsePassJson = juce::JSON::fromString (reportA.value->loadFileAsString());
         auto* falsePassRows = falsePassJson.getDynamicObject()
@@ -1817,6 +1913,71 @@ public:
         const auto cliReportB = cliB.getChildFile ("requirements-report.json");
         expect (cliReportA.hasIdenticalContentTo (cliReportB),
                 "complete CLI reports must be byte-identical");
+
+        beginTest ("release verification rejects coordinated report forgery");
+        expectDiagnostic (verifyReleaseReady (cliReportA), "release.not-ready");
+        const auto expectReportMutation = [&] (juce::var mutation, const juce::String& name) {
+            const auto file = cliA.getChildFile (name + ".json");
+            file.replaceWithText (canonicalJson (mutation), false, false, "\n");
+            expectDiagnostic (verifyReleaseReady (file), "release.report-mismatch");
+        };
+        auto wrongCounts = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongCounts.getDynamicObject()->getProperty ("counts").getDynamicObject()
+            ->setProperty ("pass", 127);
+        expectReportMutation (wrongCounts, "wrong-counts");
+        auto wrongOwner = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongOwner.getDynamicObject()->getProperty ("requirements").getArray()->getReference (0)
+            .getDynamicObject()->setProperty ("owner", "forged-owner");
+        expectReportMutation (wrongOwner, "wrong-owner");
+        auto wrongVerification = juce::JSON::fromString (cliReportA.loadFileAsString());
+        juce::Array<juce::var> forgedVerification { "UT", "DOC" };
+        wrongVerification.getDynamicObject()->getProperty ("requirements").getArray()
+            ->getReference (0).getDynamicObject()->setProperty (
+                "verification", forgedVerification);
+        expectReportMutation (wrongVerification, "wrong-verification");
+        auto wrongGateIds = juce::JSON::fromString (cliReportA.loadFileAsString());
+        juce::Array<juce::var> forgedGateIds { "hard.registry.count" };
+        wrongGateIds.getDynamicObject()->getProperty ("requirements").getArray()->getReference (0)
+            .getDynamicObject()->setProperty ("gateIds", forgedGateIds);
+        expectReportMutation (wrongGateIds, "wrong-gate-ids");
+        auto wrongReasons = juce::JSON::fromString (cliReportA.loadFileAsString());
+        juce::Array<juce::var> forgedReasons { "forged.reason" };
+        wrongReasons.getDynamicObject()->getProperty ("requirements").getArray()->getReference (0)
+            .getDynamicObject()->setProperty ("reasons", forgedReasons);
+        expectReportMutation (wrongReasons, "wrong-reasons");
+        auto wrongProvenance = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongProvenance.getDynamicObject()->getProperty ("provenance").getDynamicObject()
+            ->setProperty ("sourceCommit", "forged-source-commit");
+        expectReportMutation (wrongProvenance, "wrong-provenance");
+
+        auto wrongGateEvidence = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongGateEvidence.getDynamicObject()->getProperty ("gates").getArray()->getReference (0)
+            .getDynamicObject()->setProperty ("reason", "forged.gate-reason");
+        const auto wrongGateEvidenceFile = cliA.getChildFile ("wrong-gate-evidence.json");
+        wrongGateEvidenceFile.replaceWithText (
+            canonicalJson (wrongGateEvidence), false, false, "\n");
+        expectDiagnostic (verifyReleaseReady (wrongGateEvidenceFile), "release.gate-evidence");
+
+        auto forgedAllPass = juce::JSON::fromString (cliReportA.loadFileAsString());
+        auto* forgedRoot = forgedAllPass.getDynamicObject();
+        auto* forgedRows = forgedRoot->getProperty ("requirements").getArray();
+        const auto copiedArtifact = forgedRows->getReference (0).getDynamicObject()
+                                        ->getProperty ("artifacts");
+        for (auto& row : *forgedRows) {
+            auto* object = row.getDynamicObject();
+            object->setProperty ("status", "pass");
+            object->setProperty ("reasons", forgedReasons);
+            if (object->getProperty ("artifacts").getArray()->isEmpty())
+                object->setProperty ("artifacts", copiedArtifact);
+        }
+        auto* forgedCounts = forgedRoot->getProperty ("counts").getDynamicObject();
+        forgedCounts->setProperty ("awaiting-approved-reference", 0);
+        forgedCounts->setProperty ("fail", 0);
+        forgedCounts->setProperty ("not-run", 0);
+        forgedCounts->setProperty ("pass", 127);
+        forgedRoot->setProperty ("releaseReady", true);
+        expectReportMutation (forgedAllPass, "forged-all-pass");
+
         const auto actualReportJson = juce::JSON::fromString (cliReportA.loadFileAsString());
         juce::Array<juce::var> projectedRows;
         for (const auto& reportRow : *actualReportJson.getDynamicObject()
@@ -1837,6 +1998,71 @@ public:
             sourceRoot.getChildFile ("Tests/reference/expected-f0-requirement-statuses.json")
                 .loadFileAsString(),
             "CLI status/reason/gate projection must match the non-self-referential oracle");
+
+        const auto extraEvidence = cliA.getChildFile ("forged-extra.txt");
+        expect (extraEvidence.replaceWithText ("not a renderer artifact\n", false, false, "\n"));
+        auto extraCandidateJson = juce::JSON::fromString (cliReportA.loadFileAsString());
+        for (auto& row : *extraCandidateJson.getDynamicObject()
+                              ->getProperty ("requirements").getArray()) {
+            auto* object = row.getDynamicObject();
+            if (object->getProperty ("id").toString() != "TST-001")
+                continue;
+            auto extraArtifact = std::make_unique<juce::DynamicObject>();
+            extraArtifact->setProperty ("path", "candidate/forged-extra.txt");
+            extraArtifact->setProperty ("sha256", juce::String { sha256File (extraEvidence) });
+            object->getProperty ("artifacts").getArray()->add (
+                juce::var { extraArtifact.release() });
+            break;
+        }
+        const auto extraCandidateReport = cliA.getChildFile ("extra-candidate-report.json");
+        expect (extraCandidateReport.replaceWithText (
+            canonicalJson (extraCandidateJson), false, false, "\n"));
+        expectDiagnostic (verifyReleaseReady (extraCandidateReport), "release.report-mismatch");
+
+        auto missingCandidateJson = juce::JSON::fromString (cliReportA.loadFileAsString());
+        for (auto& row : *missingCandidateJson.getDynamicObject()
+                              ->getProperty ("requirements").getArray()) {
+            auto* object = row.getDynamicObject();
+            if (object->getProperty ("id").toString() == "TST-001") {
+                object->getProperty ("artifacts").getArray()->clear();
+                break;
+            }
+        }
+        const auto missingCandidateReport = cliA.getChildFile ("missing-candidates.json");
+        expect (missingCandidateReport.replaceWithText (
+            canonicalJson (missingCandidateJson), false, false, "\n"));
+        expectDiagnostic (verifyReleaseReady (missingCandidateReport), "release.report-mismatch");
+
+        const auto forgedCandidateRoot = reportRoot.directory.getChildFile ("cli-forged");
+        expect (cliA.copyDirectoryTo (forgedCandidateRoot),
+                "candidate forgery fixture must copy");
+        const auto forgedRender = forgedCandidateRoot.getChildFile (
+            "renders/native-v2-foundation/render.json");
+        expect (forgedRender.replaceWithText ("forged renderer evidence\n", false, false, "\n"));
+        const auto forgedCandidateReport = forgedCandidateRoot.getChildFile (
+            "requirements-report.json");
+        auto forgedCandidateJson = juce::JSON::fromString (
+            forgedCandidateReport.loadFileAsString());
+        for (auto& row : *forgedCandidateJson.getDynamicObject()
+                              ->getProperty ("requirements").getArray()) {
+            auto* object = row.getDynamicObject();
+            if (object->getProperty ("id").toString() != "TST-001")
+                continue;
+            for (auto& artifact : *object->getProperty ("artifacts").getArray()) {
+                auto* artifactObject = artifact.getDynamicObject();
+                if (artifactObject->getProperty ("path").toString()
+                    == "candidate/renders/native-v2-foundation/render.json") {
+                    artifactObject->setProperty (
+                        "sha256", juce::String { sha256File (forgedRender) });
+                    break;
+                }
+            }
+            break;
+        }
+        expect (forgedCandidateReport.replaceWithText (
+            canonicalJson (forgedCandidateJson), false, false, "\n"));
+        expectDiagnostic (verifyReleaseReady (forgedCandidateReport), "release.report-mismatch");
+
         const std::vector<std::string> verifyArguments {
             "verify-release", "--report", cliReportA.getFullPathName().toStdString(),
         };

@@ -1,8 +1,10 @@
 #include "RequirementReporter.h"
 
+#include "OfflineRenderer.h"
 #include "ReferenceData.h"
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <map>
 #include <set>
@@ -59,32 +61,61 @@ bool isRequirementId (const std::string& value)
                         [] (const auto character) { return character >= '0' && character <= '9'; });
 }
 
-LoadResult<std::vector<std::string>> readMatrixIds (const juce::File& matrixFile)
+struct MatrixRow {
+    std::string id;
+    std::string owner;
+    std::vector<std::string> verification;
+};
+
+std::vector<std::string> splitCommaList (const std::string& value)
+{
+    std::vector<std::string> values;
+    size_t offset = 0;
+    while (offset <= value.size()) {
+        const auto comma = value.find (',', offset);
+        values.push_back (trim (value.substr (
+            offset, comma == std::string::npos ? std::string::npos : comma - offset)));
+        if (comma == std::string::npos)
+            break;
+        offset = comma + 1;
+    }
+    return values;
+}
+
+LoadResult<std::vector<MatrixRow>> readMatrixRows (const juce::File& matrixFile)
 {
     if (! matrixFile.existsAsFile())
-        return failure<std::vector<std::string>> (
+        return failure<std::vector<MatrixRow>> (
             "requirement.matrix-missing", "traceability matrix does not exist");
-    std::vector<std::string> ids;
+    std::vector<MatrixRow> rows;
     std::set<std::string> unique;
     for (const auto& juceLine : juce::StringArray::fromLines (matrixFile.loadFileAsString())) {
         const auto line = juceLine.toStdString();
         if (! line.starts_with ("| "))
             continue;
         const auto cells = splitMatrixRow (line);
-        if (cells.size() < 4)
+        if (cells.size() < 10)
             continue;
         const auto id = trim (cells[1]);
         if (! isRequirementId (id))
             continue;
         if (! unique.insert (id).second)
-            return failure<std::vector<std::string>> (
+            return failure<std::vector<MatrixRow>> (
                 "requirement.matrix-duplicate", "traceability matrix requirement IDs must be unique");
-        ids.push_back (id);
+        const auto owner = trim (cells[4]);
+        const auto verification = splitCommaList (trim (cells[cells.size() - 2]));
+        if (owner.empty() || verification.empty()
+            || std::any_of (verification.begin(), verification.end(), [] (const auto& code) {
+                   return code.empty();
+               }))
+            return failure<std::vector<MatrixRow>> (
+                "requirement.matrix-fields", "matrix owner and verification fields are required");
+        rows.push_back ({ id, owner, verification });
     }
-    if (ids.empty())
-        return failure<std::vector<std::string>> (
+    if (rows.empty())
+        return failure<std::vector<MatrixRow>> (
             "requirement.matrix-empty", "traceability matrix has no requirement data rows");
-    return { std::move (ids), {} };
+    return { std::move (rows), {} };
 }
 
 bool readString (const juce::DynamicObject& object, const char* name, std::string& destination)
@@ -131,6 +162,81 @@ std::set<std::string> acceptanceGateIds (const AcceptanceManifest& acceptance)
     return ids;
 }
 
+std::vector<const GateDefinition*> acceptanceGates (const AcceptanceManifest& acceptance)
+{
+    std::vector<const GateDefinition*> gates;
+    const auto add = [&] (const std::vector<GateDefinition>& section) {
+        for (const auto& gate : section)
+            gates.push_back (&gate);
+    };
+    add (acceptance.hardSoftware);
+    add (acceptance.published);
+    add (acceptance.derivedSoftware);
+    add (acceptance.measuredHardware);
+    add (acceptance.performance);
+    return gates;
+}
+
+LoadResult<bool> validateAgainstMatrix (
+    const std::span<const RequirementDefinition> requirements,
+    const juce::File& matrixFile,
+    const bool requireOrder)
+{
+    const auto matrix = readMatrixRows (matrixFile);
+    if (! matrix.ok())
+        return { std::nullopt, matrix.diagnostics };
+    std::map<std::string, const RequirementDefinition*> byId;
+    for (const auto& requirement : requirements) {
+        if (! byId.emplace (requirement.id, &requirement).second)
+            return failure<bool> ("requirement.duplicate-id", "requirement IDs must be unique");
+    }
+    if (requirements.size() != matrix.value->size())
+        return failure<bool> ("requirement.set", "requirement map must exactly match matrix IDs");
+    for (size_t index = 0; index < matrix.value->size(); ++index) {
+        const auto& matrixRow = (*matrix.value)[index];
+        const auto found = byId.find (matrixRow.id);
+        if (found == byId.end()
+            || (requireOrder && requirements[index].id != matrixRow.id))
+            return failure<bool> (
+                "requirement.set", "requirement map must exactly match matrix IDs and order");
+        if (found->second->owner != matrixRow.owner
+            || found->second->verification != matrixRow.verification)
+            return failure<bool> (
+                "requirement.matrix-fields",
+                "requirement owner and verification must exactly match the matrix row");
+    }
+    return { true, {} };
+}
+
+LoadResult<bool> validateStaticGateReciprocity (
+    const std::span<const RequirementDefinition> requirements,
+    const AcceptanceManifest& acceptance)
+{
+    std::map<std::string, std::vector<std::string>> expected;
+    for (const auto& requirement : requirements)
+        expected.emplace (requirement.id, std::vector<std::string> {});
+    for (const auto* gate : acceptanceGates (acceptance)) {
+        std::set<std::string> unique;
+        if (gate->requirements.empty())
+            return failure<bool> (
+                "requirement.gate-reciprocity", "acceptance gates require owners");
+        for (const auto& requirementId : gate->requirements) {
+            const auto found = expected.find (requirementId);
+            if (found == expected.end() || ! unique.insert (requirementId).second)
+                return failure<bool> (
+                    "requirement.gate-reciprocity",
+                    "acceptance gate owners must be unique mapped requirement IDs");
+            found->second.push_back (gate->id);
+        }
+    }
+    for (const auto& requirement : requirements)
+        if (requirement.gateIds != expected.at (requirement.id))
+            return failure<bool> (
+                "requirement.gate-reciprocity",
+                "requirement gate IDs must exactly match acceptance ownership");
+    return { true, {} };
+}
+
 juce::var stringArray (const std::vector<std::string>& values)
 {
     juce::Array<juce::var> array;
@@ -143,6 +249,74 @@ struct ResolvedArtifact {
     juce::File file;
     std::string reportPath;
 };
+
+class TemporaryDirectory final {
+public:
+    TemporaryDirectory()
+    {
+        const auto temporaryRoot = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        for (int attempt = 0; attempt < 32; ++attempt) {
+            const auto candidate = temporaryRoot.getChildFile (
+                "model-d-release-verify-" + juce::Uuid {}.toString());
+            std::error_code error;
+            if (std::filesystem::create_directory (
+                    candidate.getFullPathName().toStdString(), error)) {
+                directory = candidate;
+                ownsDirectory = true;
+                return;
+            }
+        }
+    }
+
+    ~TemporaryDirectory()
+    {
+        if (ownsDirectory)
+            directory.deleteRecursively();
+    }
+
+    bool isOwned() const noexcept { return ownsDirectory; }
+
+    juce::File directory;
+
+private:
+    bool ownsDirectory = false;
+};
+
+using CandidateEvidence = std::pair<std::string, std::string>;
+
+LoadResult<std::vector<CandidateEvidence>> buildAuthoritativeCandidateEvidence (
+    const juce::File& sourceRoot,
+    const FixtureIndex& index)
+{
+    TemporaryDirectory temporary;
+    if (! temporary.isOwned())
+        return failure<std::vector<CandidateEvidence>> (
+            "release.candidate-evidence", "temporary candidate root could not be created");
+    std::vector<CandidateEvidence> evidence;
+    for (const auto& indexedFixture : index.renderFixtures) {
+        const auto fixture = loadRenderFixture (
+            sourceRoot, sourceRoot.getChildFile (indexedFixture.relativePath));
+        if (! fixture.ok())
+            return { std::nullopt, fixture.diagnostics };
+        const auto rendered = renderFixture (*fixture.value);
+        if (! rendered.ok())
+            return { std::nullopt, rendered.diagnostics };
+        const auto files = writeCandidateArtifacts (
+            *fixture.value, *rendered.value,
+            temporary.directory.getChildFile ("renders").getChildFile (fixture.value->id));
+        if (! files.ok())
+            return { std::nullopt, files.diagnostics };
+        for (const auto& file : *files.value) {
+            const auto relative = file.getRelativePathFrom (temporary.directory).toStdString();
+            if (relative.empty() || relative.starts_with (".."))
+                return failure<std::vector<CandidateEvidence>> (
+                    "release.candidate-evidence",
+                    "authoritative candidate artifact escaped its temporary root");
+            evidence.emplace_back ("candidate/" + relative, sha256File (file));
+        }
+    }
+    return { std::move (evidence), {} };
+}
 
 std::optional<std::string> boundedRelativePath (const juce::File& root,
                                                 const juce::File& file)
@@ -185,26 +359,153 @@ LoadResult<ResolvedArtifact> resolveArtifact (const juce::File& sourceRoot,
         "requirement.artifact-path", "gate artifact must be beneath source or candidate root");
 }
 
-std::map<std::string, GateClassification> acceptanceGateClasses (
-    const AcceptanceManifest& acceptance)
-{
-    std::map<std::string, GateClassification> classes;
-    const auto add = [&] (const std::vector<GateDefinition>& gates) {
-        for (const auto& gate : gates)
-            classes.emplace (gate.id, gate.classification);
-    };
-    add (acceptance.hardSoftware);
-    add (acceptance.published);
-    add (acceptance.derivedSoftware);
-    add (acceptance.measuredHardware);
-    add (acceptance.performance);
-    return classes;
-}
-
 void appendUnique (std::vector<std::string>& values, const std::string& value)
 {
     if (std::find (values.begin(), values.end(), value) == values.end())
         values.push_back (value);
+}
+
+juce::var metricJson (const MetricResult& metric)
+{
+    auto analyzer = std::make_unique<juce::DynamicObject>();
+    analyzer->setProperty ("id", juce::String { metric.analyzer.id });
+    analyzer->setProperty ("version", metric.analyzer.version);
+    auto settings = std::make_unique<juce::DynamicObject>();
+    for (const auto& [name, value] : metric.settings)
+        settings->setProperty (juce::Identifier { name }, juce::String { value });
+    auto object = std::make_unique<juce::DynamicObject>();
+    object->setProperty ("allowance", metric.allowance);
+    object->setProperty ("analyzer", juce::var { analyzer.release() });
+    object->setProperty ("finite", metric.finite);
+    object->setProperty ("metric", juce::String { metric.metric });
+    object->setProperty ("settings", juce::var { settings.release() });
+    object->setProperty ("unit", juce::String { metric.unit });
+    object->setProperty ("value", metric.value);
+    return juce::var { object.release() };
+}
+
+juce::var gateJson (const GateResult& gate)
+{
+    auto object = std::make_unique<juce::DynamicObject>();
+    object->setProperty ("artifactPath", juce::String { gate.artifactPath });
+    object->setProperty ("artifactSha256", juce::String { gate.artifactSha256 });
+    object->setProperty ("id", juce::String { gate.id });
+    object->setProperty ("metric", gate.metric.has_value()
+                                    ? metricJson (*gate.metric)
+                                    : juce::var {});
+    object->setProperty ("reason", juce::String { gate.reasonCode });
+    object->setProperty ("requirements", stringArray (gate.requirements));
+    object->setProperty ("status", juce::String { statusName (gate.status) });
+    return juce::var { object.release() };
+}
+
+juce::var gateArrayJson (const std::span<const GateResult> gateResults)
+{
+    juce::Array<juce::var> gates;
+    for (const auto& gate : gateResults)
+        gates.add (gateJson (gate));
+    return gates;
+}
+
+std::optional<Status> parseStatus (const std::string& value)
+{
+    if (value == "pass")
+        return Status::pass;
+    if (value == "fail")
+        return Status::fail;
+    if (value == "not-run")
+        return Status::notRun;
+    if (value == "awaiting-approved-reference")
+        return Status::awaitingApprovedReference;
+    return std::nullopt;
+}
+
+bool readPossiblyEmptyString (const juce::DynamicObject& object,
+                              const char* name,
+                              std::string& destination)
+{
+    const auto value = object.getProperty (name);
+    if (! value.isString())
+        return false;
+    destination = value.toString().toStdString();
+    return true;
+}
+
+LoadResult<std::optional<MetricResult>> parseMetric (const juce::var& value)
+{
+    if (value.isVoid())
+        return { std::optional<MetricResult> {}, {} };
+    const auto* object = value.getDynamicObject();
+    const auto* analyzer = object == nullptr
+                             ? nullptr
+                             : object->getProperty ("analyzer").getDynamicObject();
+    const auto* settings = object == nullptr
+                             ? nullptr
+                             : object->getProperty ("settings").getDynamicObject();
+    MetricResult metric;
+    if (object == nullptr || analyzer == nullptr || settings == nullptr
+        || ! readString (*analyzer, "id", metric.analyzer.id)
+        || ! analyzer->getProperty ("version").isInt()
+        || ! readString (*object, "metric", metric.metric)
+        || ! readString (*object, "unit", metric.unit)
+        || ! object->getProperty ("finite").isBool()
+        || (! object->getProperty ("value").isDouble()
+            && ! object->getProperty ("value").isInt())
+        || (! object->getProperty ("allowance").isDouble()
+            && ! object->getProperty ("allowance").isInt()))
+        return failure<std::optional<MetricResult>> (
+            "release.report-gates", "gate metric payload is malformed");
+    metric.analyzer.version = static_cast<int> (analyzer->getProperty ("version"));
+    metric.value = static_cast<double> (object->getProperty ("value"));
+    metric.allowance = static_cast<double> (object->getProperty ("allowance"));
+    metric.finite = static_cast<bool> (object->getProperty ("finite"));
+    if (! std::isfinite (metric.value) || ! std::isfinite (metric.allowance))
+        return failure<std::optional<MetricResult>> (
+            "release.report-gates", "gate metric values must be finite");
+    for (const auto& property : settings->getProperties()) {
+        if (! property.value.isString() || property.value.toString().isEmpty())
+            return failure<std::optional<MetricResult>> (
+                "release.report-gates", "gate metric settings must be strings");
+        metric.settings.emplace (property.name.toString().toStdString(),
+                                 property.value.toString().toStdString());
+    }
+    return { std::optional<MetricResult> { std::move (metric) }, {} };
+}
+
+LoadResult<std::vector<GateResult>> parseGatePayload (const juce::var& value)
+{
+    const auto* values = value.getArray();
+    if (values == nullptr || values->isEmpty())
+        return failure<std::vector<GateResult>> (
+            "release.report-gates", "report gate payload must be nonempty");
+    std::vector<GateResult> gates;
+    gates.reserve (static_cast<size_t> (values->size()));
+    std::set<std::string> ids;
+    for (const auto& gateValue : *values) {
+        const auto* object = gateValue.getDynamicObject();
+        GateResult gate;
+        std::string status;
+        if (object == nullptr || ! readString (*object, "id", gate.id)
+            || ! ids.insert (gate.id).second
+            || ! readString (*object, "reason", gate.reasonCode)
+            || ! readString (*object, "status", status)
+            || ! readStringArray (*object, "requirements", gate.requirements, false)
+            || ! readPossiblyEmptyString (*object, "artifactPath", gate.artifactPath)
+            || ! readPossiblyEmptyString (*object, "artifactSha256", gate.artifactSha256))
+            return failure<std::vector<GateResult>> (
+                "release.report-gates", "report gate payload is malformed");
+        const auto parsedStatus = parseStatus (status);
+        if (! parsedStatus.has_value())
+            return failure<std::vector<GateResult>> (
+                "release.report-gates", "report gate status is unsupported");
+        gate.status = *parsedStatus;
+        const auto metric = parseMetric (object->getProperty ("metric"));
+        if (! metric.ok())
+            return { std::nullopt, metric.diagnostics };
+        gate.metric = std::move (*metric.value);
+        gates.push_back (std::move (gate));
+    }
+    return { std::move (gates), {} };
 }
 
 juce::var reportJson (const RequirementReport& report)
@@ -245,6 +546,7 @@ juce::var reportJson (const RequirementReport& report)
     root->setProperty ("analyzerVersion", report.analyzerVersion);
     root->setProperty ("counts", juce::var { countObject.release() });
     root->setProperty ("fixtureVersion", report.fixtureVersion);
+    root->setProperty ("gates", gateArrayJson (report.gateResults));
     root->setProperty ("manifestVersion", report.manifestVersion);
     root->setProperty ("provenance", juce::var { provenance.release() });
     root->setProperty ("releaseReady", report.releaseReady);
@@ -259,26 +561,7 @@ LoadResult<bool> validateRequirementSet (
     const std::span<const RequirementDefinition> requirements,
     const juce::File& matrixFile)
 {
-    const auto matrix = readMatrixIds (matrixFile);
-    if (! matrix.ok())
-        return { std::nullopt, matrix.diagnostics };
-    std::vector<std::string> ids;
-    std::set<std::string> unique;
-    ids.reserve (requirements.size());
-    for (const auto& requirement : requirements) {
-        if (! unique.insert (requirement.id).second)
-            return failure<bool> ("requirement.duplicate-id", "requirement IDs must be unique");
-        if (requirement.owner.empty())
-            return failure<bool> ("requirement.owner", "each requirement needs exactly one owner");
-        if (requirement.verification.empty())
-            return failure<bool> (
-                "requirement.verification", "each requirement needs verification codes");
-        ids.push_back (requirement.id);
-    }
-    if (ids != *matrix.value)
-        return failure<bool> (
-            "requirement.set", "requirement map must exactly match matrix IDs and order");
-    return { true, {} };
+    return validateAgainstMatrix (requirements, matrixFile, true);
 }
 
 LoadResult<std::vector<RequirementDefinition>> loadRequirementMap (
@@ -386,7 +669,39 @@ LoadResult<std::vector<RequirementDefinition>> loadRequirementMap (
     const auto validSet = validateRequirementSet (requirements, matrixFile);
     if (! validSet.ok())
         return { std::nullopt, validSet.diagnostics };
+    const auto reciprocal = validateStaticGateReciprocity (requirements, acceptance);
+    if (! reciprocal.ok())
+        return { std::nullopt, reciprocal.diagnostics };
     return { std::move (requirements), {} };
+}
+
+LoadResult<std::vector<GateResult>> buildF0GateResults (
+    const juce::File& sourceRoot,
+    const FixtureIndex& index,
+    const AcceptanceManifest& acceptance)
+{
+    const auto smoothing = expandSmoothingFixtures (sourceRoot, index, acceptance);
+    if (! smoothing.ok())
+        return { std::nullopt, smoothing.diagnostics };
+    const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
+    const std::span<const SmoothingEvidence> noEvidence;
+    auto gates = evaluateAcceptance (
+        acceptance, *smoothing.value, noEvidence, analyzers);
+    if (! gates.ok())
+        return gates;
+    const auto registryGate = std::find_if (
+        gates.value->begin(), gates.value->end(), [] (const auto& gate) {
+            return gate.id == "hard.registry.count";
+        });
+    if (registryGate == gates.value->end() || ParameterRegistry::descriptors().size() != 48)
+        return failure<std::vector<GateResult>> (
+            "requirement.registry-gate", "exact 48-descriptor registry gate is unavailable");
+    const auto registryPath = std::string { "Tests/fixtures/parameters/parameter-registry-v2.json" };
+    registryGate->status = Status::pass;
+    registryGate->reasonCode = "registry.count-pass";
+    registryGate->artifactPath = registryPath;
+    registryGate->artifactSha256 = sha256File (sourceRoot.getChildFile (registryPath));
+    return gates;
 }
 
 LoadResult<RequirementReport> buildRequirementReport (
@@ -396,25 +711,89 @@ LoadResult<RequirementReport> buildRequirementReport (
     const std::span<const GateResult> gateResults,
     const AcceptanceManifest& acceptance)
 {
-    std::map<std::string, const GateResult*> resultsById;
-    for (const auto& gate : gateResults)
-        if (! resultsById.emplace (gate.id, &gate).second)
-            return failure<RequirementReport> (
-                "requirement.duplicate-gate-result", "gate result IDs must be unique");
-    const auto gateClasses = acceptanceGateClasses (acceptance);
+    const auto matrixFile = sourceRoot.getChildFile (
+        "docs/remediation/01-traceability-matrix.md");
+    const auto validSet = validateAgainstMatrix (requirements, matrixFile, false);
+    if (! validSet.ok())
+        return { std::nullopt, validSet.diagnostics };
+    const auto reciprocal = validateStaticGateReciprocity (requirements, acceptance);
+    if (! reciprocal.ok())
+        return { std::nullopt, reciprocal.diagnostics };
+    const auto matrix = readMatrixRows (matrixFile);
+    if (! matrix.ok())
+        return { std::nullopt, matrix.diagnostics };
+
+    std::map<std::string, RequirementDefinition> definitionsById;
+    for (const auto& definition : requirements)
+        definitionsById.emplace (definition.id, definition);
+    const auto staticGateIds = acceptanceGateIds (acceptance);
+    std::map<std::string, const GateDefinition*> staticGates;
+    for (const auto* gate : acceptanceGates (acceptance))
+        staticGates.emplace (gate->id, gate);
 
     RequirementReport report;
     report.sourceCommit = SYNTH_SOURCE_COMMIT;
     report.buildType = SYNTH_CONFIGURED_BUILD_TYPE;
     report.platform = SYNTH_CONFIGURED_PLATFORM;
     report.architecture = SYNTH_CONFIGURED_ARCHITECTURE;
+    report.gateResults.assign (gateResults.begin(), gateResults.end());
+
+    std::map<std::string, const GateResult*> resultsById;
+    for (auto& gate : report.gateResults) {
+        if (gate.id.empty() || gate.reasonCode.empty()
+            || ! resultsById.emplace (gate.id, &gate).second)
+            return failure<RequirementReport> (
+                "requirement.duplicate-gate-result",
+                "gate result IDs and reasons must be nonempty and unique");
+        std::set<std::string> owners;
+        if (gate.requirements.empty())
+            return failure<RequirementReport> (
+                "requirement.gate-requirement", "every gate result requires owners");
+        for (const auto& requirementId : gate.requirements)
+            if (! definitionsById.contains (requirementId)
+                || ! owners.insert (requirementId).second)
+                return failure<RequirementReport> (
+                    "requirement.gate-requirement",
+                    "gate result owners must be unique mapped requirement IDs");
+        if (const auto staticGate = staticGates.find (gate.id);
+            staticGate != staticGates.end()
+            && gate.requirements != staticGate->second->requirements)
+            return failure<RequirementReport> (
+                "requirement.gate-reciprocity",
+                "static gate result owners must match acceptance exactly");
+        if (gate.status == Status::pass) {
+            if (gate.artifactPath.empty() || gate.artifactSha256.size() != 64)
+                return failure<RequirementReport> (
+                    "requirement.gate-artifact", "passing gate needs a hashed artifact");
+            const auto artifact = resolveArtifact (
+                sourceRoot, candidateRoot, gate.artifactPath);
+            if (! artifact.ok() || sha256File (artifact.value->file) != gate.artifactSha256)
+                return failure<RequirementReport> (
+                    "requirement.gate-artifact", "passing gate artifact is missing or changed");
+            gate.artifactPath = artifact.value->reportPath;
+        } else if (! gate.artifactPath.empty() || ! gate.artifactSha256.empty()) {
+            return failure<RequirementReport> (
+                "requirement.gate-artifact", "non-passing gates cannot claim artifacts");
+        }
+    }
+    for (const auto& gateId : staticGateIds)
+        if (! resultsById.contains (gateId))
+            return failure<RequirementReport> (
+                "requirement.gate-result-missing", "required acceptance gate has no result");
+
     report.requirements.reserve (requirements.size());
-    for (const auto& definition : requirements) {
+    for (const auto& matrixRow : *matrix.value) {
+        const auto& definition = definitionsById.at (matrixRow.id);
         if (definition.artifactPaths.size() != definition.artifactSha256.size())
             return failure<RequirementReport> (
                 "requirement.artifact", "artifact paths and hashes must have equal length");
         RequirementResult result;
         result.definition = definition;
+        for (const auto& gate : report.gateResults)
+            if (! staticGateIds.contains (gate.id)
+                && std::find (gate.requirements.begin(), gate.requirements.end(), definition.id)
+                       != gate.requirements.end())
+                result.definition.gateIds.push_back (gate.id);
         for (size_t index = 0; index < definition.artifactPaths.size(); ++index) {
             const auto& path = definition.artifactPaths[index];
             const auto resolved = path.starts_with ("candidate/")
@@ -427,48 +806,24 @@ LoadResult<RequirementReport> buildRequirementReport (
         }
 
         bool anyFail = definition.status == Status::fail;
-        bool awaitingHardware = definition.status == Status::awaitingApprovedReference;
+        bool anyAwaiting = definition.status == Status::awaitingApprovedReference;
         bool anyNotRun = false;
-        for (const auto& gateId : definition.gateIds) {
-            const auto gate = resultsById.find (gateId);
-            if (gate == resultsById.end())
-                return failure<RequirementReport> (
-                    "requirement.gate-result-missing", "required acceptance gate has no result");
-            const auto* gateResult = gate->second;
-            if (gateResult->status == Status::fail) {
+        for (const auto& gateId : result.definition.gateIds) {
+            const auto* gate = resultsById.at (gateId);
+            if (gate->status == Status::fail)
                 anyFail = true;
-                appendUnique (result.reasons, gateResult->reasonCode);
-            } else if (gateResult->status == Status::awaitingApprovedReference) {
-                const auto classification = gateClasses.find (gateId);
-                if (classification == gateClasses.end())
-                    return failure<RequirementReport> (
-                        "requirement.gate-mapping", "required acceptance gate is unclassified");
-                if (classification->second == GateClassification::measuredHardware)
-                    awaitingHardware = true;
-                else
-                    anyNotRun = true;
-                appendUnique (result.reasons, gateResult->reasonCode);
-            } else if (gateResult->status == Status::notRun) {
+            else if (gate->status == Status::awaitingApprovedReference)
+                anyAwaiting = true;
+            else if (gate->status == Status::notRun)
                 anyNotRun = true;
-                appendUnique (result.reasons, gateResult->reasonCode);
-            } else {
-                if (gateResult->artifactPath.empty() || gateResult->artifactSha256.size() != 64)
-                    return failure<RequirementReport> (
-                        "requirement.gate-artifact", "passing gate needs a hashed artifact");
-                const auto artifact = resolveArtifact (
-                    sourceRoot, candidateRoot, gateResult->artifactPath);
-                if (! artifact.ok()
-                    || sha256File (artifact.value->file) != gateResult->artifactSha256)
-                    return failure<RequirementReport> (
-                        "requirement.gate-artifact", "passing gate artifact is missing or changed");
-                if (std::find (result.definition.artifactPaths.begin(),
-                               result.definition.artifactPaths.end(),
-                               artifact.value->reportPath)
-                    == result.definition.artifactPaths.end()) {
-                    result.definition.artifactPaths.push_back (artifact.value->reportPath);
-                    result.definition.artifactSha256.push_back (gateResult->artifactSha256);
-                    result.artifactHashes.push_back (gateResult->artifactSha256);
-                }
+            appendUnique (result.reasons, gate->reasonCode);
+            if (gate->status == Status::pass
+                && std::find (result.definition.artifactPaths.begin(),
+                              result.definition.artifactPaths.end(), gate->artifactPath)
+                       == result.definition.artifactPaths.end()) {
+                result.definition.artifactPaths.push_back (gate->artifactPath);
+                result.definition.artifactSha256.push_back (gate->artifactSha256);
+                result.artifactHashes.push_back (gate->artifactSha256);
             }
         }
 
@@ -476,7 +831,7 @@ LoadResult<RequirementReport> buildRequirementReport (
             result.status = Status::fail;
             if (result.reasons.empty())
                 result.reasons.push_back ("requirement.declared-fail");
-        } else if (awaitingHardware) {
+        } else if (anyAwaiting) {
             result.status = Status::awaitingApprovedReference;
             if (result.reasons.empty())
                 result.reasons.push_back ("requirement.awaiting-approved-reference");
@@ -484,7 +839,7 @@ LoadResult<RequirementReport> buildRequirementReport (
             result.status = Status::notRun;
             if (result.reasons.empty())
                 result.reasons.push_back ("requirement.not-run");
-        } else if (! definition.gateIds.empty()
+        } else if (! result.definition.gateIds.empty()
                    && ! result.definition.artifactPaths.empty()) {
             result.status = Status::pass;
             result.reasons = { "requirement.gates-pass" };
@@ -535,37 +890,121 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
     if (text != canonicalJson (parsed))
         return failure<bool> ("release.report-canonical", "requirement report is not canonical JSON");
     const auto* root = parsed.getDynamicObject();
-    if (root == nullptr
+    if (root == nullptr || ! root->getProperty ("schema").isString()
         || root->getProperty ("schema").toString() != "model-d.requirements-report.v1"
+        || ! root->getProperty ("manifestVersion").isInt()
         || static_cast<int> (root->getProperty ("manifestVersion")) != 1
+        || ! root->getProperty ("fixtureVersion").isInt()
         || static_cast<int> (root->getProperty ("fixtureVersion")) != 1
-        || static_cast<int> (root->getProperty ("analyzerVersion")) != 1)
+        || ! root->getProperty ("analyzerVersion").isInt()
+        || static_cast<int> (root->getProperty ("analyzerVersion")) != 1
+        || ! root->getProperty ("releaseReady").isBool())
         return failure<bool> ("release.report-schema", "requirement report schema is unsupported");
-    const auto* rows = root->getProperty ("requirements").getArray();
-    if (rows == nullptr || rows->size() != 127)
-        return failure<bool> ("release.report-set", "requirement report must contain 127 rows");
 
-    bool allPass = true;
-    std::string firstOpen;
-    std::set<std::string> ids;
-    std::vector<std::string> orderedIds;
-    for (const auto& rowValue : *rows) {
-        const auto* row = rowValue.getDynamicObject();
+    const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+    const auto matrix = readMatrixRows (sourceRoot.getChildFile (
+        "docs/remediation/01-traceability-matrix.md"));
+    if (! matrix.ok())
+        return { std::nullopt, matrix.diagnostics };
+    const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
+    const auto index = loadFixtureIndex (
+        sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
+    if (! index.ok())
+        return { std::nullopt, index.diagnostics };
+    const auto acceptance = loadAcceptanceManifest (
+        sourceRoot, sourceRoot.getChildFile ("Tests/reference/acceptance-v1.json"), analyzers);
+    if (! acceptance.ok())
+        return { std::nullopt, acceptance.diagnostics };
+    auto requirements = loadRequirementMap (
+        sourceRoot, sourceRoot.getChildFile ("Tests/reference/requirement-map.json"),
+        sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md"),
+        *acceptance.value);
+    if (! requirements.ok())
+        return { std::nullopt, requirements.diagnostics };
+    const auto authoritativeGates = buildF0GateResults (
+        sourceRoot, *index.value, *acceptance.value);
+    if (! authoritativeGates.ok())
+        return { std::nullopt, authoritativeGates.diagnostics };
+    const auto submittedGates = parseGatePayload (root->getProperty ("gates"));
+    if (! submittedGates.ok())
+        return { std::nullopt, submittedGates.diagnostics };
+    if (canonicalJson (gateArrayJson (*submittedGates.value))
+        != canonicalJson (gateArrayJson (*authoritativeGates.value)))
+        return failure<bool> (
+            "release.gate-evidence", "submitted gate evidence is not authoritative");
+
+    const auto* counts = root->getProperty ("counts").getDynamicObject();
+    const auto* provenance = root->getProperty ("provenance").getDynamicObject();
+    const auto* rows = root->getProperty ("requirements").getArray();
+    if (counts == nullptr || provenance == nullptr || rows == nullptr
+        || rows->size() != static_cast<int> (matrix.value->size()))
+        return failure<bool> ("release.report-set", "requirement report set is malformed");
+    const auto exactProvenance = [&] (const char* name, const char* expected) {
+        const auto value = provenance->getProperty (name);
+        return value.isString() && value.toString() == expected;
+    };
+    if (! exactProvenance ("sourceCommit", SYNTH_SOURCE_COMMIT)
+        || ! exactProvenance ("buildType", SYNTH_CONFIGURED_BUILD_TYPE)
+        || ! exactProvenance ("platform", SYNTH_CONFIGURED_PLATFORM)
+        || ! exactProvenance ("architecture", SYNTH_CONFIGURED_ARCHITECTURE))
+        return failure<bool> (
+            "release.report-mismatch", "report provenance is not the current build provenance");
+
+    std::map<std::string, int> submittedCounts {
+        { "awaiting-approved-reference", 0 }, { "fail", 0 }, { "not-run", 0 }, { "pass", 0 },
+    };
+    for (auto& [name, count] : submittedCounts) {
+        const auto value = counts->getProperty (juce::Identifier { name });
+        if (! value.isInt() || static_cast<int> (value) < 0)
+            return failure<bool> (
+                "release.report-mismatch", "report counts must be nonnegative integers");
+        count = static_cast<int> (value);
+    }
+
+    std::map<std::string, RequirementDefinition*> definitionsById;
+    for (auto& definition : *requirements.value)
+        definitionsById.emplace (definition.id, &definition);
+    std::map<std::string, int> actualSubmittedCounts {
+        { "awaiting-approved-reference", 0 }, { "fail", 0 }, { "not-run", 0 }, { "pass", 0 },
+    };
+    bool submittedAllPass = true;
+    std::vector<std::string> expectedCandidatePaths;
+    for (const auto& fixture : index.value->renderFixtures) {
+        const auto prefix = "candidate/renders/" + fixture.id + "/";
+        for (const auto* name : { "render.json", "control-trace.json", "event-trace.json",
+                                  "main.wav", "phones.wav" })
+            expectedCandidatePaths.push_back (prefix + name);
+    }
+    std::vector<CandidateEvidence> submittedCandidateEvidence;
+    std::set<std::string> uniqueCandidatePaths;
+    for (size_t indexPosition = 0; indexPosition < matrix.value->size(); ++indexPosition) {
+        const auto* row = (*rows)[static_cast<int> (indexPosition)].getDynamicObject();
         std::string id;
+        std::string owner;
         std::string status;
+        std::vector<std::string> verification;
+        std::vector<std::string> gateIds;
+        std::vector<std::string> reasons;
         if (row == nullptr || ! readString (*row, "id", id)
-            || ! readString (*row, "status", status) || ! ids.insert (id).second)
+            || id != (*matrix.value)[indexPosition].id)
+            return failure<bool> (
+                "release.report-set", "requirement report IDs must exactly match matrix order");
+        if (! readString (*row, "owner", owner)
+            || ! readString (*row, "status", status)
+            || ! readStringArray (*row, "verification", verification, false)
+            || ! readStringArray (*row, "gateIds", gateIds, true)
+            || ! readStringArray (*row, "reasons", reasons, false))
             return failure<bool> ("release.report-row", "requirement report row is malformed");
-        orderedIds.push_back (id);
-        const auto* artifacts = row->getProperty ("artifacts").getArray();
-        const auto* reasons = row->getProperty ("reasons").getArray();
-        if (artifacts == nullptr || reasons == nullptr || reasons->isEmpty())
-            return failure<bool> ("release.report-row", "requirement row evidence is malformed");
-        if (status == "pass" && artifacts->isEmpty())
-            return failure<bool> ("release.pass-artifact", "passing requirement has no artifact");
-        if (status != "pass" && status != "fail" && status != "not-run"
-            && status != "awaiting-approved-reference")
+        const auto parsedStatus = parseStatus (status);
+        if (! parsedStatus.has_value())
             return failure<bool> ("release.report-status", "requirement row status is unsupported");
+        ++actualSubmittedCounts[status];
+        submittedAllPass = submittedAllPass && *parsedStatus == Status::pass;
+        const auto* artifacts = row->getProperty ("artifacts").getArray();
+        if (artifacts == nullptr)
+            return failure<bool> ("release.report-row", "requirement artifacts must be an array");
+        if (*parsedStatus == Status::pass && artifacts->isEmpty())
+            return failure<bool> ("release.pass-artifact", "passing requirement has no artifact");
         for (const auto& artifactValue : *artifacts) {
             const auto* artifact = artifactValue.getDynamicObject();
             std::string path;
@@ -577,13 +1016,15 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
             if (path.starts_with ("candidate/")) {
                 const auto candidate = resolveBoundedRegularFile (
                     reportFile.getParentDirectory(), path.substr (10));
-                if (! candidate.ok())
+                if (! candidate.ok() || id != "TST-001"
+                    || ! uniqueCandidatePaths.insert (path).second)
                     return failure<bool> (
-                        "release.report-artifact", "candidate artifact is missing or unbounded");
+                        "release.report-mismatch",
+                        "candidate evidence placement is not authoritative");
                 resolved = *candidate.value;
+                submittedCandidateEvidence.emplace_back (path, hash);
             } else {
-                const auto source = resolveBoundedRegularFile (
-                    juce::File { SYNTH_SOURCE_ROOT }, path);
+                const auto source = resolveBoundedRegularFile (sourceRoot, path);
                 if (! source.ok())
                     return failure<bool> (
                         "release.report-artifact", "source artifact is missing or unbounded");
@@ -592,22 +1033,50 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
             if (sha256File (resolved) != hash)
                 return failure<bool> ("release.report-artifact", "report artifact hash changed");
         }
-        if (status != "pass" && firstOpen.empty()) {
-            const auto reason = (*reasons)[0].toString().toStdString();
-            firstOpen = id + " " + status + " " + reason;
-        }
-        allPass = allPass && status == "pass";
     }
-    const auto matrix = readMatrixIds (
-        juce::File { SYNTH_SOURCE_ROOT }.getChildFile (
-            "docs/remediation/01-traceability-matrix.md"));
-    if (! matrix.ok() || orderedIds != *matrix.value)
+    std::vector<std::string> submittedCandidatePaths;
+    for (const auto& [path, hash] : submittedCandidateEvidence) {
+        static_cast<void> (hash);
+        submittedCandidatePaths.push_back (path);
+    }
+    if (submittedCandidatePaths != expectedCandidatePaths
+        || submittedCounts != actualSubmittedCounts
+        || static_cast<bool> (root->getProperty ("releaseReady")) != submittedAllPass)
         return failure<bool> (
-            "release.report-set", "requirement report IDs must exactly match matrix order");
-    if (static_cast<bool> (root->getProperty ("releaseReady")) != allPass)
-        return failure<bool> ("release.report-ready", "releaseReady disagrees with row statuses");
-    if (! allPass)
-        return failure<bool> ("release.not-ready", firstOpen);
+            "release.report-mismatch",
+            "candidate evidence, counts, or readiness disagree with authoritative inputs");
+
+    const auto authoritativeCandidateEvidence = buildAuthoritativeCandidateEvidence (
+        sourceRoot, *index.value);
+    if (! authoritativeCandidateEvidence.ok())
+        return { std::nullopt, authoritativeCandidateEvidence.diagnostics };
+    if (submittedCandidateEvidence != *authoritativeCandidateEvidence.value)
+        return failure<bool> (
+            "release.report-mismatch",
+            "candidate evidence does not match an authoritative renderer replay");
+    auto* candidateDefinition = definitionsById.at ("TST-001");
+    for (const auto& [path, hash] : *authoritativeCandidateEvidence.value) {
+        candidateDefinition->artifactPaths.push_back (path);
+        candidateDefinition->artifactSha256.push_back (hash);
+    }
+
+    const auto rebuilt = buildRequirementReport (
+        sourceRoot, reportFile.getParentDirectory(), *requirements.value,
+        *authoritativeGates.value, *acceptance.value);
+    if (! rebuilt.ok())
+        return { std::nullopt, rebuilt.diagnostics };
+    if (text != canonicalJson (reportJson (*rebuilt.value)))
+        return failure<bool> (
+            "release.report-mismatch", "submitted report does not match authoritative reduction");
+    if (! rebuilt.value->releaseReady) {
+        const auto firstOpen = std::find_if (
+            rebuilt.value->requirements.begin(), rebuilt.value->requirements.end(),
+            [] (const auto& requirement) { return requirement.status != Status::pass; });
+        return failure<bool> (
+            "release.not-ready",
+            firstOpen->definition.id + " " + statusName (firstOpen->status) + " "
+                + firstOpen->reasons.front());
+    }
     return { true, {} };
 }
 
