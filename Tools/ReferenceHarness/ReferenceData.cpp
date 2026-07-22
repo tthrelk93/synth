@@ -8,7 +8,9 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <set>
 #include <utility>
 
@@ -18,6 +20,8 @@ namespace {
 constexpr auto fixtureSchema = "model-d.fixture-index.v1";
 constexpr auto fixtureVersion = 1;
 constexpr auto frozenArtifactCount = 9;
+constexpr auto renderFixtureSchema = "model-d.render-fixture.v1";
+constexpr std::uint64_t maximumRenderSamples = 96'000u * 60u;
 
 struct ExpectedFrozenArtifact {
     const char* id;
@@ -149,6 +153,59 @@ bool readRequiredString (const juce::DynamicObject& object,
         return false;
     destination = property->toString().toStdString();
     return true;
+}
+
+bool readUnsignedInteger (const juce::DynamicObject& object,
+                          const char* name,
+                          std::uint64_t& destination)
+{
+    const auto* property = requiredProperty (object, name);
+    if (property == nullptr || (! property->isInt() && ! property->isInt64()))
+        return false;
+    const auto value = static_cast<juce::int64> (*property);
+    if (value < 0)
+        return false;
+    destination = static_cast<std::uint64_t> (value);
+    return true;
+}
+
+bool readFiniteNumber (const juce::DynamicObject& object,
+                       const char* name,
+                       double& destination)
+{
+    const auto* property = requiredProperty (object, name);
+    if (property == nullptr
+        || (! property->isInt() && ! property->isInt64() && ! property->isDouble()))
+        return false;
+    destination = static_cast<double> (*property);
+    return std::isfinite (destination);
+}
+
+bool readNonemptyStringArray (const juce::DynamicObject& object,
+                              const char* name,
+                              std::vector<std::string>& destination)
+{
+    const auto* property = requiredProperty (object, name);
+    const auto* array = property == nullptr ? nullptr : property->getArray();
+    if (array == nullptr || array->isEmpty())
+        return false;
+    destination.clear();
+    destination.reserve (static_cast<size_t> (array->size()));
+    for (const auto& entry : *array) {
+        if (! entry.isString() || entry.toString().isEmpty())
+            return false;
+        destination.push_back (entry.toString().toStdString());
+    }
+    return true;
+}
+
+std::optional<ParameterRegistry::Key> parameterKeyForId (const std::string_view id)
+{
+    const auto descriptors = ParameterRegistry::descriptors();
+    for (size_t index = 0; index < descriptors.size(); ++index)
+        if (descriptors[index].id == id)
+            return static_cast<ParameterRegistry::Key> (index);
+    return std::nullopt;
 }
 
 bool readArtifact (const juce::var& value, IndexedArtifact& artifact)
@@ -510,6 +567,223 @@ LoadResult<FixtureIndex> loadFixtureIndex (const juce::File& sourceRoot,
     }
 
     return { std::move (index), {} };
+}
+
+LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
+                                             const juce::File& fixtureFile)
+{
+    if (! fixtureFile.existsAsFile())
+        return failure<RenderFixture> ("fixture.missing", "render fixture does not exist");
+
+    juce::var parsed;
+    if (juce::JSON::parse (fixtureFile.loadFileAsString(), parsed).failed())
+        return failure<RenderFixture> ("fixture.parse", "render fixture is not valid JSON");
+    const auto* root = parsed.getDynamicObject();
+    if (root == nullptr)
+        return failure<RenderFixture> ("fixture.shape", "render fixture root must be an object");
+
+    std::string schema;
+    RenderFixture fixture;
+    fixture.fixtureFile = fixtureFile;
+    if (! readRequiredString (*root, "schema", schema) || schema != renderFixtureSchema)
+        return failure<RenderFixture> ("fixture.schema", "render fixture schema is unsupported");
+    if (! readRequiredString (*root, "id", fixture.id))
+        return failure<RenderFixture> ("fixture.id", "render fixture identifier is required");
+
+    const auto* stateValue = requiredProperty (*root, "state");
+    const auto* state = stateValue == nullptr ? nullptr : stateValue->getDynamicObject();
+    std::string stateKind;
+    std::string statePath;
+    std::string contourContract;
+    if (state == nullptr || ! readRequiredString (*state, "kind", stateKind)
+        || stateKind != "hostState")
+        return failure<RenderFixture> ("fixture.state-source",
+                                       "render state source must be hostState");
+    if (! readRequiredString (*state, "path", statePath)
+        || ! readRequiredString (*state, "sha256", fixture.stateSha256)
+        || ! isLowercaseSha256 (fixture.stateSha256))
+        return failure<RenderFixture> ("fixture.state", "render state path and hash are required");
+
+    const auto stateFile = resolveBoundedRegularFile (sourceRoot, statePath);
+    if (! stateFile.ok())
+        return { std::nullopt, stateFile.diagnostics };
+    fixture.stateFile = *stateFile.value;
+    if (sha256File (fixture.stateFile) != fixture.stateSha256)
+        return failure<RenderFixture> ("fixture.state-hash", "render state hash does not match its bytes");
+
+    const auto* stateVersion = requiredProperty (*state, "version");
+    if (stateVersion == nullptr || ! stateVersion->isInt()
+        || static_cast<int> (*stateVersion) != StateContract::currentVersion)
+        return failure<RenderFixture> ("fixture.state-version", "render state version is unsupported");
+    if (! readRequiredString (*state, "contourContract", contourContract)
+        || (contourContract != "canonicalContours"
+            && contourContract != "legacyCrossedContours"))
+        return failure<RenderFixture> ("fixture.contour", "render contour contract is unsupported");
+    fixture.expectedContourContract = contourContract == "legacyCrossedContours"
+                                          ? StateContract::ContourContract::legacyCrossedContours
+                                          : StateContract::ContourContract::canonicalContours;
+
+    const auto stateXml = juce::XmlDocument::parse (fixture.stateFile);
+    const auto* compatibility = stateXml == nullptr ? nullptr
+                                                     : stateXml->getChildByName ("compatibility");
+    if (stateXml == nullptr || ! stateXml->hasTagName ("modelDState")
+        || stateXml->getIntAttribute ("stateVersion") != StateContract::currentVersion
+        || compatibility == nullptr
+        || compatibility->getStringAttribute ("contourContract") != juce::String { contourContract })
+        return failure<RenderFixture> ("fixture.state-contract",
+                                       "render state bytes do not match the declared v2 contour contract");
+
+    const auto* renderValue = requiredProperty (*root, "render");
+    const auto* render = renderValue == nullptr ? nullptr : renderValue->getDynamicObject();
+    if (render == nullptr || ! readFiniteNumber (*render, "sampleRate", fixture.config.sampleRate)
+        || (fixture.config.sampleRate != 44100.0 && fixture.config.sampleRate != 48000.0
+            && fixture.config.sampleRate != 96000.0))
+        return failure<RenderFixture> ("fixture.sample-rate", "render sample rate is unsupported");
+    if (! readUnsignedInteger (*render, "totalSamples", fixture.config.totalSamples)
+        || fixture.config.totalSamples == 0
+        || fixture.config.totalSamples > maximumRenderSamples)
+        return failure<RenderFixture> ("fixture.total-samples",
+                                       "render length must be positive and bounded");
+    if (! readUnsignedInteger (*render, "seed", fixture.config.seed))
+        return failure<RenderFixture> ("fixture.seed", "render seed must be an unsigned integer");
+
+    const auto* patternsValue = requiredProperty (*render, "blockPatterns");
+    const auto* patterns = patternsValue == nullptr ? nullptr : patternsValue->getArray();
+    if (patterns == nullptr || patterns->isEmpty())
+        return failure<RenderFixture> ("fixture.block-pattern",
+                                       "render block patterns must be nonempty");
+    for (const auto& patternValue : *patterns) {
+        const auto* pattern = patternValue.getArray();
+        if (pattern == nullptr || pattern->isEmpty())
+            return failure<RenderFixture> ("fixture.block-pattern",
+                                           "each render block pattern must be nonempty");
+        std::vector<int> parsedPattern;
+        parsedPattern.reserve (static_cast<size_t> (pattern->size()));
+        for (const auto& size : *pattern) {
+            if (! size.isInt() || static_cast<int> (size) <= 0)
+                return failure<RenderFixture> ("fixture.block-size",
+                                               "render block sizes must be positive integers");
+            parsedPattern.push_back (static_cast<int> (size));
+        }
+        fixture.config.blockPatterns.push_back (std::move (parsedPattern));
+    }
+
+    std::set<std::uint32_t> sequences;
+    const auto readEventIdentity = [&] (const juce::DynamicObject& event,
+                                        std::uint64_t& sample,
+                                        std::uint32_t& sequence) -> std::optional<Diagnostic> {
+        std::uint64_t parsedSequence = 0;
+        if (! readUnsignedInteger (event, "sample", sample)
+            || sample >= fixture.config.totalSamples)
+            return Diagnostic { "fixture.event-sample", "render event sample is outside the render" };
+        if (! readUnsignedInteger (event, "sequence", parsedSequence)
+            || parsedSequence > std::numeric_limits<std::uint32_t>::max()
+            || ! sequences.insert (static_cast<std::uint32_t> (parsedSequence)).second)
+            return Diagnostic { "fixture.event-sequence", "render event sequences must be unique" };
+        sequence = static_cast<std::uint32_t> (parsedSequence);
+        return std::nullopt;
+    };
+
+    const auto* automationValue = requiredProperty (*root, "automation");
+    const auto* automation = automationValue == nullptr ? nullptr : automationValue->getArray();
+    if (automation == nullptr)
+        return failure<RenderFixture> ("fixture.automation", "render automation must be an array");
+    for (const auto& eventValue : *automation) {
+        const auto* eventObject = eventValue.getDynamicObject();
+        AutomationEvent event;
+        if (eventObject == nullptr)
+            return failure<RenderFixture> ("fixture.automation", "automation event must be an object");
+        if (const auto diagnostic = readEventIdentity (*eventObject, event.sample, event.sequence);
+            diagnostic.has_value())
+            return { std::nullopt, { *diagnostic } };
+        std::string parameterId;
+        if (! readRequiredString (*eventObject, "parameterId", parameterId))
+            return failure<RenderFixture> ("fixture.parameter", "automation parameter is required");
+        const auto key = parameterKeyForId (parameterId);
+        if (! key.has_value())
+            return failure<RenderFixture> ("fixture.parameter", "automation parameter is unknown");
+        event.key = *key;
+        double normalizedValue = 0.0;
+        if (! readFiniteNumber (*eventObject, "normalizedValue", normalizedValue)
+            || normalizedValue < 0.0 || normalizedValue > 1.0)
+            return failure<RenderFixture> ("fixture.automation-value",
+                                           "automation value must be finite and normalized");
+        event.normalizedValue = static_cast<float> (normalizedValue);
+        fixture.automation.push_back (event);
+    }
+
+    const auto* midiValue = requiredProperty (*root, "midi");
+    const auto* midi = midiValue == nullptr ? nullptr : midiValue->getArray();
+    if (midi == nullptr)
+        return failure<RenderFixture> ("fixture.midi", "render MIDI must be an array");
+    for (const auto& eventValue : *midi) {
+        const auto* eventObject = eventValue.getDynamicObject();
+        MidiEvent event;
+        if (eventObject == nullptr)
+            return failure<RenderFixture> ("fixture.midi", "MIDI event must be an object");
+        if (const auto diagnostic = readEventIdentity (*eventObject, event.sample, event.sequence);
+            diagnostic.has_value())
+            return { std::nullopt, { *diagnostic } };
+        const auto* bytesValue = requiredProperty (*eventObject, "bytes");
+        const auto* bytes = bytesValue == nullptr ? nullptr : bytesValue->getArray();
+        if (bytes == nullptr || bytes->isEmpty() || bytes->size() > 3)
+            return failure<RenderFixture> ("fixture.midi", "MIDI messages must contain one to three bytes");
+        for (const auto& byte : *bytes) {
+            if (! byte.isInt() || static_cast<int> (byte) < 0 || static_cast<int> (byte) > 255)
+                return failure<RenderFixture> ("fixture.midi", "MIDI bytes must be valid octets");
+            event.bytes.push_back (static_cast<std::uint8_t> (static_cast<int> (byte)));
+        }
+        if (event.bytes.front() < 0x80
+            || juce::MidiMessage::getMessageLengthFromFirstByte (event.bytes.front())
+                != static_cast<int> (event.bytes.size()))
+            return failure<RenderFixture> ("fixture.midi", "MIDI bytes must form a complete JUCE message");
+        const juce::MidiMessage message { event.bytes.data(), static_cast<int> (event.bytes.size()), 0.0 };
+        if (message.getRawDataSize() != static_cast<int> (event.bytes.size()))
+            return failure<RenderFixture> ("fixture.midi", "MIDI bytes are not accepted by JUCE");
+        fixture.midi.push_back (std::move (event));
+    }
+
+    const auto* inputValue = requiredProperty (*root, "input");
+    const auto* input = inputValue == nullptr ? nullptr : inputValue->getDynamicObject();
+    std::string inputKind;
+    if (input == nullptr || ! readRequiredString (*input, "kind", inputKind))
+        return failure<RenderFixture> ("fixture.input", "render input kind is required");
+    if (inputKind == "silence") {
+        fixture.input.kind = InputKind::silence;
+    } else if (inputKind == "dc") {
+        fixture.input.kind = InputKind::dc;
+        if (! readFiniteNumber (*input, "value", fixture.input.value))
+            return failure<RenderFixture> ("fixture.input", "DC input requires a finite value");
+    } else if (inputKind == "sine") {
+        fixture.input.kind = InputKind::sine;
+        if (! readFiniteNumber (*input, "value", fixture.input.value)
+            || ! readFiniteNumber (*input, "frequencyHz", fixture.input.frequencyHz)
+            || fixture.input.frequencyHz <= 0.0
+            || fixture.input.frequencyHz >= fixture.config.sampleRate * 0.5)
+            return failure<RenderFixture> ("fixture.input", "sine input requires finite amplitude and frequency");
+    } else if (inputKind == "wav") {
+        fixture.input.kind = InputKind::wav;
+        std::string path;
+        if (! readRequiredString (*input, "path", path)
+            || ! readRequiredString (*input, "sha256", fixture.input.sha256)
+            || ! isLowercaseSha256 (fixture.input.sha256))
+            return failure<RenderFixture> ("fixture.input", "WAV input path and hash are required");
+        const auto file = resolveBoundedRegularFile (sourceRoot, path);
+        if (! file.ok())
+            return { std::nullopt, file.diagnostics };
+        fixture.input.file = *file.value;
+        if (sha256File (fixture.input.file) != fixture.input.sha256)
+            return failure<RenderFixture> ("fixture.input-hash", "WAV input hash does not match its bytes");
+    } else {
+        return failure<RenderFixture> ("fixture.input", "render input kind is unsupported");
+    }
+
+    if (! readNonemptyStringArray (*root, "analyzers", fixture.analyzers))
+        return failure<RenderFixture> ("fixture.analyzers", "render analyzers must be nonempty");
+    if (! readNonemptyStringArray (*root, "requirements", fixture.requirements))
+        return failure<RenderFixture> ("fixture.requirements", "render requirements must be nonempty");
+
+    return { std::move (fixture), {} };
 }
 
 } // namespace ReferenceHarness

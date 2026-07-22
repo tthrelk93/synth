@@ -57,6 +57,25 @@
       "requirements": ["PAR-003", "PAR-005"]
     }
   ],
-  "renderFixtures": [],
+  "renderFixtures": [
+    {
+      "id": "native-v2-foundation",
+      "relativePath": "Tests/reference/fixtures/native-v2-foundation.json",
+      "sha256": "fbe23d62fdd1e59f31fafc9112d217bf401878a469b18a459124d2937563d67d",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "migrated-v2-foundation",
+      "relativePath": "Tests/reference/fixtures/migrated-v2-foundation.json",
+      "sha256": "3b22aa0ab95b9de985047c4b7c64a291c8a0db134fb97344f751a1099ea4cbd7",
+      "requirements": ["PAR-006"]
+    },
+    {
+      "id": "legacy-contour-foundation",
+      "relativePath": "Tests/reference/fixtures/legacy-contour-foundation.json",
+      "sha256": "cf662f28091ce4c83d1b89209e614dadc1e1ab5483133998076d38641446a754",
+      "requirements": ["PAR-004", "PAR-006"]
+    }
+  ],
   "smoothingFixtures": []
 }

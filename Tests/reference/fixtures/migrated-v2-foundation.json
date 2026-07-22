@@ -1,0 +1,29 @@
+{
+  "schema": "model-d.render-fixture.v1",
+  "id": "migrated-v2-foundation",
+  "state": {
+    "kind": "hostState",
+    "path": "Tests/fixtures/state/migrated-default-state-v2.xml",
+    "sha256": "4fa0dbbfec6b9816657f41d68411285e6d4e17e176d93c596141054c7a7d4958",
+    "version": 2,
+    "contourContract": "legacyCrossedContours"
+  },
+  "render": {
+    "sampleRate": 48000,
+    "totalSamples": 2048,
+    "seed": 212791958372932,
+    "blockPatterns": [[128], [17, 31, 64, 127], [512]]
+  },
+  "automation": [
+    {"sample": 0, "sequence": 0, "parameterId": "outputVolKnob", "normalizedValue": 1.0},
+    {"sample": 0, "sequence": 1, "parameterId": "a440HzOnOff", "normalizedValue": 1.0},
+    {"sample": 512, "sequence": 3, "parameterId": "filterCutoff", "normalizedValue": 0.25}
+  ],
+  "midi": [
+    {"sample": 0, "sequence": 2, "bytes": [144, 60, 100]},
+    {"sample": 1024, "sequence": 4, "bytes": [128, 60, 0]}
+  ],
+  "input": {"kind": "silence"},
+  "analyzers": ["exact-control-trace", "exact-event-trace"],
+  "requirements": ["PAR-006"]
+}

@@ -620,24 +620,64 @@ if(SYNTH_BUILD_VALIDATORS)
         VERBATIM)
 endif()
 
+execute_process(
+    COMMAND git rev-parse HEAD
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    RESULT_VARIABLE _model_d_source_commit_status
+    OUTPUT_VARIABLE _model_d_source_commit
+    ERROR_VARIABLE _model_d_source_commit_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+if(NOT _model_d_source_commit_status EQUAL 0 OR _model_d_source_commit STREQUAL "")
+    message(FATAL_ERROR
+        "Reference rendering requires git rev-parse HEAD: ${_model_d_source_commit_error}")
+endif()
+
+add_library(ModelDReferenceHarness STATIC
+    Tools/ReferenceHarness/ReferenceData.cpp
+    Tools/ReferenceHarness/OfflineRenderer.cpp)
+synth_enable_project_warnings(
+    Tools/ReferenceHarness/ReferenceData.cpp
+    Tools/ReferenceHarness/OfflineRenderer.cpp)
+target_include_directories(ModelDReferenceHarness
+    PUBLIC
+        Tools/ReferenceHarness
+    PRIVATE
+        Source
+        cmake/plugin_compat
+        "${juce_SOURCE_DIR}/modules")
+target_link_libraries(ModelDReferenceHarness
+    PUBLIC
+        juce::juce_audio_formats
+        juce::juce_core
+        juce::juce_cryptography
+    PRIVATE
+        ModelDPlugin
+        SynthProjectOptions)
+set(_model_d_reference_build_definitions
+    SYNTH_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+    SYNTH_CONFIGURED_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+    SYNTH_CONFIGURED_PLATFORM="${CMAKE_SYSTEM_NAME}"
+    SYNTH_CONFIGURED_ARCHITECTURE="${CMAKE_SYSTEM_PROCESSOR}"
+    SYNTH_RESOLVED_JUCE_COMMIT="${SYNTH_RESOLVED_JUCE_COMMIT}"
+    SYNTH_SOURCE_COMMIT="${_model_d_source_commit}")
+target_compile_definitions(ModelDReferenceHarness
+    PUBLIC
+        ${_model_d_reference_build_definitions})
+
 add_executable(ModelDOfflineRenderer Tools/ModelDOfflineRenderer.cpp)
 synth_enable_project_warnings(Tools/ModelDOfflineRenderer.cpp)
-target_link_libraries(ModelDOfflineRenderer PRIVATE ModelDCore SynthProjectOptions)
+target_include_directories(ModelDOfflineRenderer
+    PRIVATE
+        Source
+        cmake/plugin_compat
+        "${juce_SOURCE_DIR}/modules")
+target_link_libraries(ModelDOfflineRenderer
+    PRIVATE
+        ModelDReferenceHarness
+        SynthProjectOptions)
 
 if(SYNTH_BUILD_TESTS)
     enable_testing()
-    execute_process(
-        COMMAND git rev-parse HEAD
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        RESULT_VARIABLE _model_d_source_commit_status
-        OUTPUT_VARIABLE _model_d_source_commit
-        ERROR_VARIABLE _model_d_source_commit_error
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if(NOT _model_d_source_commit_status EQUAL 0 OR _model_d_source_commit STREQUAL "")
-        message(FATAL_ERROR
-            "SYNTH_BUILD_TESTS requires git rev-parse HEAD: ${_model_d_source_commit_error}")
-    endif()
-
     add_executable(ModelDTests Tests/ModelDTests.cpp)
     synth_enable_project_warnings(Tests/ModelDTests.cpp)
     target_include_directories(ModelDTests
@@ -663,35 +703,8 @@ if(SYNTH_BUILD_TESTS)
     endfunction()
 
     add_executable(ModelDReferenceTests Tests/ReferenceHarnessTests.cpp)
-    add_library(ModelDReferenceHarness STATIC
-        Tools/ReferenceHarness/ReferenceData.cpp)
     synth_enable_project_warnings(
-        Tests/ReferenceHarnessTests.cpp
-        Tools/ReferenceHarness/ReferenceData.cpp)
-    target_include_directories(ModelDReferenceHarness
-        PUBLIC
-            Tools/ReferenceHarness
-        PRIVATE
-            Source
-            cmake/plugin_compat
-            "${juce_SOURCE_DIR}/modules")
-    target_link_libraries(ModelDReferenceHarness
-        PUBLIC
-            juce::juce_core
-            juce::juce_cryptography
-        PRIVATE
-            ModelDPlugin
-            SynthProjectOptions)
-    set(_model_d_reference_build_definitions
-        SYNTH_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
-        SYNTH_CONFIGURED_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
-        SYNTH_CONFIGURED_PLATFORM="${CMAKE_SYSTEM_NAME}"
-        SYNTH_CONFIGURED_ARCHITECTURE="${CMAKE_SYSTEM_PROCESSOR}"
-        SYNTH_RESOLVED_JUCE_COMMIT="${SYNTH_RESOLVED_JUCE_COMMIT}"
-        SYNTH_SOURCE_COMMIT="${_model_d_source_commit}")
-    target_compile_definitions(ModelDReferenceHarness
-        PUBLIC
-            ${_model_d_reference_build_definitions})
+        Tests/ReferenceHarnessTests.cpp)
     target_include_directories(ModelDReferenceTests
         BEFORE PRIVATE
             Source
@@ -706,6 +719,8 @@ if(SYNTH_BUILD_TESTS)
             juce::juce_cryptography)
     synth_add_reference_test(ModelDReferenceManifestContract manifest)
     set_tests_properties(ModelDReferenceManifestContract PROPERTIES LABELS "unit;state")
+    synth_add_reference_test(ModelDReferenceRendererContract renderer)
+    set_tests_properties(ModelDReferenceRendererContract PROPERTIES LABELS "dsp;state")
 
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)

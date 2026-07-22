@@ -16,5 +16,7 @@ LoadResult<juce::File> resolveBoundedRegularFile (
 juce::String canonicalJson (const juce::var&);
 LoadResult<FixtureIndex> loadFixtureIndex (
     const juce::File& sourceRoot, const juce::File& indexFile);
+LoadResult<RenderFixture> loadRenderFixture (
+    const juce::File& sourceRoot, const juce::File& fixtureFile);
 
 } // namespace ReferenceHarness
