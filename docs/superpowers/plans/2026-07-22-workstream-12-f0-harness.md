@@ -710,7 +710,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Do not push.
 
-- [ ] **Step 6: Build the exact successor context**
+- [x] **Step 6: Build the exact successor context**
 
   Construct `Agent-08-Workstream-12-F0-Complete-Context.zip` from the exact final commit with one top-level root. Include:
 
@@ -724,7 +724,7 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Exclude `.git`, builds/caches, dependencies, downloaded tools/validators, credentials, settings, recovery files, predecessor archives, and unrelated workspace paths.
 
-- [ ] **Step 7: Verify the successor package and record it**
+- [x] **Step 7: Verify the successor package and record it**
 
   Run ZIP integrity; reject absolute, drive/UNC, traversal, and symlink entries; extract into a fresh bounded directory; verify every internal SHA-256; compare packaged sources/planning/reference files with the committed originals; verify the packaged final commit; and run semantic spot checks for F0-complete status, draft acceptance manifest, open release report, retained Workstream 03 fixtures, and Workstream 04 first action.
 

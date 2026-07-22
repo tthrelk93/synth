@@ -143,22 +143,95 @@ exercised through CLI validate/run/verify again before packaging. The exact
 post-commit SHA is intentionally recorded in the package's generated
 `repository-context/GIT-STATE.md`, avoiding a self-referential tracked file.
 
-Reproduction commands:
+Exact copyable reproduction commands for the successful default-generator
+path are below. Candidate directories must not already exist. `validate`, both
+`run` commands, every build/CTest command, every `cmp`, and every hash command
+are expected to exit 0. `verify-release` is expected to exit 3 with the exact
+open BLD-006 diagnostic asserted at the end.
 
 ```sh
-cmake -S "$SOURCE" -B "$FINAL_BUILD" -G Ninja \
+set -eu
+SOURCE='/Users/agentt/.openclaw/workspace/Developer/synth/.worktrees/workstream-12-f0'
+FINAL_ROOT='/private/tmp/model-d-task5-final.cUgN5c'
+FINAL_BUILD="$FINAL_ROOT/Release build with spaces"
+EXACT_JUCE='/private/tmp/model-d-agent03-final.NECHVL/Release build with spaces/_deps/juce-src'
+BIN="$FINAL_BUILD/ModelDOfflineRenderer"
+INDEX="$SOURCE/Tests/reference/fixture-index-v1.json"
+ACCEPTANCE="$SOURCE/Tests/reference/acceptance-v1.json"
+REQUIREMENTS="$SOURCE/Tests/reference/requirement-map.json"
+CANDIDATE_A="$FINAL_ROOT/review-candidate-a"
+CANDIDATE_B="$FINAL_ROOT/review-candidate-b"
+
+cmake -S "$SOURCE" -B "$FINAL_BUILD" \
   -DCMAKE_BUILD_TYPE=Release \
   -DSYNTH_JUCE_SOURCE_DIR="$EXACT_JUCE" \
-  -DSYNTH_BUILD_TESTS=ON -DSYNTH_BUILD_VALIDATORS=ON \
+  -DSYNTH_BUILD_TESTS=ON \
+  -DSYNTH_BUILD_VALIDATORS=ON \
   -DSYNTH_WARNINGS_AS_ERRORS=ON \
   -DSYNTH_VALIDATE_DISTRIBUTION_IDENTITY=ON
 cmake --build "$FINAL_BUILD" --config Release --parallel 2
+
 ctest --test-dir "$FINAL_BUILD" -C Release -j1 --output-on-failure
-ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L <label> --output-on-failure
-ModelDOfflineRenderer validate --fixture-index ... --acceptance ... --requirements ...
-ModelDOfflineRenderer run --fixture-index ... --acceptance ... --requirements ... --output <new-candidate>
-ModelDOfflineRenderer verify-release --report <new-candidate>/requirements-report.json
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L unit --output-on-failure
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L state --output-on-failure
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L dsp --output-on-failure
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L midi --output-on-failure
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L realtime --output-on-failure
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L host --output-on-failure
+ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L artifact --output-on-failure
+
+"$BIN" validate \
+  --fixture-index "$INDEX" \
+  --acceptance "$ACCEPTANCE" \
+  --requirements "$REQUIREMENTS"
+"$BIN" run \
+  --fixture-index "$INDEX" \
+  --acceptance "$ACCEPTANCE" \
+  --requirements "$REQUIREMENTS" \
+  --output "$CANDIDATE_A"
+"$BIN" run \
+  --fixture-index "$INDEX" \
+  --acceptance "$ACCEPTANCE" \
+  --requirements "$REQUIREMENTS" \
+  --output "$CANDIDATE_B"
+
+test "$(find "$CANDIDATE_A" -type f | wc -l | tr -d ' ')" -eq 16
+test "$(find "$CANDIDATE_B" -type f | wc -l | tr -d ' ')" -eq 16
+find "$CANDIDATE_A" -type f -print0 | LC_ALL=C sort -z |
+while IFS= read -r -d '' candidate_file; do
+  relative_file=${candidate_file#"$CANDIDATE_A/"}
+  cmp "$candidate_file" "$CANDIDATE_B/$relative_file"
+  LC_ALL=C shasum -a 256 "$candidate_file"
+done
+
+set +e
+"$BIN" verify-release \
+  --report "$CANDIDATE_A/requirements-report.json" \
+  >"$FINAL_ROOT/verify-release.stdout" \
+  2>"$FINAL_ROOT/verify-release.stderr"
+VERIFY_EXIT=$?
+set -e
+test "$VERIFY_EXIT" -eq 3
+test "$(cat "$FINAL_ROOT/verify-release.stderr")" = \
+  'release-not-ready: BLD-006 not-run requirement.not-run'
 ```
+
+## Successor package correction status
+
+The one-root successor ZIP was first built and fully verified from closeout
+commit `96a48dd91361648b3776c3c39477938c7a099a2b`: ZIP integrity, 192 internal
+manifest hashes, safe paths, zero symlinks, committed-file equality, final
+candidate equality, and semantic spot checks passed. Review then identified
+the non-executable recipe above as an Important tracked-evidence defect. The
+`96a48dd` archive is therefore superseded rather than represented as final.
+
+Task 5 package Steps 6–7 are checked only after that real construction and
+verification. This tracked correction creates a new exact commit, so the
+successor ZIP, exact-head build/tests/candidates, generated `GIT-STATE.md`, and
+generated verification summary must all be rebuilt and reverified from the
+correction commit before reporting the final outer ZIP hash. The generated
+package files record that final SHA and post-commit evidence without making
+this tracked report self-referential.
 
 ## Honest F0 projection and next action
 
