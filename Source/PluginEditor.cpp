@@ -1983,8 +1983,8 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     SignalFlowOverlay::FilterVizState filterViz;
     signalFlowContourSnapshot = audioProcessor.getSignalFlowContourSnapshot (
         signalFlowContourSnapshot);
-    const auto routedContours = ContourRouting::route (signalFlowContourSnapshot.contract,
-                                                       signalFlowContourSnapshot.controls);
+    const auto routedContours = ContourRouting::mapStoredControls (
+        signalFlowContourSnapshot.contract, signalFlowContourSnapshot.controls);
     filterViz.cutoffHz = audioProcessor.mapFilterCutoffValueToFrequency(
         audioProcessor.apvts.getRawParameterValue("filterCutoff")->load());
     filterViz.resonance = audioProcessor.apvts.getRawParameterValue("filterEmphasis")->load() / 10.0f;

@@ -46,6 +46,8 @@ struct RoutedContours
 Parameter parameterFor (StateContract::ContourContract contract,
                         SemanticContour semanticContour,
                         Stage stage) noexcept;
+RoutedContours mapStoredControls (StateContract::ContourContract contract,
+                                  const ContourControls& controls) noexcept;
 RoutedContours route (StateContract::ContourContract contract,
                       const ContourControls& controls) noexcept;
 std::size_t index (Parameter parameter) noexcept;

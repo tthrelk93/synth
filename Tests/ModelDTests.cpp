@@ -2725,6 +2725,11 @@ void testContourTask3BContract (TestContext& test)
     test.expect (! editorSource.contains (
                      "callbacks.setContourAttack = [setParam](float value) { setParam(\"loudnessAttackTimeKnob\""),
                  "Signal Flow filter contour callbacks must not constructor-capture crossed IDs");
+    test.expect (routingHeader.loadFileAsString().contains ("mapStoredControls")
+                     && editorSource.contains ("ContourRouting::mapStoredControls")
+                     && ! editorSource.contains (
+                         "const auto routedContours = ContourRouting::route (signalFlowContourSnapshot.contract"),
+                 "Signal Flow readback must map stored semantic controls without Decay gating");
 
     const ContourRouting::ContourControls controls {
         0.11f, 0.22f, 0.3f, 0.66f, 0.77f, 0.9f, true
@@ -2755,6 +2760,16 @@ void testContourTask3BContract (TestContext& test)
     test.expect (noDecayRouted.filter.sustain == 1.0f
                      && noDecayRouted.loudness.sustain == 1.0f,
                  "disabled Decay must retain sustain 1.0 on both physical ports");
+    const auto canonicalStored = ContourRouting::mapStoredControls (
+        StateContract::ContourContract::canonicalContours, noDecay);
+    const auto legacyStored = ContourRouting::mapStoredControls (
+        StateContract::ContourContract::legacyCrossedContours, noDecay);
+    test.expect (close (canonicalStored.filter.sustain, 0.3f)
+                     && close (canonicalStored.loudness.sustain, 0.9f),
+                 "canonical disabled-Decay display mapping must retain distinct stored sustains");
+    test.expect (close (legacyStored.filter.sustain, 0.9f)
+                     && close (legacyStored.loudness.sustain, 0.3f),
+                 "legacy disabled-Decay display mapping must retain crossed distinct stored sustains");
 
     constexpr std::array stages { ContourRouting::Stage::attack,
                                   ContourRouting::Stage::decay,

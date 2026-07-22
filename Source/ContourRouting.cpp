@@ -28,22 +28,30 @@ Parameter parameterFor (StateContract::ContourContract contract,
     return canonicalParameter (semanticContour, stage);
 }
 
-RoutedContours route (StateContract::ContourContract contract,
-                      const ContourControls& controls) noexcept
+RoutedContours mapStoredControls (StateContract::ContourContract contract,
+                                  const ContourControls& controls) noexcept
 {
-    const auto sustain = [&] (float value) noexcept
-    {
-        return controls.decayEnabled ? value : 1.0f;
-    };
     const ContourSettings filterIds {
-        controls.filterAttack, controls.filterDecay, sustain (controls.filterSustain)
+        controls.filterAttack, controls.filterDecay, controls.filterSustain
     };
     const ContourSettings loudnessIds {
-        controls.loudnessAttack, controls.loudnessDecay, sustain (controls.loudnessSustain)
+        controls.loudnessAttack, controls.loudnessDecay, controls.loudnessSustain
     };
     return contract == StateContract::ContourContract::canonicalContours
              ? RoutedContours { filterIds, loudnessIds }
              : RoutedContours { loudnessIds, filterIds };
+}
+
+RoutedContours route (StateContract::ContourContract contract,
+                      const ContourControls& controls) noexcept
+{
+    auto routed = mapStoredControls (contract, controls);
+    if (! controls.decayEnabled)
+    {
+        routed.filter.sustain = 1.0f;
+        routed.loudness.sustain = 1.0f;
+    }
+    return routed;
 }
 
 std::size_t index (Parameter parameter) noexcept

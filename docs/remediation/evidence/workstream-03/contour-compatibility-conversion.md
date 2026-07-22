@@ -24,6 +24,14 @@ Signal Flow reads route a typed snapshot through the adapter. Writes call
 restore cannot leave stale constructor-captured IDs. Authentic panel bindings
 keep their literal stable host IDs.
 
+Stored semantic display routing is deliberately separate from physical DSP
+routing. `mapStoredControls` maps the six stored stable-ID values under the
+current canonical/legacy contract without applying the Decay switch, so Signal
+Flow continues to show distinct stored Filter/Loudness sustains when Decay is
+off. `route` reuses that typed mapping and then forces both physical envelope
+sustains to `1.0` when Decay is off. Focused tests cover both contracts and both
+outcomes.
+
 ## Generation publication and bounded reader
 
 The processor resolves all six contour atomic handles during construction. A
@@ -114,6 +122,14 @@ all state-labeled tests passed 5/5. The complete Release build exited zero and
 built Assets, Core, OfflineRenderer, ActualWrapperSmoke, plugin shared code,
 tests, Standalone, AU, and VST3 targets.
 
+Review remediation also followed RED/GREEN. With only the new source/behavior
+guard present, `ModelDContourContract` built and failed 0/1 because Signal Flow
+still called the decay-gated DSP route. After introducing
+`mapStoredControls`, focused contour/state-v2 passed 2/2 and the state label
+passed 5/5. Disabled-Decay tests prove canonical display sustains remain
+`0.30/0.90`, legacy display sustains remain crossed `0.90/0.30`, and physical
+DSP sustains remain `1.0/1.0` in both modes.
+
 Full-suite command:
 
 ```sh
@@ -124,16 +140,16 @@ The completed run passed 14/14 with zero failures and retained all seven
 labels:
 
 ```text
-artifact = 4.89 sec*proc (3 tests)
+artifact = 4.92 sec*proc (3 tests)
 dsp = 0.03 sec*proc
-host = 29.97 sec*proc (2 tests)
+host = 29.84 sec*proc (2 tests)
 midi = 0.01 sec*proc
 realtime = 0.01 sec*proc
-state = 0.32 sec*proc (5 tests)
-unit = 0.38 sec*proc
+state = 0.31 sec*proc (5 tests)
+unit = 0.09 sec*proc
 ```
 
-Total real time was `35.61 sec`.
+Total real time was `35.22 sec`.
 
 ## Explicit deferrals
 
