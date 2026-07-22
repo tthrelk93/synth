@@ -730,9 +730,33 @@ Do not add harness implementation to `Source/` or grow `Tests/ModelDTests.cpp`; 
 
   Add a final tracked plan mark only if package verification status must be recorded, commit that one documentation change, rebuild the package from the new exact commit, and repeat every archive verification. Leave only the final verified ZIP untracked.
 
+## Whole-branch review remediation
+
+- [x] Add RED/GREEN contracts for exact render analyzer IDs, real analyzer execution,
+  canonical metric artifacts, typed gate evidence, and removal of manual registry
+  promotion.
+- [x] Make `run` emit one root registry `metrics.json` plus one render
+  `metrics.json` per fixture; require byte equality across repeated runs and
+  analyzer equivalence across block patterns.
+- [x] Make `verify-release` independently rerender/reanalyze and reject stale
+  analyzers, missing/tampered metrics, coordinated report forgery, and metric or
+  provenance mismatch.
+- [x] Replace untyped published/measured-hardware/performance provenance with
+  strict classification records and exhaustive positive/negative contracts,
+  without populating the globally draft manifest arrays.
+- [x] Calibrate 5/10 ms ramp first movement at `eventSample`, retain the ideal
+  increment formula, and document the v1 event origin.
+- [x] Preserve all Task 1–5 invariants, dynamic gate ownership/reduction, the
+  four approved derived policies, and the empty `Source/` diff.
+
+Implementation commit:
+`9a0c6b942b04e4ae07d596cc9b6688e4d4634096`.
+The exact-head verification and replacement Agent-08 archive are recorded in
+the ignored whole-branch remediation report to avoid self-referential hashes.
+
 ## Self-Review
 
 - Spec coverage: Task 1 implements canonical data, hashing, path safety, and the frozen artifact seam; Task 2 implements fixture parsing, deterministic exact-event rendering, generated inputs, output governance, and CLI compatibility; Task 3 implements analyzers, synthetic calibration, seven registry-derived PAR-006 templates, approved derived policy, and honest open results; Task 4 implements all-127 requirement mapping, canonical reports, and release enforcement; Task 5 implements evidence, planning synchronization, full serial verification, and the successor chain.
 - Placeholder scan: every implementation step names exact paths, interfaces, commands, expected RED/GREEN outcomes, status semantics, and commit boundaries. Command metavariables such as `FINAL_BUILD` and `NEW_CANDIDATE` are explicitly runtime-chosen bounded paths, not unresolved design decisions.
-- Type consistency: all loaders return `LoadResult<T>`; the renderer produces `RenderResult`; analyzers produce `MetricResult`; acceptance produces `GateResult`; reporting produces `RequirementReport`. Parameter identity always resolves through `ParameterRegistry::Key`; report status always uses the single `Status` enum.
+- Type consistency: all loaders return `LoadResult<T>`; the renderer produces `RenderResult`; analyzers produce `MetricResult` and typed `MetricEvidenceRecord`; acceptance consumes narrow `GateMetricEvidence` and produces `GateResult`; reporting produces `RequirementReport`. Classification-specific provenance uses typed records. Parameter identity always resolves through `ParameterRegistry::Key`; report status always uses the single `Status` enum.
 - Scope check: the five tasks form one F0 harness subsystem with sequential dependencies and independently reviewable commits. Later DSP analyzers, hardware campaigns, full TST completion, host validation, presets, UI, release, and distribution remain out of scope.

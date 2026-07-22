@@ -95,10 +95,10 @@ Planned `tests/reference/acceptance-v1.json` structure:
 {
   "manifestVersion": 1,
   "status": "draft|approved",
-  "published": [{"id":"...","value":0,"unit":"...","source":"...","page":80}],
+  "published": [{"id":"...","value":0,"unit":"...","source":"...","sourceVersion":"...","page":"80"}],
   "derivedSoftware": [{"id":"...","value":0,"derivation":"...","review":"..."}],
-  "measuredHardware": [{"id":"...","referenceSet":"...","bandArtifact":"...","uncertainty":"..."}],
-  "performance": [{"id":"...","targetSystem":"...","budget":0,"rationale":"..."}]
+  "measuredHardware": [{"id":"...","referenceStatus":"approved","referenceSet":"...","bandArtifact":"...","rawSha256":["..."],"instrument":"...","environment":"...","captureChain":"...","repetitionCount":3,"repetitionStatistic":"...","uncertaintyMethod":"...","uncertaintyValue":0,"approver":"...","approvalDate":"YYYY-MM-DD"}],
+  "performance": [{"id":"...","targetSystem":"...","budgetBasis":"...","rationale":"...","reviewStatus":"approved","reviewer":"...","reviewDate":"YYYY-MM-DD"}]
 }
 ```
 

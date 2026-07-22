@@ -52,6 +52,7 @@ GREEN proof without treating a failed intermediate command as final evidence.
 
 The harness defines `model-d.fixture-index.v1`,
 `model-d.render-fixture.v1`, canonical render/control/event outputs,
+`model-d.metrics.v1`,
 `model-d.smoothing-fixture.v1`, `model-d.acceptance.v1`,
 `model-d.requirement-map.v1`, `model-d.requirements-report.v1`, and the
 non-provenance expected F0 status projection. Analyzer identities are
@@ -62,9 +63,9 @@ The immutable Workstream 03 frozen set remains nine files with the hashes in
 
 | Artifact | SHA-256 |
 |---|---|
-| `native-v2-foundation.json` | `86a06f1dacabff5cc3e346a0549446fff154f79c8fc8263beeadbf439d614c79` |
-| `migrated-v2-foundation.json` | `4c298c51d760e6b0ed27db97e777c25cabd6b4f3ad737bddc9db71ac7bfd8740` |
-| `legacy-contour-foundation.json` | `9decfa1f8cf93b57656c2c2035cd244619c985ef183172003833de3f17feb830` |
+| `native-v2-foundation.json` | `4dba2dc10bbaa74aa3f31500c5c52d267d3d8719252adbf1f5ba815a6489b28e` |
+| `migrated-v2-foundation.json` | `549b7ef47faf267fc43c874a7c34244f5b23241f7bfdfef5ef982675127b1961` |
+| `legacy-contour-foundation.json` | `84651db327575bc87e41c8e3313a176396b836e63e898b9ed2df14d60c6991a8` |
 | `par-006/none-step-v1.json` | `e2346232c6d4ad68621231982c35de64377789ed83678d6dd0509dfbe1f9b6b3` |
 | `par-006/gain-control-step-v1.json` | `e44a0d7953c79f2bc8604d9b8addb527e986da73f43cd155c91e9050459ebfcf` |
 | `par-006/control-step-v1.json` | `43dded14ef88f7d7fc1b43cffd69e15fc498af95d4e59b5aff44cd258613684f` |
@@ -74,14 +75,14 @@ The immutable Workstream 03 frozen set remains nine files with the hashes in
 | `par-006/contour-stage-step-v1.json` | `4a982469f00b68b01276017a6afac32f765221892b8da7062ff64d5770677bb4` |
 | `acceptance-v1.json` | `7ebe0d765301125165726884f0e424105f502b0fb718002af7c0c9e2867e0216` |
 | `requirement-map.json` | `d1a23e8b70fe94d044cb5827338ebd36648066820836c70c06c9e4ddfe50a8b9` |
-| `expected-f0-requirement-statuses.json` | `179ec17e454bfaa6d14059fe8e426bab86f0633ac18a6a58886a20d72ea12c46` |
+| `expected-f0-requirement-statuses.json` | `65d89b318021f29825113e20b75c1a282dac01f964f5eda8ca8dd28cf5146180` |
 
 ## Determinism and negative contracts
 
 Each native, migrated, and legacy-contour fixture renders twice and across its
 declared `[128]`, `[17,31,64,127]`, or `[512]` host partition. Main audio,
-Phones audio, control traces, event traces, and canonical render manifests are
-byte-equal for repeated candidates at the same exact configured commit. The
+Phones audio, control traces, event traces, canonical analyzer metrics, and
+render manifests are byte-equal for repeated candidates at the same exact configured commit. The
 final retained repeat hashes are recorded in the closeout verification below.
 
 Stable negative diagnostics cover `path.*`, `index.*`, `semantic.*`,
@@ -110,7 +111,7 @@ passed 20/20 in 38.75 seconds. The required label reruns passed: unit 4/4,
 state 10/10, DSP 3/3, MIDI 1/1, realtime 2/2, host 2/2, and artifact 4/4.
 
 CLI `validate`, candidate A `run`, and candidate B `run` each exited 0.
-All 16 files in A compare byte-equal to B. `verify-release` exited 3 with the
+All 20 files in A compare byte-equal to B. `verify-release` exited 3 with the
 exact expected first-open diagnostic:
 
 ```text
@@ -202,8 +203,8 @@ ctest --test-dir "$FINAL_BUILD" -C Release -j1 -L artifact --output-on-failure
   --requirements "$REQUIREMENTS" \
   --output "$CANDIDATE_B"
 
-test "$(find "$CANDIDATE_A" -type f | wc -l | tr -d ' ')" -eq 16
-test "$(find "$CANDIDATE_B" -type f | wc -l | tr -d ' ')" -eq 16
+test "$(find "$CANDIDATE_A" -type f | wc -l | tr -d ' ')" -eq 20
+test "$(find "$CANDIDATE_B" -type f | wc -l | tr -d ' ')" -eq 20
 find "$CANDIDATE_A" -type f -print0 | LC_ALL=C sort -z |
 while IFS= read -r -d '' candidate_file; do
   relative_file=${candidate_file#"$CANDIDATE_A/"}
@@ -243,6 +244,49 @@ generated verification summary must all be rebuilt and reverified from the
 correction commit before reporting the final outer ZIP hash. The generated
 package files record that final SHA and post-commit evidence without making
 this tracked report self-referential.
+
+## Whole-branch review remediation
+
+Whole-branch review remediation implementation commit
+`9a0c6b942b04e4ae07d596cc9b6688e4d4634096` closes three acceptance-pipeline
+defects without changing `Source/`, the 48-key registry, state v2, contour
+routing, the global `draft` status, or the four approved derived policies.
+
+The RED contracts first demonstrated that render fixtures accepted unregistered
+trace labels, `run` emitted no analyzer metrics, `hard.registry.count` was
+manually promoted without a metric, minimal classification records loaded, and
+5/10 ms synthetic ramps first moved one sample late. GREEN now requires exact
+registered analyzer IDs, executes every declared analyzer across every immutable
+block-pattern result, and rejects metric divergence. Each render writes a
+canonical hashed `metrics.json`; the candidate root writes a separate canonical
+registry `metrics.json`. A run now contains exactly 20 files: the report, the
+root metric artifact, and six files for each of three render fixtures.
+
+`hard.registry.count` is evaluated through typed `GateMetricEvidence` produced
+by `signal.stats.v1` over the immutable live 48-entry registry. Acceptance
+reruns that analyzer and checks identity/version, metric/unit, settings,
+finite/value/allowance, source provenance, artifact bytes and SHA-256, then the
+exact gate comparison. Missing evidence stays open; malformed and out-of-bound
+evidence fails without claiming an artifact. `verify-release` independently
+rerenders and reanalyzes all candidate data, including both root and per-render
+metric artifacts. Coordinated report, missing-metric, tampered-metric, stale
+analyzer, and repeat-byte mutations are rejected.
+
+Published provenance now requires source, source version, and page. Measured
+hardware provenance requires approved reference status/set, band artifact,
+one-or-more lowercase SHA-256 raw hashes, instrument, environment, capture
+chain, positive repetition count/statistic, uncertainty method/nonnegative
+finite value, approver, and valid approval date. Performance provenance requires
+target system, budget basis, rationale, explicit approved review status,
+reviewer, and valid review date. The checked-in arrays remain empty; tests use
+only complete synthetic records and exhaustive negative mutations.
+
+The `control.step.v1` calibration now places the first ideal ramp increment at
+`eventSample`, settles at `eventSample + durationSamples - 1`, preserves
+`travel / durationSamples`, and publishes that origin in its version-1 settings.
+The post-remediation report remains 127 rows and 101 gates at 14 pass, 94
+not-run, 19 awaiting approved reference, 0 fail, and `releaseReady=false`.
+Authoritative verification still exits 3 at BLD-006.
 
 ## Honest F0 projection and next action
 
