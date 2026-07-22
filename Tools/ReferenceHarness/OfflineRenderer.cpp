@@ -1,8 +1,11 @@
 #include "OfflineRenderer.h"
 
+#include "Acceptance.h"
+#include "AnalyzerRegistry.h"
 #include "Oscillator.h"
 #include "PluginProcessor.h"
 #include "ReferenceData.h"
+#include "RequirementReporter.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_cryptography/juce_cryptography.h>
@@ -495,6 +498,90 @@ LoadResult<FixtureIndex> validateIndexAndRenderFixtures (const juce::File& index
     return index;
 }
 
+struct ValidatedInputs {
+    FixtureIndex index;
+    AcceptanceManifest acceptance;
+    std::vector<RequirementDefinition> requirements;
+    std::vector<SmoothingCase> smoothing;
+};
+
+LoadResult<ValidatedInputs> validateInputs (const juce::File& indexPath,
+                                            const juce::File& acceptancePath,
+                                            const juce::File& requirementsPath)
+{
+    const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+    const auto index = validateIndexAndRenderFixtures (indexPath);
+    if (! index.ok())
+        return { std::nullopt, index.diagnostics };
+    const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
+    for (const auto id : { "signal.stats.v1", "control.step.v1", "audio.click.v1" }) {
+        const auto analyzer = analyzers.find (id);
+        if (! analyzer.ok())
+            return { std::nullopt, analyzer.diagnostics };
+    }
+    const auto acceptance = loadAcceptanceManifest (sourceRoot, acceptancePath, analyzers);
+    if (! acceptance.ok())
+        return { std::nullopt, acceptance.diagnostics };
+    const auto smoothing = expandSmoothingFixtures (
+        sourceRoot, *index.value, *acceptance.value);
+    if (! smoothing.ok())
+        return { std::nullopt, smoothing.diagnostics };
+    const auto requirements = loadRequirementMap (
+        sourceRoot, requirementsPath,
+        sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md"),
+        *acceptance.value);
+    if (! requirements.ok())
+        return { std::nullopt, requirements.diagnostics };
+    return { ValidatedInputs { *index.value, *acceptance.value,
+                               *requirements.value, *smoothing.value }, {} };
+}
+
+LoadResult<std::vector<GateResult>> evaluateF0Gates (
+    const ValidatedInputs& inputs,
+    const juce::File& sourceRoot)
+{
+    const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
+    const std::span<const SmoothingEvidence> noEvidence;
+    auto gates = evaluateAcceptance (
+        inputs.acceptance, inputs.smoothing, noEvidence, analyzers);
+    if (! gates.ok())
+        return gates;
+    const auto registryGate = std::find_if (
+        gates.value->begin(), gates.value->end(), [] (const auto& gate) {
+            return gate.id == "hard.registry.count";
+        });
+    if (registryGate == gates.value->end() || ParameterRegistry::descriptors().size() != 48)
+        return failure<std::vector<GateResult>> (
+            "requirement.registry-gate", "exact 48-descriptor registry gate is unavailable");
+    const auto registryPath = std::string { "Tests/fixtures/parameters/parameter-registry-v2.json" };
+    const auto registryArtifact = sourceRoot.getChildFile (registryPath);
+    registryGate->status = Status::pass;
+    registryGate->reasonCode = "registry.count-pass";
+    registryGate->artifactPath = registryPath;
+    registryGate->artifactSha256 = sha256File (registryArtifact);
+    return gates;
+}
+
+bool appendCandidateEvidence (std::vector<RequirementDefinition>& requirements,
+                              const juce::File& candidateRoot,
+                              const std::vector<juce::File>& files)
+{
+    const auto row = std::find_if (
+        requirements.begin(), requirements.end(), [] (const auto& requirement) {
+            return requirement.id == "TST-001";
+        });
+    if (row == requirements.end())
+        return false;
+    for (const auto& file : files) {
+        const auto relative = file.getRelativePathFrom (candidateRoot).toStdString();
+        if (relative.starts_with ("..") || relative.empty())
+            return false;
+        row->artifactPaths.push_back ("candidate/" + relative);
+        row->artifactSha256.push_back (sha256File (file));
+    }
+    return true;
+}
+
 void printDiagnostic (const Diagnostic& diagnostic)
 {
     std::cerr << diagnostic.code << ": " << diagnostic.message << "\n";
@@ -623,20 +710,108 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             std::cerr << "cli.arguments: invalid command arguments\n";
             return 2;
         }
-        const auto index = validateIndexAndRenderFixtures (juce::File { arguments[2] });
-        if (! index.ok()) {
-            printDiagnostic (index.diagnostics.front());
+        const auto inputs = validateInputs (
+            juce::File { arguments[2] }, juce::File { arguments[4] }, juce::File { arguments[6] });
+        if (! inputs.ok()) {
+            printDiagnostic (inputs.diagnostics.front());
             return 1;
         }
-        std::cerr << "missing-acceptance-implementation: acceptance validation is deferred to Task 3\n";
-        return 1;
+        if (! run)
+            return 0;
+
+        const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+        const auto output = juce::File { arguments[8] };
+        if (output.exists()) {
+            std::cerr << "output.exists: candidate output directory already exists\n";
+            return 1;
+        }
+        const auto staging = output.getParentDirectory().getChildFile (
+            "." + output.getFileName() + "-" + juce::Uuid {}.toString());
+        if (! staging.createDirectory()) {
+            std::cerr << "output.create: staging directory cannot be created\n";
+            return 1;
+        }
+        const auto discardStaging = [&] { staging.deleteRecursively(); };
+        std::vector<juce::File> candidateFiles;
+        const auto rendersRoot = staging.getChildFile ("renders");
+        if (! rendersRoot.createDirectory()) {
+            discardStaging();
+            std::cerr << "output.create: render directory cannot be created\n";
+            return 1;
+        }
+        for (const auto& artifact : inputs.value->index.renderFixtures) {
+            const auto fixture = loadRenderFixture (
+                sourceRoot, sourceRoot.getChildFile (artifact.relativePath));
+            if (! fixture.ok()) {
+                discardStaging();
+                printDiagnostic (fixture.diagnostics.front());
+                return 1;
+            }
+            const auto rendered = renderFixture (*fixture.value);
+            if (! rendered.ok()) {
+                discardStaging();
+                printDiagnostic (rendered.diagnostics.front());
+                return 1;
+            }
+            const auto written = writeCandidateArtifacts (
+                *fixture.value, *rendered.value, rendersRoot.getChildFile (fixture.value->id));
+            if (! written.ok()) {
+                discardStaging();
+                printDiagnostic (written.diagnostics.front());
+                return 1;
+            }
+            candidateFiles.insert (candidateFiles.end(),
+                                   written.value->begin(), written.value->end());
+        }
+        auto requirements = inputs.value->requirements;
+        if (! appendCandidateEvidence (requirements, staging, candidateFiles)) {
+            discardStaging();
+            std::cerr << "requirement.candidate-evidence: F0 artifact mapping failed\n";
+            return 1;
+        }
+        const auto gates = evaluateF0Gates (*inputs.value, sourceRoot);
+        if (! gates.ok()) {
+            discardStaging();
+            printDiagnostic (gates.diagnostics.front());
+            return 1;
+        }
+        const auto report = buildRequirementReport (
+            sourceRoot, staging, requirements, *gates.value, inputs.value->acceptance);
+        if (! report.ok()) {
+            discardStaging();
+            printDiagnostic (report.diagnostics.front());
+            return 1;
+        }
+        const auto writtenReport = writeRequirementReport (*report.value, output);
+        if (! writtenReport.ok()) {
+            discardStaging();
+            printDiagnostic (writtenReport.diagnostics.front());
+            return 1;
+        }
+        if (! rendersRoot.copyDirectoryTo (output.getChildFile ("renders"))) {
+            discardStaging();
+            output.deleteRecursively();
+            std::cerr << "output.write: candidate render artifacts could not be finalized\n";
+            return 1;
+        }
+        discardStaging();
+        return 0;
     }
     if (arguments[0] == "verify-release") {
         if (arguments.size() != 3 || ! exactOption (1, "--report")) {
             std::cerr << "cli.arguments: invalid command arguments\n";
             return 2;
         }
-        std::cerr << "missing-requirement-implementation: release verification is deferred to Task 4\n";
+        const auto verified = verifyReleaseReady (juce::File { arguments[2] });
+        if (verified.ok())
+            return 0;
+        if (! verified.diagnostics.empty()
+            && verified.diagnostics.front().code == "release.not-ready") {
+            std::cerr << "release-not-ready: " << verified.diagnostics.front().message << "\n";
+            return 3;
+        }
+        if (! verified.diagnostics.empty())
+            printDiagnostic (verified.diagnostics.front());
         return 1;
     }
     std::cerr << "cli.command: unsupported command\n";

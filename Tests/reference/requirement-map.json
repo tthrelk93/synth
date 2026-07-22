@@ -1,0 +1,1518 @@
+{
+  "schema": "model-d.requirement-map.v1",
+  "manifestVersion": 1,
+  "requirements": [
+    {
+      "id": "BLD-001",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "DOC"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/build-foundation.md",
+          "sha256": "06bb3a2c7c6759413cd2ab45c119ccd3908889374ece79abec18e38a72441b95"
+        }
+      ]
+    },
+    {
+      "id": "BLD-002",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "DOC"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/build-foundation.md",
+          "sha256": "06bb3a2c7c6759413cd2ab45c119ccd3908889374ece79abec18e38a72441b95"
+        }
+      ]
+    },
+    {
+      "id": "BLD-003",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "DOC"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/dependency-license-review.md",
+          "sha256": "4403e3bc579709038f3ccc86ff5b922f1c433077ef138daa0ac6ee5f5894269f"
+        }
+      ]
+    },
+    {
+      "id": "BLD-004",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "DOC"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/ctest-ci-enforcement.md",
+          "sha256": "564b165143451b8ed8bd8c5c25229e15d27e5a43cf85255a29c6305447ab87f7"
+        }
+      ]
+    },
+    {
+      "id": "BLD-005",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "UT",
+        "HV"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/wrapper-bus-contract.md",
+          "sha256": "1a7233ddfd7c77a702e5806bb9aa6e3044946ec930bfbd1748111728859b9841"
+        }
+      ]
+    },
+    {
+      "id": "BLD-006",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "UT",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "BLD-007",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "DOC"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/owner-identity-and-deferral-decision.md",
+          "sha256": "56873564babbdf755f14cf3703ed7627f9a7b8c33c2ef8be85d91b8202a9e291"
+        }
+      ]
+    },
+    {
+      "id": "BLD-008",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/warning-baseline.md",
+          "sha256": "51a37c0e4455e787bede230c1a1347cedd2485b6d0c07c4a7e3d4945ec5bff98"
+        }
+      ]
+    },
+    {
+      "id": "BLD-009",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "UI"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/standalone-lifecycle.md",
+          "sha256": "bec7bacabb9331485c0fb3c821baeb28192c50fefb2aedfb1e0e93628703d105"
+        }
+      ]
+    },
+    {
+      "id": "BLD-010",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "UT",
+        "HV"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/ctest-ci-enforcement.md",
+          "sha256": "564b165143451b8ed8bd8c5c25229e15d27e5a43cf85255a29c6305447ab87f7"
+        }
+      ]
+    },
+    {
+      "id": "BLD-011",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "BLD-012",
+      "owner": "[02 Build](02-build-packaging-host-validation.md)",
+      "verification": [
+        "HV",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PAR-001",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "DOC"
+      ],
+      "status": "pass",
+      "gateIds": [
+        "hard.registry.count"
+      ],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-03/parameter-registry-foundation.md",
+          "sha256": "f67f0b6014961b2e431a563024154e96ed283a42c1c94a76dc053a46d2fd0a0f"
+        }
+      ]
+    },
+    {
+      "id": "PAR-002",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PAR-003",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "ST"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-03/parameter-registry-v2.md",
+          "sha256": "ed8285403bf0b39d697a879646a6fea00f5f32d1574bdb40eca1bdf7789883f3"
+        }
+      ]
+    },
+    {
+      "id": "PAR-004",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "ST",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PAR-005",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "ST"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-03/state-v2-migration.md",
+          "sha256": "be1798506e064bbf382ab383989e3b40b832bf6ff2a4a567a9f9408fb5ab455a"
+        }
+      ]
+    },
+    {
+      "id": "PAR-006",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [
+        "par006.gain-control.duration",
+        "par006.control.duration",
+        "par006.settling.allowance",
+        "par006.none.intermediate"
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "PAR-007",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "ST",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PAR-008",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "ST",
+        "SEC"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-03/state-v2-migration.md",
+          "sha256": "be1798506e064bbf382ab383989e3b40b832bf6ff2a4a567a9f9408fb5ab455a"
+        }
+      ]
+    },
+    {
+      "id": "PAR-009",
+      "owner": "[03 Parameters/state](03-parameter-automation-state-contract.md)",
+      "verification": [
+        "UT",
+        "RT"
+      ],
+      "status": "pass",
+      "gateIds": [],
+      "artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-03/prepared-parameter-snapshot.md",
+          "sha256": "a0320ea8bf62c4b6e5df25513ff8e67405d9a9df8162da3e70e69953d0217abd"
+        }
+      ]
+    },
+    {
+      "id": "PIT-001",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-002",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-003",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-004",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-005",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-006",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-007",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PIT-008",
+      "owner": "[04 Pitch](04-pitch-tuning-glide-modulation.md)",
+      "verification": [
+        "RT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-001",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-002",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-003",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "ST",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-004",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-005",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-006",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-007",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HV",
+        "UI"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-008",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-009",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-010",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "UT",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "MID-011",
+      "owner": "[05 MIDI/lifecycle](05-sample-accurate-midi-monophonic-lifecycle.md)",
+      "verification": [
+        "OR",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-001",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-002",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "OR",
+        "HR",
+        "LI"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-003",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "HR",
+        "OR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-004",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-005",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-006",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-007",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "OSC-008",
+      "owner": "[06 Oscillators](06-band-limited-calibrated-oscillators.md)",
+      "verification": [
+        "UT",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-001",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-002",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-003",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "OR",
+        "HR",
+        "LI"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-004",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-005",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-006",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-007",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-008",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "ENV-009",
+      "owner": "[07 Contours](07-model-d-contour-generators.md)",
+      "verification": [
+        "UT",
+        "ST",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-001",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-002",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-003",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-004",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "OR",
+        "HR",
+        "LI"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-005",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-006",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-007",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-008",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "UT",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "FLT-009",
+      "owner": "[08 Filter](08-virtual-analog-ladder-filter.md)",
+      "verification": [
+        "OR",
+        "HR",
+        "RT"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-001",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-002",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-003",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-004",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-005",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "OR",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-006",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-007",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-008",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "HR",
+        "UI"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-009",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "OR",
+        "HR",
+        "LI"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "SIG-010",
+      "owner": "[09 Signal path](09-nonlinear-signal-path.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "RT",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-001",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UT",
+        "UI"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-002",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UT",
+        "UI",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-003",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UT",
+        "UI"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-004",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UT",
+        "ST",
+        "UI"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-005",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UI",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-006",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UI",
+        "ST",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-007",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UI",
+        "UT",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "UI-008",
+      "owner": "[10 UI](10-ui-correctness-authentic-panel.md)",
+      "verification": [
+        "UI",
+        "HV",
+        "ST"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-001",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-002",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-003",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "UT",
+        "RT",
+        "SEC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-004",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "UT",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-005",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "UT",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-006",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "RT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-007",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "RT",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "RT-008",
+      "owner": "[11 RT/performance](11-real-time-safety-visualization-performance.md)",
+      "verification": [
+        "RT",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-001",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "OR",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-002",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-003",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "OR",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-004",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "DOC",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-005",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "HR",
+        "DOC"
+      ],
+      "status": "awaiting-approved-reference",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-006",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "UT",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [
+        "hard.registry.count",
+        "par006.gain-control.duration",
+        "par006.control.duration",
+        "par006.settling.allowance",
+        "par006.none.intermediate"
+      ],
+      "artifacts": []
+    },
+    {
+      "id": "TST-007",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "UT",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-008",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "OR",
+        "HV",
+        "RT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "TST-009",
+      "owner": "[12 Reference/tests](12-hardware-reference-regression-system.md)",
+      "verification": [
+        "LI",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-001",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "ST",
+        "UT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-002",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "ST",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-003",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "ST",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-004",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "CR",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-005",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "CR",
+        "UT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-006",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "UT",
+        "ST"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-007",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "ST",
+        "SEC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-008",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "ST",
+        "HV"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-009",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "HV",
+        "DOC",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "PRE-010",
+      "owner": "[13 Presets](13-versioned-presets-official-library.md)",
+      "verification": [
+        "UT",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-001",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "ST",
+        "UT"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-002",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "ST",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-003",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "ST",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-004",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "UT",
+        "CR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-005",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "ST",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-006",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "UT",
+        "OR",
+        "UI"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-007",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "OR",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "REC-008",
+      "owner": "[14 Recreation](14-recording-recreation-mode.md)",
+      "verification": [
+        "LI",
+        "CR",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-001",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "DOC",
+        "CR",
+        "SEC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-002",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "UT",
+        "OR"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-003",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "OR",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-004",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "UT",
+        "UI",
+        "ST"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-005",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "ST",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-006",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "OR",
+        "SEC",
+        "UI"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-007",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "CR",
+        "SEC",
+        "DOC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    },
+    {
+      "id": "IMG-008",
+      "owner": "[15 Photo import](15-photographed-patch-sheet-import.md)",
+      "verification": [
+        "OR",
+        "DOC",
+        "SEC"
+      ],
+      "status": "not-run",
+      "gateIds": [],
+      "artifacts": []
+    }
+  ]
+}

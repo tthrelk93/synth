@@ -2,6 +2,7 @@
 #include "OfflineRenderer.h"
 #include "Acceptance.h"
 #include "AnalyzerRegistry.h"
+#include "RequirementReporter.h"
 #include "PluginProcessor.h"
 
 #include <array>
@@ -1581,6 +1582,311 @@ private:
 };
 
 ReferenceRendererTest referenceRendererTest;
+
+class ReferenceRequirementTest final : public juce::UnitTest {
+public:
+    ReferenceRequirementTest()
+        : juce::UnitTest ("ModelDReferenceRequirementContract", "requirements")
+    {
+    }
+
+    void runTest() override
+    {
+        using namespace ReferenceHarness;
+        const auto sourceRoot = juce::File { sourceRootPath };
+        const auto registry = AnalyzerRegistry::withFoundationAnalyzers();
+        const auto acceptance = loadAcceptanceManifest (
+            sourceRoot,
+            sourceRoot.getChildFile ("Tests/reference/acceptance-v1.json"),
+            registry);
+
+        beginTest ("the complete requirement map matches the traceability matrix");
+        expect (acceptance.ok(), "acceptance must validate before requirement mapping");
+        if (! acceptance.ok())
+            return;
+        const auto requirements = loadRequirementMap (
+            sourceRoot,
+            sourceRoot.getChildFile ("Tests/reference/requirement-map.json"),
+            sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md"),
+            *acceptance.value);
+        expect (requirements.ok(), "the checked-in requirement map must validate");
+        if (requirements.ok()) {
+            expectEquals (static_cast<int> (requirements.value->size()), 127,
+                          "the map must contain every matrix requirement exactly once");
+            expect (validateRequirementSet (
+                        *requirements.value,
+                        sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md")).ok(),
+                    "the loaded set must remain equal to the independent matrix parse");
+        }
+
+        const auto mapText = sourceRoot.getChildFile ("Tests/reference/requirement-map.json")
+                                 .loadFileAsString();
+        beginTest ("requirement map rejects unsupported statuses and unproven passes");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (
+                                 R"("status": "pass")", R"("status": "waived")"),
+                             "requirement.status");
+        expectMapDiagnostic (
+            sourceRoot, *acceptance.value,
+            mapText.replaceFirstOccurrenceOf (
+                R"("artifacts": [
+        {
+          "path": "docs/remediation/evidence/workstream-02/build-foundation.md",
+          "sha256": "06bb3a2c7c6759413cd2ab45c119ccd3908889374ece79abec18e38a72441b95"
+        }
+      ])",
+                R"("artifacts": [])"),
+            "requirement.pass-artifact");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (
+                                 "06bb3a2c7c6759413cd2ab45c119ccd3908889374ece79abec18e38a72441b95",
+                                 "00bb3a2c7c6759413cd2ab45c119ccd3908889374ece79abec18e38a72441b95"),
+                             "requirement.artifact-hash");
+
+        beginTest ("requirement map rejects unknown verification and gate identities");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (R"("HV")", R"("XX")"),
+                             "requirement.verification-code");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (
+                                 R"("hard.registry.count")", R"("unknown.gate")"),
+                             "requirement.gate-mapping");
+
+        beginTest ("requirement map rejects duplicate identities and multiple owners");
+        expectMapDiagnostic (sourceRoot, *acceptance.value,
+                             mapText.replaceFirstOccurrenceOf (
+                                 R"("id": "BLD-002")", R"("id": "BLD-001")"),
+                             "requirement.duplicate-id");
+        expectMapDiagnostic (
+            sourceRoot, *acceptance.value,
+            mapText.replaceFirstOccurrenceOf (
+                R"OWNER("owner": "[02 Build](02-build-packaging-host-validation.md)")OWNER",
+                R"OWNER("owner": ["[02 Build](02-build-packaging-host-validation.md)", "duplicate"] )OWNER"),
+            "requirement.owner");
+
+        beginTest ("requirement set rejects matrix drift");
+        const TemporaryDirectory matrixRoot { "model-d-requirement-matrix-drift" };
+        expect (matrixRoot.isOwned(), "matrix drift root must be owned");
+        if (matrixRoot.isOwned() && requirements.ok()) {
+            const auto changedMatrix = matrixRoot.directory.getChildFile ("matrix.md");
+            changedMatrix.replaceWithText (
+                sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md")
+                    .loadFileAsString().replaceFirstOccurrenceOf ("| BLD-001 |", "| BLD-999 |"));
+            expectDiagnostic (validateRequirementSet (*requirements.value, changedMatrix),
+                              "requirement.set");
+        }
+
+        if (! requirements.ok())
+            return;
+        std::vector<GateResult> gateResults;
+        for (const auto& gate : acceptance.value->hardSoftware)
+            gateResults.push_back ({ gate.id, Status::pass, "registry.count-pass",
+                                     gate.requirements, std::nullopt,
+                                     "Tests/fixtures/parameters/parameter-registry-v2.json",
+                                     sha256File (sourceRoot.getChildFile (
+                                         "Tests/fixtures/parameters/parameter-registry-v2.json")) });
+        const auto appendOpenGates = [&] (const std::vector<GateDefinition>& gates) {
+            for (const auto& gate : gates)
+                gateResults.push_back ({ gate.id, gate.status, "acceptance.evidence-missing",
+                                         gate.requirements, std::nullopt, {}, {} });
+        };
+        appendOpenGates (acceptance.value->published);
+        appendOpenGates (acceptance.value->derivedSoftware);
+        appendOpenGates (acceptance.value->measuredHardware);
+        appendOpenGates (acceptance.value->performance);
+
+        beginTest ("requirement reduction preserves honest mixed statuses");
+        const TemporaryDirectory candidateRoot { "model-d-requirement-candidate-root" };
+        expect (candidateRoot.isOwned(), "candidate root must be owned");
+        if (! candidateRoot.isOwned())
+            return;
+        const auto report = buildRequirementReport (
+            sourceRoot, candidateRoot.directory, *requirements.value, gateResults,
+            *acceptance.value);
+        expect (report.ok(), "mixed-status requirement report must build successfully");
+        if (! report.ok())
+            return;
+        expectEquals (static_cast<int> (report.value->requirements.size()), 127);
+        expect (! report.value->releaseReady, "F0 must remain non-release-ready");
+        expectRequirement (*report.value, "BLD-001", Status::pass);
+        expectRequirement (*report.value, "BLD-006", Status::notRun);
+        expectRequirement (*report.value, "PAR-001", Status::pass);
+        expectRequirement (*report.value, "PAR-006", Status::notRun);
+        expectRequirement (*report.value, "PIT-003", Status::awaitingApprovedReference);
+
+        beginTest ("failing gates dominate open and awaiting statuses");
+        auto failingGates = gateResults;
+        const auto failingGate = std::find_if (
+            failingGates.begin(), failingGates.end(), [] (const auto& gate) {
+                return gate.id == "par006.gain-control.duration";
+            });
+        expect (failingGate != failingGates.end(), "PAR-006 gate must exist");
+        if (failingGate != failingGates.end()) {
+            failingGate->status = Status::fail;
+            failingGate->reasonCode = "acceptance.metric-fail";
+            const auto failingReport = buildRequirementReport (
+                sourceRoot, candidateRoot.directory, *requirements.value, failingGates,
+                *acceptance.value);
+            expect (failingReport.ok(), "numerical failure belongs in a valid report");
+            if (failingReport.ok())
+                expectRequirement (*failingReport.value, "PAR-006", Status::fail);
+        }
+
+        beginTest ("report building rejects missing gate results and changed evidence");
+        auto missingGate = gateResults;
+        missingGate.pop_back();
+        expectDiagnostic (buildRequirementReport (
+                              sourceRoot, candidateRoot.directory, *requirements.value,
+                              missingGate, *acceptance.value),
+                          "requirement.gate-result-missing");
+        auto wrongEvidence = *requirements.value;
+        wrongEvidence.front().artifactSha256.front() = std::string (64, '0');
+        expectDiagnostic (buildRequirementReport (
+                              sourceRoot, candidateRoot.directory, wrongEvidence,
+                              gateResults, *acceptance.value),
+                          "requirement.artifact-hash");
+
+        beginTest ("canonical reports are byte-identical and release enforcement is stable");
+        const TemporaryDirectory reportRoot { "model-d-requirement-report-root" };
+        expect (reportRoot.isOwned(), "report root must be owned");
+        if (! reportRoot.isOwned())
+            return;
+        const auto reportA = writeRequirementReport (
+            *report.value, reportRoot.directory.getChildFile ("candidate-a"));
+        const auto reportB = writeRequirementReport (
+            *report.value, reportRoot.directory.getChildFile ("candidate-b"));
+        expect (reportA.ok() && reportB.ok(), "two fresh report candidates must write");
+        if (! reportA.ok() || ! reportB.ok())
+            return;
+        expect (reportA.value->hasIdenticalContentTo (*reportB.value),
+                "same-commit reports must be byte-identical");
+        expectDiagnostic (verifyReleaseReady (*reportA.value), "release.not-ready");
+        expect (verifyReleaseReady (*reportA.value).diagnostics.front().message.starts_with (
+                    "BLD-006 not-run requirement.not-run"),
+                "release failure must identify the first open row and reason");
+
+        auto falsePassJson = juce::JSON::fromString (reportA.value->loadFileAsString());
+        auto* falsePassRows = falsePassJson.getDynamicObject()
+                                  ->getProperty ("requirements").getArray();
+        for (auto& row : *falsePassRows) {
+            auto* object = row.getDynamicObject();
+            if (object != nullptr && object->getProperty ("id").toString() == "BLD-006") {
+                object->setProperty ("status", "pass");
+                break;
+            }
+        }
+        const auto falsePassFile = reportRoot.directory.getChildFile ("false-pass.json");
+        falsePassFile.replaceWithText (canonicalJson (falsePassJson), false, false, "\n");
+        expectDiagnostic (verifyReleaseReady (falsePassFile), "release.pass-artifact");
+        auto wrongSetJson = juce::JSON::fromString (reportA.value->loadFileAsString());
+        wrongSetJson.getDynamicObject()->getProperty ("requirements").getArray()->getReference (0)
+            .getDynamicObject()->setProperty ("id", "BLD-999");
+        const auto wrongSetFile = reportRoot.directory.getChildFile ("wrong-set.json");
+        wrongSetFile.replaceWithText (canonicalJson (wrongSetJson), false, false, "\n");
+        expectDiagnostic (verifyReleaseReady (wrongSetFile), "release.report-set");
+
+        beginTest ("CLI validation and mixed-status runs succeed while release verification blocks");
+        const auto indexPath = sourceRoot.getChildFile (
+            "Tests/reference/fixture-index-v1.json").getFullPathName().toStdString();
+        const auto acceptancePath = sourceRoot.getChildFile (
+            "Tests/reference/acceptance-v1.json").getFullPathName().toStdString();
+        const auto requirementPath = sourceRoot.getChildFile (
+            "Tests/reference/requirement-map.json").getFullPathName().toStdString();
+        const std::vector<std::string> validateArguments {
+            "validate", "--fixture-index", indexPath,
+            "--acceptance", acceptancePath,
+            "--requirements", requirementPath,
+        };
+        expectEquals (runOfflineRendererCommand (validateArguments), 0,
+                      "validate must succeed without rendering");
+        const auto cliA = reportRoot.directory.getChildFile ("cli-a");
+        const auto cliB = reportRoot.directory.getChildFile ("cli-b");
+        const auto runArguments = [&] (const juce::File& output) {
+            return std::vector<std::string> {
+                "run", "--fixture-index", indexPath,
+                "--acceptance", acceptancePath,
+                "--requirements", requirementPath,
+                "--output", output.getFullPathName().toStdString(),
+            };
+        };
+        expectEquals (runOfflineRendererCommand (runArguments (cliA)), 0,
+                      "run must succeed with honest open statuses");
+        expectEquals (runOfflineRendererCommand (runArguments (cliB)), 0,
+                      "same-commit repeated run must succeed");
+        const auto cliReportA = cliA.getChildFile ("requirements-report.json");
+        const auto cliReportB = cliB.getChildFile ("requirements-report.json");
+        expect (cliReportA.hasIdenticalContentTo (cliReportB),
+                "complete CLI reports must be byte-identical");
+        const auto actualReportJson = juce::JSON::fromString (cliReportA.loadFileAsString());
+        juce::Array<juce::var> projectedRows;
+        for (const auto& reportRow : *actualReportJson.getDynamicObject()
+                                          ->getProperty ("requirements").getArray()) {
+            const auto* source = reportRow.getDynamicObject();
+            auto projected = std::make_unique<juce::DynamicObject>();
+            projected->setProperty ("gateIds", source->getProperty ("gateIds"));
+            projected->setProperty ("id", source->getProperty ("id"));
+            projected->setProperty ("reasons", source->getProperty ("reasons"));
+            projected->setProperty ("status", source->getProperty ("status"));
+            projectedRows.add (juce::var { projected.release() });
+        }
+        auto projection = std::make_unique<juce::DynamicObject>();
+        projection->setProperty ("requirements", projectedRows);
+        projection->setProperty ("schema", "model-d.requirement-status-projection.v1");
+        expectEquals (
+            canonicalJson (juce::var { projection.release() }),
+            sourceRoot.getChildFile ("Tests/reference/expected-f0-requirement-statuses.json")
+                .loadFileAsString(),
+            "CLI status/reason/gate projection must match the non-self-referential oracle");
+        const std::vector<std::string> verifyArguments {
+            "verify-release", "--report", cliReportA.getFullPathName().toStdString(),
+        };
+        expectEquals (runOfflineRendererCommand (verifyArguments),
+                      3, "release verification must use exit 3 for an honest open report");
+    }
+
+private:
+    template <typename T>
+    void expectDiagnostic (const ReferenceHarness::LoadResult<T>& result,
+                           const std::string_view code)
+    {
+        const auto actual = result.diagnostics.empty() ? "<none>" : result.diagnostics.front().code;
+        expect (! result.ok() && ! result.diagnostics.empty() && actual == code,
+                "negative case must report stable diagnostic " + std::string { code }
+                    + ", got " + actual);
+    }
+
+    void expectMapDiagnostic (const juce::File& sourceRoot,
+                              const ReferenceHarness::AcceptanceManifest& acceptance,
+                              const juce::String& contents,
+                              const std::string_view code)
+    {
+        const TemporaryDirectory temporary { "model-d-requirement-negative" };
+        expect (temporary.isOwned(), "requirement negative root must be owned");
+        if (! temporary.isOwned())
+            return;
+        const auto mapFile = temporary.directory.getChildFile ("requirement-map.json");
+        mapFile.replaceWithText (contents);
+        expectDiagnostic (ReferenceHarness::loadRequirementMap (
+                              sourceRoot, mapFile,
+                              sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md"),
+                              acceptance),
+                          code);
+    }
+
+    void expectRequirement (const ReferenceHarness::RequirementReport& report,
+                            const std::string_view id,
+                            const ReferenceHarness::Status status)
+    {
+        const auto found = std::find_if (
+            report.requirements.begin(), report.requirements.end(), [&] (const auto& requirement) {
+                return requirement.definition.id == id;
+            });
+        expect (found != report.requirements.end() && found->status == status,
+                std::string { id } + " must have status " + ReferenceHarness::statusName (status));
+    }
+};
+
+ReferenceRequirementTest referenceRequirementTest;
 
 } // namespace
 
