@@ -874,12 +874,32 @@ MoogMiniAudioProcessorEditor::MoogMiniAudioProcessorEditor (MoogMiniAudioProcess
         callbacks.setCutoff = [setParam](float value) { setParam("filterCutoff", value); };
         callbacks.setResonance = [setChoiceParam](float value) { setChoiceParam("filterEmphasis", value); };
         callbacks.setContour = [setChoiceParam](float value) { setChoiceParam("filterContour", value); };
-        callbacks.setContourAttack = [setParam](float value) { setParam("loudnessAttackTimeKnob", value); };
-        callbacks.setContourDecay = [setParam](float value) { setParam("loudnessDecayTimeKnob", value); };
-        callbacks.setContourSustain = [setChoiceParam](float value) { setChoiceParam("loudnessSustainLevelKnob", value); };
-        callbacks.setLoudnessAttack = [setParam](float value) { setParam("filterAttackTimeKnob", value); };
-        callbacks.setLoudnessDecay = [setParam](float value) { setParam("filterDecayTimeKnob", value); };
-        callbacks.setLoudnessSustain = [setChoiceParam](float value) { setChoiceParam("filterSustainKnob", value); };
+        callbacks.setContourAttack = [this](float value) {
+            audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::filter,
+                                                        ContourRouting::Stage::attack, value);
+        };
+        callbacks.setContourDecay = [this](float value) {
+            audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::filter,
+                                                        ContourRouting::Stage::decay, value);
+        };
+        callbacks.setContourSustain = [this](float value) {
+            audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::filter,
+                                                        ContourRouting::Stage::sustain,
+                                                        std::round (value * 10.0f) / 10.0f);
+        };
+        callbacks.setLoudnessAttack = [this](float value) {
+            audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::loudness,
+                                                        ContourRouting::Stage::attack, value);
+        };
+        callbacks.setLoudnessDecay = [this](float value) {
+            audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::loudness,
+                                                        ContourRouting::Stage::decay, value);
+        };
+        callbacks.setLoudnessSustain = [this](float value) {
+            audioProcessor.setSignalFlowContourControl (ContourRouting::SemanticContour::loudness,
+                                                        ContourRouting::Stage::sustain,
+                                                        std::round (value * 10.0f) / 10.0f);
+        };
     signalFlowOverlay.setFilterVizCallbacks(callbacks);
     }
     signalFlowOverlay.toFront(false);
@@ -1961,23 +1981,25 @@ void MoogMiniAudioProcessorEditor::timerCallback() {
     signalFlowOverlay.setLevels(overlayLevels);
 
     SignalFlowOverlay::FilterVizState filterViz;
+    signalFlowContourSnapshot = audioProcessor.getSignalFlowContourSnapshot (
+        signalFlowContourSnapshot);
+    const auto routedContours = ContourRouting::route (signalFlowContourSnapshot.contract,
+                                                       signalFlowContourSnapshot.controls);
     filterViz.cutoffHz = audioProcessor.mapFilterCutoffValueToFrequency(
         audioProcessor.apvts.getRawParameterValue("filterCutoff")->load());
     filterViz.resonance = audioProcessor.apvts.getRawParameterValue("filterEmphasis")->load() / 10.0f;
     filterViz.contourAmount = audioProcessor.apvts.getRawParameterValue("filterContour")->load() / 10.0f;
     filterViz.filterEnvelope = audioProcessor.getFilterEnvelopeValue();
     filterViz.contourEnvelope = audioProcessor.getContourEnvelopeValue();
-    filterViz.attackMs = audioProcessor.normalizedToMilliseconds(
-        audioProcessor.apvts.getRawParameterValue("loudnessAttackTimeKnob")->load());
-    filterViz.decayMs = audioProcessor.normalizedToMilliseconds(
-        audioProcessor.apvts.getRawParameterValue("loudnessDecayTimeKnob")->load());
-    filterViz.sustainLevel = audioProcessor.apvts.getRawParameterValue("loudnessSustainLevelKnob")->load() / 10.0f;
-    filterViz.contourAttackNorm = audioProcessor.apvts.getRawParameterValue("loudnessAttackTimeKnob")->load();
-    filterViz.contourDecayNorm = audioProcessor.apvts.getRawParameterValue("loudnessDecayTimeKnob")->load();
-    filterViz.contourSustainLevel = audioProcessor.apvts.getRawParameterValue("loudnessSustainLevelKnob")->load() / 10.0f;
-    filterViz.loudnessAttackNorm = audioProcessor.apvts.getRawParameterValue("filterAttackTimeKnob")->load();
-    filterViz.loudnessDecayNorm = audioProcessor.apvts.getRawParameterValue("filterDecayTimeKnob")->load();
-    filterViz.loudnessSustainLevel = audioProcessor.apvts.getRawParameterValue("filterSustainKnob")->load() / 10.0f;
+    filterViz.attackMs = audioProcessor.normalizedToMilliseconds (routedContours.filter.attack);
+    filterViz.decayMs = audioProcessor.normalizedToMilliseconds (routedContours.filter.decay);
+    filterViz.sustainLevel = routedContours.filter.sustain;
+    filterViz.contourAttackNorm = routedContours.filter.attack;
+    filterViz.contourDecayNorm = routedContours.filter.decay;
+    filterViz.contourSustainLevel = routedContours.filter.sustain;
+    filterViz.loudnessAttackNorm = routedContours.loudness.attack;
+    filterViz.loudnessDecayNorm = routedContours.loudness.decay;
+    filterViz.loudnessSustainLevel = routedContours.loudness.sustain;
     const bool keyCtrl1 = audioProcessor.apvts.getRawParameterValue("keyboardCtrlSwitch1")->load() > 0.5f;
     const bool keyCtrl2 = audioProcessor.apvts.getRawParameterValue("keyboardCtrlSwitch2")->load() > 0.5f;
     filterViz.keyTracking = (keyCtrl1 ? (1.0f / 3.0f) : 0.0f) + (keyCtrl2 ? (2.0f / 3.0f) : 0.0f);

@@ -56,6 +56,14 @@ version 2, a lowercase SHA-256 source hash, and retains its extensions and
 migration entries on every later v2 save. Serialization contains no time,
 random identifier, platform path, or locale-dependent number formatting.
 
+A validated explicit contour conversion retains source version 0,
+migrated-at version 2, and the original lowercase source hash, changes only the
+marker to `canonicalContours`, and requires exactly one final
+`ENTRY { from=2, to=2, action="convertLegacyContours",
+warningCode="legacy.hostAutomationNotRewritten" }`. Source-0 canonical state
+without that final provenance rejects, as does conversion history under a
+legacy marker.
+
 ## Stable restore result codes
 
 | Enum | Stable string | Meaning |
@@ -317,13 +325,10 @@ Total Test time (real) = 35.22 sec
 
 ## Deferred behavior
 
-Migration never swaps v0 contour values. Runtime crossed routing, the explicit
-static-value conversion command/undo, and automation warning UX remain Task
-3B. Task 3B must also introduce a generation-bracketed prepared snapshot so
-audio processing cannot observe new APVTS parameter values paired with the old
-atomic contour contract during a restore publication. Task 3A's lock makes
-save/restore/canonical publication coherent, but audio parameter readers do not
-take that lock; this cross-generation DSP handoff is therefore explicitly not
-claimed here. This task makes no contour DSP/UI routing change and introduces
-no preset schema, prepared snapshot, MIDI, wrapper, bus, identity, or DSP
-behavior.
+Migration itself never swaps v0 contour values. Task 3B now consumes this seam
+with canonical/legacy routing, explicit static conversion/undo, and a bounded
+generation-bracketed six-contour snapshot so DSP does not pair replacement
+values with an earlier contour marker. Task 3C still owns the full prepared
+48-parameter snapshot and remaining general editor bindings. This state
+contract introduces no preset schema, MIDI, wrapper, bus, identity, contour
+algorithm, timing, calibration, or smoothing change.

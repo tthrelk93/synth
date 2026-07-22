@@ -82,5 +82,6 @@ juce::ValueTree withCurrentParameters (const juce::ValueTree& canonicalState,
 void serialiseBinary (const juce::ValueTree& canonicalState,
                       juce::MemoryBlock& destination);
 PreparedRestore parseAndPrepare (const void* data, int sizeInBytes);
+PreparedRestore prepareLegacyContourConversion (const juce::ValueTree& canonicalState);
 ContourContract contourContract (const juce::ValueTree& canonicalState) noexcept;
 }

@@ -11,6 +11,7 @@
 #include <JuceHeader.h>
 #include "Oscillator.h"
 #include "CircularBuffer.h"
+#include "ContourRouting.h"
 #include "LadderFilter.h"
 #include "ModWheel.h"
 #include "StateContract.h"
@@ -68,6 +69,46 @@ public:
     void setStateInformation (const void* data, int sizeInBytes) override;
     StateContract::RestoreResult restoreState (const void* data, int sizeInBytes);
     StateContract::ContourContract getContourContract() const noexcept;
+
+    struct ContourSnapshot {
+        ContourRouting::ContourControls controls;
+        StateContract::ContourContract contract = StateContract::ContourContract::canonicalContours;
+        std::uint64_t generation = 0;
+        bool usedFallback = false;
+        bool coherent = false;
+    };
+    struct ContourTrace {
+        ContourRouting::RoutedContours routed;
+        StateContract::ContourContract contract = StateContract::ContourContract::canonicalContours;
+        std::uint64_t generation = 0;
+        bool usedFallback = false;
+    };
+    enum class HostAutomationKnowledge { unknown, knownAbsent, knownPresent };
+    struct ContourConversionRequest {
+        bool confirmed = false;
+        HostAutomationKnowledge automation = HostAutomationKnowledge::unknown;
+    };
+    enum class ContourConversionCode {
+        cancelled, converted, alreadyCanonical, undoRestored, noUndoAvailable
+    };
+    enum class ContourConversionWarning { none, hostAutomationNotRewritten };
+    struct ContourConversionResult {
+        ContourConversionCode code = ContourConversionCode::cancelled;
+        ContourConversionWarning warning = ContourConversionWarning::none;
+        std::string_view codeString() const noexcept;
+        std::string_view warningString() const noexcept;
+    };
+
+    ContourSnapshot captureContourSnapshot (const ContourSnapshot& fallback) const noexcept;
+    ContourSnapshot getSignalFlowContourSnapshot (const ContourSnapshot& fallback) const noexcept;
+    void setSignalFlowContourControl (ContourRouting::SemanticContour contour,
+                                      ContourRouting::Stage stage,
+                                      float normalisedValue);
+    ContourTrace getContourTrace (const ContourSnapshot& fallback) const noexcept;
+    std::uint64_t getStateGeneration() const noexcept;
+    ContourConversionResult convertLegacyContours();
+    ContourConversionResult convertLegacyContours (ContourConversionRequest request);
+    ContourConversionResult undoContourConversion();
     
     float mapFilterCutoffValueToFrequency(float filterCutoffValue);
     
@@ -203,6 +244,16 @@ private:
     std::atomic<StateContract::ContourContract> contourContractCache {
         StateContract::ContourContract::canonicalContours
     };
+    std::atomic<std::uint64_t> stateGeneration { 0 };
+    std::array<std::atomic<float>*, static_cast<std::size_t> (ContourRouting::Parameter::count)>
+        contourParameterHandles {};
+    std::array<juce::RangedAudioParameter*, static_cast<std::size_t> (ContourRouting::Parameter::count)>
+        contourParameters {};
+    std::atomic<float>* decayEnabledHandle = nullptr;
+    ContourSnapshot lastCoherentContourSnapshot;
+    ContourSnapshot initialCoherentContourSnapshot;
+    juce::MemoryBlock contourConversionUndoState;
+    bool contourConversionUndoLifecycle = false;
     juce::ValueTree canonicalState;
     
     juce::MidiBuffer incomingMidi;

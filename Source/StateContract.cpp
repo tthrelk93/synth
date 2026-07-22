@@ -339,6 +339,15 @@ juce::ValueTree makeEntry (const juce::String& action, const juce::String& warni
     return entry;
 }
 
+juce::ValueTree makeEntry (int from, int to, const juce::String& action,
+                           const juce::String& warningCode)
+{
+    auto entry = makeEntry (action, warningCode);
+    entry.setProperty ("from", from, nullptr);
+    entry.setProperty ("to", to, nullptr);
+    return entry;
+}
+
 juce::ValueTree assembleState (const std::map<std::string, float>& values,
                                const juce::ValueTree& compatibility,
                                const juce::ValueTree& ui,
@@ -727,7 +736,10 @@ PreparedRestore parseV2 (const juce::XmlElement& root)
     const auto migratedTuple = contour == ContourContract::legacyCrossedContours
                             && sourceVersion == 0 && migratedAtVersion == currentVersion
                             && isLowercaseSha256 (sourceHash);
-    if (! nativeTuple && ! migratedTuple)
+    const auto convertedTuple = contour == ContourContract::canonicalContours
+                             && sourceVersion == 0 && migratedAtVersion == currentVersion
+                             && isLowercaseSha256 (sourceHash);
+    if (! nativeTuple && ! migratedTuple && ! convertedTuple)
         return failure (RestoreCode::invalidCompatibility);
 
     const auto& uiXml = *children[2];
@@ -797,7 +809,34 @@ PreparedRestore parseV2 (const juce::XmlElement& root)
         canonicalEntry.setProperty ("warningCode", warningCode, nullptr);
         migrationLog.addChild (canonicalEntry, -1, nullptr);
     }
-    if (nativeTuple && migrationLog.getNumChildren() != 0)
+    int conversionEntries = 0;
+    int conversionHistoryEntries = 0;
+    for (int index = 0; index < migrationLog.getNumChildren(); ++index)
+    {
+        const auto entry = migrationLog.getChild (index);
+        conversionHistoryEntries += entry.getProperty ("action").toString()
+                                      == "convertLegacyContours" ? 1 : 0;
+        const auto isConversion = static_cast<int> (entry.getProperty ("from")) == currentVersion
+                               && static_cast<int> (entry.getProperty ("to")) == currentVersion
+                               && entry.getProperty ("action").toString() == "convertLegacyContours"
+                               && entry.getProperty ("warningCode").toString()
+                                      == "legacy.hostAutomationNotRewritten";
+        conversionEntries += isConversion ? 1 : 0;
+    }
+    const auto finalEntryIsConversion = migrationLog.getNumChildren() > 0
+        && static_cast<int> (migrationLog.getChild (
+               migrationLog.getNumChildren() - 1).getProperty ("from")) == currentVersion
+        && static_cast<int> (migrationLog.getChild (
+               migrationLog.getNumChildren() - 1).getProperty ("to")) == currentVersion
+        && migrationLog.getChild (migrationLog.getNumChildren() - 1)
+               .getProperty ("action").toString() == "convertLegacyContours"
+        && migrationLog.getChild (migrationLog.getNumChildren() - 1)
+               .getProperty ("warningCode").toString()
+               == "legacy.hostAutomationNotRewritten";
+    if ((nativeTuple && migrationLog.getNumChildren() != 0)
+        || (migratedTuple && conversionHistoryEntries != 0)
+        || (convertedTuple && (conversionEntries != 1 || conversionHistoryEntries != 1
+                               || ! finalEntryIsConversion)))
         return failure (RestoreCode::invalidMigrationLog);
 
     const auto canonical = assembleState (
@@ -888,6 +927,59 @@ PreparedRestore parseAndPrepare (const void* data, int sizeInBytes)
     if (! hasExactTagName (*xml, "modelDState"))
         return failure (RestoreCode::wrongRoot);
     return parseV2 (*xml);
+}
+
+PreparedRestore prepareLegacyContourConversion (const juce::ValueTree& canonicalState)
+{
+    if (! canonicalState.hasType ("modelDState")
+        || contourContract (canonicalState) != ContourContract::legacyCrossedContours)
+        return failure (RestoreCode::invalidCompatibility);
+    auto converted = canonicalState.createCopy();
+    auto parameters = converted.getChildWithName ("parameters");
+    if (! parameters.isValid())
+        return failure (RestoreCode::missingRequiredChild);
+    const auto find = [&] (std::string_view id)
+    {
+        for (int child = 0; child < parameters.getNumChildren(); ++child)
+        {
+            auto parameter = parameters.getChild (child);
+            if (std::string_view { parameter.getProperty ("id").toString().toRawUTF8() } == id)
+                return parameter;
+        }
+        return juce::ValueTree {};
+    };
+    constexpr std::array pairs {
+        std::pair { "filterAttackTimeKnob"sv, "loudnessAttackTimeKnob"sv },
+        std::pair { "filterDecayTimeKnob"sv, "loudnessDecayTimeKnob"sv },
+        std::pair { "filterSustainKnob"sv, "loudnessSustainLevelKnob"sv }
+    };
+    for (const auto& [filterId, loudnessId] : pairs)
+    {
+        auto filter = find (filterId);
+        auto loudness = find (loudnessId);
+        if (! filter.isValid() || ! loudness.isValid())
+            return failure (RestoreCode::missingParameterId);
+        const auto filterValue = filter.getProperty ("value");
+        filter.setProperty ("value", loudness.getProperty ("value"), nullptr);
+        loudness.setProperty ("value", filterValue, nullptr);
+    }
+    converted.getChildWithName ("compatibility").setProperty (
+        "contourContract", "canonicalContours", nullptr);
+    converted.getChildWithName ("migrationLog").addChild (
+        makeEntry (currentVersion, currentVersion, "convertLegacyContours",
+                   "legacy.hostAutomationNotRewritten"), -1, nullptr);
+    const auto values = [&]
+    {
+        std::map<std::string, float> result;
+        for (int child = 0; child < parameters.getNumChildren(); ++child)
+        {
+            const auto parameter = parameters.getChild (child);
+            result.emplace (parameter.getProperty ("id").toString().toStdString(),
+                            static_cast<float> (parameter.getProperty ("value")));
+        }
+        return result;
+    }();
+    return { RestoreResult { RestoreCode::success }, converted, makeApvtsTree (values) };
 }
 
 ContourContract contourContract (const juce::ValueTree& canonicalState) noexcept

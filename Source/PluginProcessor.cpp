@@ -39,6 +39,12 @@ Oscillator::Waveform mapOsc3Waveform(int selection) {
         default: return Oscillator::Triangle;
     }
 }
+
+constexpr std::array<const char*, static_cast<std::size_t> (ContourRouting::Parameter::count)>
+    contourParameterIds {
+        "filterAttackTimeKnob", "filterDecayTimeKnob", "filterSustainKnob",
+        "loudnessAttackTimeKnob", "loudnessDecayTimeKnob", "loudnessSustainLevelKnob"
+    };
 } // namespace
 
 
@@ -65,6 +71,21 @@ circularBuffer(1024)
     
     currentNoteNumber = -1; // Initialize current note number
     canonicalState = StateContract::makeNativeState (apvts.copyState());
+    for (std::size_t index = 0; index < contourParameterIds.size(); ++index)
+    {
+        contourParameterHandles[index] = apvts.getRawParameterValue (contourParameterIds[index]);
+        contourParameters[index] = apvts.getParameter (contourParameterIds[index]);
+    }
+    decayEnabledHandle = apvts.getRawParameterValue ("decaySwitch");
+    lastCoherentContourSnapshot.controls = {
+        contourParameterHandles[0]->load(), contourParameterHandles[1]->load(),
+        contourParameterHandles[2]->load() / 10.0f,
+        contourParameterHandles[3]->load(), contourParameterHandles[4]->load(),
+        contourParameterHandles[5]->load() / 10.0f,
+        decayEnabledHandle->load() > 0.5f
+    };
+    lastCoherentContourSnapshot.coherent = true;
+    initialCoherentContourSnapshot = lastCoherentContourSnapshot;
     
 }
 
@@ -339,18 +360,11 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     float filterCutoffValue = mapFilterCutoffValueToFrequency(*apvts.getRawParameterValue("filterCutoff"));
     const int filterEmphasisValue = static_cast<int>(apvts.getRawParameterValue("filterEmphasis")->load());
     const int filterContourValue = static_cast<int>(apvts.getRawParameterValue("filterContour")->load());
-    float filterAttackTimeValue = *apvts.getRawParameterValue("filterAttackTimeKnob");
-    float filterAttackTimeMilliseconds = normalizedToMilliseconds(filterAttackTimeValue);
-    float filterDecayTimeValue = *apvts.getRawParameterValue("filterDecayTimeKnob");
-    float filterDecayTimeMilliseconds = normalizedToMilliseconds(filterDecayTimeValue);
-    float filterSustainTimeValue = *apvts.getRawParameterValue("filterSustainKnob");
-    
-    float loudnessAttackTimeValue = *apvts.getRawParameterValue("loudnessAttackTimeKnob");
-    float loudnessAttackTimeMilliseconds = normalizedToMilliseconds(loudnessAttackTimeValue);
-    float loudnessDecayTimeValue = *apvts.getRawParameterValue("loudnessDecayTimeKnob");
-    float loudnessDecayTimeMilliseconds = normalizedToMilliseconds(loudnessDecayTimeValue);
-    float loudnessSustainTimeValue = *apvts.getRawParameterValue("loudnessSustainLevelKnob");
-    bool decaySwitchValue = *apvts.getRawParameterValue("decaySwitch");
+    const auto contourSnapshot = captureContourSnapshot (lastCoherentContourSnapshot);
+    if (! contourSnapshot.usedFallback)
+        lastCoherentContourSnapshot = contourSnapshot;
+    const auto routed = ContourRouting::route (contourSnapshot.contract,
+                                               contourSnapshot.controls);
     
     bool keyboardCtrlSwitch1Value = *apvts.getRawParameterValue("keyboardCtrlSwitch1");
     bool keyboardCtrlSwitch2Value = *apvts.getRawParameterValue("keyboardCtrlSwitch2");
@@ -377,11 +391,14 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     ladderFilter.setEnvelopeAmount(static_cast<float>(filterContourValue) / 10.0f); // Assuming range 0-10
     ladderFilter.setSampleRate(static_cast<float>(getSampleRate()));
     ladderFilter.setFeedback(feedbackValue);
-    const float contourSustainLevel = decaySwitchValue ? (loudnessSustainTimeValue / 10.0f) : 1.0f;
-    const float loudnessSustainLevel = decaySwitchValue ? (filterSustainTimeValue / 10.0f) : 1.0f;
-    // C Attack/Decay/Sustain (contour) drive the filter envelope; Attack/Decay/Sustain drive loudness.
-    ladderFilter.setEnvelopeSettings(loudnessAttackTimeMilliseconds, loudnessDecayTimeMilliseconds, contourSustainLevel);
-    ladderFilter.setContourEnvelopeSettings(filterAttackTimeMilliseconds, filterDecayTimeMilliseconds, loudnessSustainLevel);
+    // Legacy LadderFilter naming: setEnvelopeSettings is the physical Filter envelope;
+    // setContourEnvelopeSettings is the contour used as the physical VCA/Loudness multiplier.
+    ladderFilter.setEnvelopeSettings (normalizedToMilliseconds (routed.filter.attack),
+                                      normalizedToMilliseconds (routed.filter.decay),
+                                      routed.filter.sustain);
+    ladderFilter.setContourEnvelopeSettings (normalizedToMilliseconds (routed.loudness.attack),
+                                             normalizedToMilliseconds (routed.loudness.decay),
+                                             routed.loudness.sustain);
     
     
     osc1.setWaveform(mapOsc1Waveform(waveformSelectionOsc1));
@@ -809,10 +826,14 @@ StateContract::RestoreResult MoogMiniAudioProcessor::restoreState (const void* d
 
     const auto preparedContour = StateContract::contourContract (prepared.canonicalState);
     const juce::ScopedLock lock { statePublicationLock };
+    const auto generation = stateGeneration.load (std::memory_order_relaxed);
+    stateGeneration.store (generation + 1, std::memory_order_release);
     apvts.replaceState (prepared.apvtsState);
     canonicalState = std::move (prepared.canonicalState);
     contourContractCache.store (preparedContour, std::memory_order_release);
     restoredStateFromHost.store (true, std::memory_order_release);
+    contourConversionUndoState.reset();
+    stateGeneration.store (generation + 2, std::memory_order_release);
     return prepared.result;
 }
 
@@ -825,6 +846,148 @@ bool MoogMiniAudioProcessor::shouldAutoLoadLastPreset() const {
     return ! restoredStateFromHost.load (std::memory_order_acquire);
 }
 
+MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::captureContourSnapshot (
+    const ContourSnapshot& fallback) const noexcept
+{
+    constexpr int maximumAttempts = 3;
+    for (int attempt = 0; attempt < maximumAttempts; ++attempt)
+    {
+        const auto before = stateGeneration.load (std::memory_order_acquire);
+        if ((before & 1u) != 0u)
+            continue;
+        ContourSnapshot snapshot;
+        snapshot.generation = before;
+        snapshot.controls = {
+            contourParameterHandles[0]->load (std::memory_order_relaxed),
+            contourParameterHandles[1]->load (std::memory_order_relaxed),
+            contourParameterHandles[2]->load (std::memory_order_relaxed) / 10.0f,
+            contourParameterHandles[3]->load (std::memory_order_relaxed),
+            contourParameterHandles[4]->load (std::memory_order_relaxed),
+            contourParameterHandles[5]->load (std::memory_order_relaxed) / 10.0f,
+            decayEnabledHandle->load (std::memory_order_relaxed) > 0.5f
+        };
+        snapshot.contract = contourContractCache.load (std::memory_order_acquire);
+        const auto after = stateGeneration.load (std::memory_order_acquire);
+        if (before == after && (after & 1u) == 0u)
+        {
+            snapshot.coherent = true;
+            return snapshot;
+        }
+    }
+    auto result = fallback.coherent ? fallback : initialCoherentContourSnapshot;
+    result.usedFallback = true;
+    return result;
+}
+
+MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::getSignalFlowContourSnapshot (
+    const ContourSnapshot& fallback) const noexcept
+{
+    return captureContourSnapshot (fallback);
+}
+
+void MoogMiniAudioProcessor::setSignalFlowContourControl (
+    ContourRouting::SemanticContour contour, ContourRouting::Stage stage,
+    float normalisedValue)
+{
+    const auto parameter = ContourRouting::parameterFor (getContourContract(), contour, stage);
+    if (auto* ranged = contourParameters[ContourRouting::index (parameter)])
+    {
+        ranged->beginChangeGesture();
+        ranged->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, normalisedValue));
+        ranged->endChangeGesture();
+    }
+}
+
+MoogMiniAudioProcessor::ContourTrace MoogMiniAudioProcessor::getContourTrace (
+    const ContourSnapshot& fallback) const noexcept
+{
+    const auto snapshot = captureContourSnapshot (fallback);
+    return { ContourRouting::route (snapshot.contract, snapshot.controls), snapshot.contract,
+             snapshot.generation, snapshot.usedFallback };
+}
+
+std::uint64_t MoogMiniAudioProcessor::getStateGeneration() const noexcept
+{
+    return stateGeneration.load (std::memory_order_acquire);
+}
+
+std::string_view MoogMiniAudioProcessor::ContourConversionResult::codeString() const noexcept
+{
+    switch (code)
+    {
+        case ContourConversionCode::cancelled: return "cancelled";
+        case ContourConversionCode::converted: return "converted";
+        case ContourConversionCode::alreadyCanonical: return "already_canonical";
+        case ContourConversionCode::undoRestored: return "undo_restored";
+        case ContourConversionCode::noUndoAvailable: return "no_undo_available";
+    }
+    return "invalid_conversion_result";
+}
+
+std::string_view MoogMiniAudioProcessor::ContourConversionResult::warningString() const noexcept
+{
+    return warning == ContourConversionWarning::hostAutomationNotRewritten
+             ? "host_automation_not_rewritten" : "none";
+}
+
+MoogMiniAudioProcessor::ContourConversionResult MoogMiniAudioProcessor::convertLegacyContours (
+    ContourConversionRequest request)
+{
+    const auto warning = request.automation == HostAutomationKnowledge::knownAbsent
+                           ? ContourConversionWarning::none
+                           : ContourConversionWarning::hostAutomationNotRewritten;
+    if (getContourContract() == StateContract::ContourContract::canonicalContours)
+        return { ContourConversionCode::alreadyCanonical, ContourConversionWarning::none };
+    if (! request.confirmed)
+        return { ContourConversionCode::cancelled, warning };
+
+    const juce::ScopedLock lock { statePublicationLock };
+    if (contourContractCache.load (std::memory_order_acquire)
+          == StateContract::ContourContract::canonicalContours)
+        return { ContourConversionCode::alreadyCanonical, ContourConversionWarning::none };
+    auto before = StateContract::withCurrentParameters (canonicalState, apvts.copyState());
+    auto prepared = StateContract::prepareLegacyContourConversion (before);
+    if (! prepared.result.succeeded())
+        return { ContourConversionCode::cancelled, warning };
+    juce::MemoryBlock undoBytes;
+    StateContract::serialiseBinary (before, undoBytes);
+    const auto generation = stateGeneration.load (std::memory_order_relaxed);
+    stateGeneration.store (generation + 1, std::memory_order_release);
+    apvts.replaceState (prepared.apvtsState);
+    canonicalState = std::move (prepared.canonicalState);
+    contourContractCache.store (StateContract::ContourContract::canonicalContours,
+                                std::memory_order_release);
+    contourConversionUndoLifecycle = restoredStateFromHost.load (std::memory_order_acquire);
+    contourConversionUndoState = std::move (undoBytes);
+    stateGeneration.store (generation + 2, std::memory_order_release);
+    return { ContourConversionCode::converted, warning };
+}
+
+MoogMiniAudioProcessor::ContourConversionResult MoogMiniAudioProcessor::convertLegacyContours()
+{
+    return convertLegacyContours (ContourConversionRequest {});
+}
+
+MoogMiniAudioProcessor::ContourConversionResult MoogMiniAudioProcessor::undoContourConversion()
+{
+    const juce::ScopedLock lock { statePublicationLock };
+    if (contourConversionUndoState.isEmpty())
+        return { ContourConversionCode::noUndoAvailable, ContourConversionWarning::none };
+    auto prepared = StateContract::parseAndPrepare (
+        contourConversionUndoState.getData(), static_cast<int> (contourConversionUndoState.getSize()));
+    if (! prepared.result.succeeded())
+        return { ContourConversionCode::noUndoAvailable, ContourConversionWarning::none };
+    const auto generation = stateGeneration.load (std::memory_order_relaxed);
+    stateGeneration.store (generation + 1, std::memory_order_release);
+    apvts.replaceState (prepared.apvtsState);
+    canonicalState = std::move (prepared.canonicalState);
+    contourContractCache.store (StateContract::contourContract (canonicalState),
+                                std::memory_order_release);
+    restoredStateFromHost.store (contourConversionUndoLifecycle, std::memory_order_release);
+    contourConversionUndoState.reset();
+    stateGeneration.store (generation + 2, std::memory_order_release);
+    return { ContourConversionCode::undoRestored, ContourConversionWarning::none };
+}
 
 //==============================================================================
 // This creates new instances of the plugin..

@@ -151,6 +151,7 @@ set(MODEL_D_PLUGIN_SOURCES
         Source/BlackBackgroundComponent.cpp
         Source/CustomPanelComponent.cpp
         Source/CustomSliderLookAndFeel.cpp
+        Source/ContourRouting.cpp
         Source/ModWheelSlider.cpp
         Source/ParameterRegistry.cpp
         Source/PianoKey.cpp
@@ -647,6 +648,7 @@ if(SYNTH_BUILD_TESTS)
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)
     synth_add_model_d_test(ModelDStateV2Contract state state-v2)
+    synth_add_model_d_test(ModelDContourContract state contours)
     synth_add_model_d_test(ModelDLegacyParameterFixtures state fixtures)
     synth_add_model_d_test(ModelDParameterRegistry state registry)
     synth_add_model_d_test(ModelDDspContract dsp dsp)

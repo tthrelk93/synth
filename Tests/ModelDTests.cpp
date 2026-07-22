@@ -484,6 +484,7 @@ bool fixtureMatchesXml (const juce::File& fixture, const juce::XmlElement& xml)
 }
 
 std::unique_ptr<juce::XmlElement> copyStateXml (const juce::XmlElement& xml);
+juce::String makeContourRoutingTraceFixture();
 
 void setRepresentativeParameterState (MoogMiniAudioProcessor& processor)
 {
@@ -998,11 +999,93 @@ void testParameterRegistry (TestContext& test)
     testLegacyParameterFixtures (test);
 }
 
+juce::String makeContourRoutingTraceFixture()
+{
+    const ContourRouting::ContourControls controls {
+        0.11f, 0.22f, 0.3f, 0.66f, 0.77f, 0.9f, true
+    };
+    const auto settingsObject = [] (const ContourRouting::ContourSettings& settings)
+    {
+        auto result = juce::DynamicObject::Ptr { new juce::DynamicObject };
+        result->setProperty ("attack", settings.attack);
+        result->setProperty ("decay", settings.decay);
+        result->setProperty ("sustain", settings.sustain);
+        return juce::var { result.get() };
+    };
+    const auto routedObject = [&] (const ContourRouting::RoutedContours& routed)
+    {
+        auto result = juce::DynamicObject::Ptr { new juce::DynamicObject };
+        result->setProperty ("physicalFilter", settingsObject (routed.filter));
+        result->setProperty ("physicalLoudnessVCA", settingsObject (routed.loudness));
+        return juce::var { result.get() };
+    };
+
+    auto legacyXml = juce::parseXML (legacyFixtureFile (
+        "Tests/fixtures/state/legacy-representative-state.xml"));
+    if (legacyXml == nullptr)
+        return {};
+    for (const auto& [id, value] : std::to_array<std::pair<const char*, const char*>> ({
+             { "filterAttackTimeKnob", "0.11" }, { "filterDecayTimeKnob", "0.22" },
+             { "filterSustainKnob", "3" }, { "loudnessAttackTimeKnob", "0.66" },
+             { "loudnessDecayTimeKnob", "0.77" }, { "loudnessSustainLevelKnob", "9" },
+             { "decaySwitch", "1" } }))
+        findParameterXml (*legacyXml, id)->setAttribute ("value", value);
+    const auto legacyBytes = binaryFromXml (*legacyXml);
+    MoogMiniAudioProcessor processor;
+    if (! processor.restoreState (legacyBytes.getData(), static_cast<int> (legacyBytes.getSize())).succeeded())
+        return {};
+    const auto before = processor.captureContourSnapshot ({});
+    const auto beforeRouted = ContourRouting::route (before.contract, before.controls);
+    const auto conversion = processor.convertLegacyContours (
+        { true, MoogMiniAudioProcessor::HostAutomationKnowledge::unknown });
+    const auto after = processor.captureContourSnapshot (before);
+    const auto afterRouted = ContourRouting::route (after.contract, after.controls);
+
+    auto root = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    root->setProperty ("schema", "model-d-contour-routing-trace-v1");
+    auto controlsObject = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    controlsObject->setProperty ("filterAttackTimeKnob", controls.filterAttack);
+    controlsObject->setProperty ("filterDecayTimeKnob", controls.filterDecay);
+    controlsObject->setProperty ("filterSustainKnob", controls.filterSustain);
+    controlsObject->setProperty ("loudnessAttackTimeKnob", controls.loudnessAttack);
+    controlsObject->setProperty ("loudnessDecayTimeKnob", controls.loudnessDecay);
+    controlsObject->setProperty ("loudnessSustainLevelKnob", controls.loudnessSustain);
+    root->setProperty ("distinctControls", juce::var { controlsObject.get() });
+    root->setProperty ("canonicalContours", routedObject (ContourRouting::route (
+        StateContract::ContourContract::canonicalContours, controls)));
+    root->setProperty ("legacyCrossedContours", routedObject (beforeRouted));
+    auto convertedObject = juce::DynamicObject::Ptr { new juce::DynamicObject };
+    convertedObject->setProperty ("marker", "canonicalContours");
+    convertedObject->setProperty ("result", juce::String { conversion.codeString().data(),
+                                                            conversion.codeString().size() });
+    convertedObject->setProperty ("warning", juce::String { conversion.warningString().data(),
+                                                             conversion.warningString().size() });
+    convertedObject->setProperty ("logAction", "convertLegacyContours");
+    convertedObject->setProperty ("logWarningCode", "legacy.hostAutomationNotRewritten");
+    convertedObject->setProperty ("swappedStaticValues", routedObject ({
+        { after.controls.filterAttack, after.controls.filterDecay, after.controls.filterSustain },
+        { after.controls.loudnessAttack, after.controls.loudnessDecay, after.controls.loudnessSustain }
+    }));
+    convertedObject->setProperty ("physicalTraceAfter", routedObject (afterRouted));
+    root->setProperty ("confirmedConversion", juce::var { convertedObject.get() });
+    return juce::JSON::toString (juce::var { root.get() },
+                                 juce::JSON::FormatOptions {}
+                                     .withSpacing (juce::JSON::Spacing::none)) + "\n";
+}
+
 int captureLegacyFixture (std::string_view mode)
 {
     if (mode == "capture-registry-v2")
     {
         std::cout << makeRegistryV2Export().toStdString();
+        return 0;
+    }
+    if (mode == "capture-contour-routing-trace")
+    {
+        const auto fixture = makeContourRoutingTraceFixture();
+        if (fixture.isEmpty())
+            return 1;
+        std::cout << fixture.toStdString();
         return 0;
     }
 
@@ -2606,6 +2689,473 @@ void testStatePublicationBoundary (TestContext& test)
                  "concurrent restore/save publication must expose only complete valid snapshots");
 }
 
+void testContourTask3BContract (TestContext& test)
+{
+    const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+    const auto routingHeader = sourceRoot.getChildFile ("Source/ContourRouting.h");
+    const auto routingSource = sourceRoot.getChildFile ("Source/ContourRouting.cpp");
+    const auto processorHeader = sourceRoot.getChildFile ("Source/PluginProcessor.h").loadFileAsString();
+    const auto processorSource = sourceRoot.getChildFile ("Source/PluginProcessor.cpp").loadFileAsString();
+    const auto editorSource = sourceRoot.getChildFile ("Source/PluginEditor.cpp").loadFileAsString();
+
+    test.expect (routingHeader.existsAsFile() && routingSource.existsAsFile(),
+                 "Task 3B must provide one shared production ContourRouting adapter");
+    const auto traceFixture = sourceRoot.getChildFile (
+        "Tests/fixtures/state/contour-routing-conversion-trace.json");
+    test.expect (traceFixture.existsAsFile()
+                     && traceFixture.loadFileAsString() == makeContourRoutingTraceFixture(),
+                 "production contour routing/conversion capture must equal its fixture byte-for-byte");
+    test.expect (processorHeader.contains ("ContourSnapshot")
+                     && processorHeader.contains ("ContourConversionRequest")
+                     && processorHeader.contains ("undoContourConversion"),
+                 "processor must expose typed contour snapshot/conversion/undo seams");
+    test.expect (processorHeader.contains ("stateGeneration")
+                     && processorSource.contains ("captureContourSnapshot"),
+                 "contour publication must use a generation-bracketed bounded snapshot");
+    test.expect (processorSource.contains ("convertLegacyContours")
+                     && processorSource.contains ("host_automation_not_rewritten"),
+                 "legacy static conversion must be explicit and retain the stable automation warning");
+    test.expect (processorSource.contains ("ContourRouting::route")
+                     && processorSource.contains ("setEnvelopeSettings (normalizedToMilliseconds (routed.filter.attack)")
+                     && processorSource.contains ("setContourEnvelopeSettings (normalizedToMilliseconds (routed.loudness.attack)"),
+                 "processBlock must route both physical contour ports through the shared adapter");
+    test.expect (editorSource.contains ("setSignalFlowContourControl")
+                     && editorSource.contains ("getSignalFlowContourSnapshot"),
+                 "Signal Flow contour reads and writes must choose semantic IDs dynamically");
+    test.expect (! editorSource.contains (
+                     "callbacks.setContourAttack = [setParam](float value) { setParam(\"loudnessAttackTimeKnob\""),
+                 "Signal Flow filter contour callbacks must not constructor-capture crossed IDs");
+
+    const ContourRouting::ContourControls controls {
+        0.11f, 0.22f, 0.3f, 0.66f, 0.77f, 0.9f, true
+    };
+    const auto canonical = ContourRouting::route (
+        StateContract::ContourContract::canonicalContours, controls);
+    const auto legacy = ContourRouting::route (
+        StateContract::ContourContract::legacyCrossedContours, controls);
+    const auto close = [] (float left, float right) { return std::abs (left - right) < 1.0e-6f; };
+    test.expect (close (canonical.filter.attack, 0.11f)
+                     && close (canonical.filter.decay, 0.22f)
+                     && close (canonical.filter.sustain, 0.3f)
+                     && close (canonical.loudness.attack, 0.66f)
+                     && close (canonical.loudness.decay, 0.77f)
+                     && close (canonical.loudness.sustain, 0.9f),
+                 "canonical adapter truth table must route all six distinct controls exactly");
+    test.expect (close (legacy.filter.attack, 0.66f)
+                     && close (legacy.filter.decay, 0.77f)
+                     && close (legacy.filter.sustain, 0.9f)
+                     && close (legacy.loudness.attack, 0.11f)
+                     && close (legacy.loudness.decay, 0.22f)
+                     && close (legacy.loudness.sustain, 0.3f),
+                 "legacy adapter truth table must retain the exact crossed physical routing");
+    auto noDecay = controls;
+    noDecay.decayEnabled = false;
+    const auto noDecayRouted = ContourRouting::route (
+        StateContract::ContourContract::legacyCrossedContours, noDecay);
+    test.expect (noDecayRouted.filter.sustain == 1.0f
+                     && noDecayRouted.loudness.sustain == 1.0f,
+                 "disabled Decay must retain sustain 1.0 on both physical ports");
+
+    constexpr std::array stages { ContourRouting::Stage::attack,
+                                  ContourRouting::Stage::decay,
+                                  ContourRouting::Stage::sustain };
+    for (const auto stage : stages)
+    {
+        const auto canonicalFilter = ContourRouting::parameterFor (
+            StateContract::ContourContract::canonicalContours,
+            ContourRouting::SemanticContour::filter, stage);
+        const auto canonicalLoudness = ContourRouting::parameterFor (
+            StateContract::ContourContract::canonicalContours,
+            ContourRouting::SemanticContour::loudness, stage);
+        const auto legacyFilter = ContourRouting::parameterFor (
+            StateContract::ContourContract::legacyCrossedContours,
+            ContourRouting::SemanticContour::filter, stage);
+        const auto legacyLoudness = ContourRouting::parameterFor (
+            StateContract::ContourContract::legacyCrossedContours,
+            ContourRouting::SemanticContour::loudness, stage);
+        test.expect (canonicalFilter == legacyLoudness
+                         && canonicalLoudness == legacyFilter,
+                     "dynamic overlay semantic mapping must cross every stage only in legacy mode");
+    }
+
+    const auto makeDistinctLegacy = [&]
+    {
+        auto xml = juce::parseXML (legacyFixtureFile (
+            "Tests/fixtures/state/legacy-representative-state.xml"));
+        if (xml != nullptr)
+        {
+            xml->setAttribute ("presetName", "Contour Conversion Retention");
+            for (const auto& [id, value] : std::to_array<std::pair<const char*, const char*>> ({
+                     { "filterAttackTimeKnob", "0.11" }, { "filterDecayTimeKnob", "0.22" },
+                     { "filterSustainKnob", "3" }, { "loudnessAttackTimeKnob", "0.66" },
+                     { "loudnessDecayTimeKnob", "0.77" }, { "loudnessSustainLevelKnob", "9" },
+                     { "decaySwitch", "1" } }))
+                findParameterXml (*xml, id)->setAttribute ("value", value);
+            auto retained = std::make_unique<juce::XmlElement> ("PARAM");
+            retained->setAttribute ("id", "vendor.contourRetention");
+            retained->setAttribute ("value", "0.3141592653589793");
+            xml->addChildElement (retained.release());
+        }
+        return xml;
+    };
+    const auto renderTrace = [] (MoogMiniAudioProcessor& processor)
+    {
+        processor.setRateAndBufferSizeDetails (48000.0, 1);
+        processor.prepareToPlay (48000.0, 1);
+        juce::AudioBuffer<float> buffer (processor.getTotalNumOutputChannels(), 1);
+        buffer.clear();
+        juce::MidiBuffer midi;
+        processor.processBlock (buffer, midi);
+        processor.releaseResources();
+        return processor.getContourTrace ({});
+    };
+    const auto setDistinct = [&] (MoogMiniAudioProcessor& processor)
+    {
+        setParameter (processor, "filterAttackTimeKnob", 0.11f, test);
+        setParameter (processor, "filterDecayTimeKnob", 0.22f, test);
+        setParameter (processor, "filterSustainKnob", 0.3f, test);
+        setParameter (processor, "loudnessAttackTimeKnob", 0.66f, test);
+        setParameter (processor, "loudnessDecayTimeKnob", 0.77f, test);
+        setParameter (processor, "loudnessSustainLevelKnob", 0.9f, test);
+        setParameter (processor, "decaySwitch", 1.0f, test);
+    };
+
+    MoogMiniAudioProcessor native;
+    setDistinct (native);
+    const auto nativeTrace = renderTrace (native);
+    test.expect (nativeTrace.contract == StateContract::ContourContract::canonicalContours
+                     && close (nativeTrace.routed.filter.attack, 0.11f)
+                     && close (nativeTrace.routed.loudness.attack, 0.66f),
+                 "new/native v2 must use canonical routing in the actual processor path");
+
+    const auto distinctLegacyXml = makeDistinctLegacy();
+    test.expect (distinctLegacyXml != nullptr, "synthetic distinct v0 contour state must parse");
+    if (distinctLegacyXml == nullptr)
+        return;
+    const auto distinctLegacyBytes = binaryFromXml (*distinctLegacyXml);
+    MoogMiniAudioProcessor migrated;
+    const auto migration = migrated.restoreState (distinctLegacyBytes.getData(),
+                                                   static_cast<int> (distinctLegacyBytes.getSize()));
+    const auto legacyTrace = renderTrace (migrated);
+    test.expect (migration.succeeded()
+                     && legacyTrace.contract == StateContract::ContourContract::legacyCrossedContours
+                     && close (legacyTrace.routed.filter.attack, 0.66f)
+                     && close (legacyTrace.routed.loudness.attack, 0.11f)
+                     && close (physicalParameterValue (migrated, "filterAttackTimeKnob"), 0.11f),
+                 "synthetic v0 must retain stored IDs and exact frozen legacy physical routing");
+
+    MoogMiniAudioProcessor canonicalAutomation;
+    setDistinct (canonicalAutomation);
+    setParameter (canonicalAutomation, "filterAttackTimeKnob", 0.15f, test);
+    auto canonicalAutomationTrace = canonicalAutomation.getContourTrace ({});
+    test.expect (close (canonicalAutomationTrace.routed.filter.attack, 0.15f)
+                     && close (canonicalAutomationTrace.routed.loudness.attack, 0.66f),
+                 "canonical Filter-ID host automation must change only the physical Filter port");
+    setParameter (canonicalAutomation, "loudnessAttackTimeKnob", 0.73f, test);
+    canonicalAutomationTrace = canonicalAutomation.getContourTrace ({});
+    test.expect (close (canonicalAutomationTrace.routed.filter.attack, 0.15f)
+                     && close (canonicalAutomationTrace.routed.loudness.attack, 0.73f),
+                 "canonical Loudness-ID host automation must change only the physical VCA port");
+    MoogMiniAudioProcessor legacyAutomation;
+    legacyAutomation.restoreState (distinctLegacyBytes.getData(),
+                                   static_cast<int> (distinctLegacyBytes.getSize()));
+    setParameter (legacyAutomation, "filterAttackTimeKnob", 0.15f, test);
+    auto legacyAutomationTrace = legacyAutomation.getContourTrace ({});
+    test.expect (close (legacyAutomationTrace.routed.filter.attack, 0.66f)
+                     && close (legacyAutomationTrace.routed.loudness.attack, 0.15f),
+                 "legacy Filter-ID host automation must change only the old physical VCA port");
+    setParameter (legacyAutomation, "loudnessAttackTimeKnob", 0.73f, test);
+    legacyAutomationTrace = legacyAutomation.getContourTrace ({});
+    test.expect (close (legacyAutomationTrace.routed.filter.attack, 0.73f)
+                     && close (legacyAutomationTrace.routed.loudness.attack, 0.15f),
+                 "legacy Loudness-ID host automation must change only the old physical Filter port");
+    for (const auto fixture : { "Tests/fixtures/state/legacy-default-state.xml",
+                                "Tests/fixtures/state/legacy-representative-state.xml" })
+    {
+        const auto xml = juce::parseXML (legacyFixtureFile (fixture));
+        const auto bytes = xml == nullptr ? juce::MemoryBlock {} : binaryFromXml (*xml);
+        MoogMiniAudioProcessor restored;
+        test.expect (xml != nullptr
+                         && restored.restoreState (bytes.getData(), static_cast<int> (bytes.getSize())).succeeded()
+                         && restored.getContourContract()
+                                == StateContract::ContourContract::legacyCrossedContours,
+                     "each immutable v0 fixture must restore in legacy crossed mode");
+    }
+
+    MoogMiniAudioProcessor overlayNative;
+    overlayNative.setSignalFlowContourControl (ContourRouting::SemanticContour::filter,
+                                               ContourRouting::Stage::attack, 0.41f);
+    overlayNative.setSignalFlowContourControl (ContourRouting::SemanticContour::loudness,
+                                               ContourRouting::Stage::decay, 0.82f);
+    test.expect (close (physicalParameterValue (overlayNative, "filterAttackTimeKnob"), 0.41f)
+                     && close (physicalParameterValue (overlayNative, "loudnessDecayTimeKnob"), 0.82f),
+                 "canonical Signal Flow writes must target canonical stable IDs");
+    migrated.setSignalFlowContourControl (ContourRouting::SemanticContour::filter,
+                                          ContourRouting::Stage::attack, 0.42f);
+    migrated.setSignalFlowContourControl (ContourRouting::SemanticContour::loudness,
+                                          ContourRouting::Stage::decay, 0.83f);
+    test.expect (close (physicalParameterValue (migrated, "loudnessAttackTimeKnob"), 0.42f)
+                     && close (physicalParameterValue (migrated, "filterDecayTimeKnob"), 0.83f),
+                 "legacy Signal Flow writes must dynamically target crossed stable IDs");
+
+    MoogMiniAudioProcessor conversion;
+    test.expect (conversion.restoreState (distinctLegacyBytes.getData(),
+                                          static_cast<int> (distinctLegacyBytes.getSize())).succeeded(),
+                 "conversion source must restore");
+    const auto beforeBytes = serialiseProcessorStateBytes (conversion);
+    const auto beforeXml = std::unique_ptr<juce::XmlElement> (
+        MoogMiniAudioProcessor::getXmlFromBinary (beforeBytes.getData(),
+                                                  static_cast<int> (beforeBytes.getSize())));
+    const auto beforeGeneration = conversion.getStateGeneration();
+    const auto beforeSnapshot = conversion.captureContourSnapshot ({});
+    const auto beforeRouted = ContourRouting::route (beforeSnapshot.contract, beforeSnapshot.controls);
+    const auto cancelled = conversion.convertLegacyContours();
+    test.expect (cancelled.codeString() == "cancelled"sv
+                     && cancelled.warningString() == "host_automation_not_rewritten"sv
+                     && beforeBytes == serialiseProcessorStateBytes (conversion)
+                     && beforeGeneration == conversion.getStateGeneration(),
+                 "default conversion request must cancel with warning and no mutation/generation advance");
+    const auto converted = conversion.convertLegacyContours (
+        { true, MoogMiniAudioProcessor::HostAutomationKnowledge::unknown });
+    const auto convertedBytes = serialiseProcessorStateBytes (conversion);
+    const auto convertedSnapshot = conversion.captureContourSnapshot (beforeSnapshot);
+    const auto afterRouted = ContourRouting::route (convertedSnapshot.contract,
+                                                    convertedSnapshot.controls);
+    test.expect (converted.codeString() == "converted"sv
+                     && converted.warningString() == "host_automation_not_rewritten"sv
+                     && conversion.getStateGeneration() == beforeGeneration + 2
+                     && conversion.getContourContract()
+                            == StateContract::ContourContract::canonicalContours
+                     && close (physicalParameterValue (conversion, "filterAttackTimeKnob"), 0.66f)
+                     && close (physicalParameterValue (conversion, "loudnessAttackTimeKnob"), 0.11f)
+                     && close (beforeRouted.filter.attack, afterRouted.filter.attack)
+                     && close (beforeRouted.loudness.decay, afterRouted.loudness.decay),
+                 "confirmed conversion must swap exactly the static pairs and preserve physical trace");
+    const auto convertedXml = serialiseProcessorState (conversion);
+    const auto* convertedLog = convertedXml == nullptr ? nullptr
+                                                        : convertedXml->getChildByName ("migrationLog");
+    const auto* conversionEntry = convertedLog == nullptr || convertedLog->getNumChildElements() == 0
+                                    ? nullptr
+                                    : convertedLog->getChildElement (
+                                          convertedLog->getNumChildElements() - 1);
+    test.expect (conversionEntry != nullptr
+                     && conversionEntry->getIntAttribute ("from") == 2
+                     && conversionEntry->getIntAttribute ("to") == 2
+                     && conversionEntry->getStringAttribute ("action") == "convertLegacyContours"
+                     && conversionEntry->getStringAttribute ("warningCode")
+                            == "legacy.hostAutomationNotRewritten",
+                 "converted state must append the exact deterministic provenance entry");
+    const auto* beforeCompatibility = beforeXml == nullptr ? nullptr
+                                                            : beforeXml->getChildByName ("compatibility");
+    const auto* afterCompatibility = convertedXml == nullptr ? nullptr
+                                                              : convertedXml->getChildByName ("compatibility");
+    test.expect (beforeXml != nullptr && convertedXml != nullptr
+                     && beforeXml->getStringAttribute ("engineVersion")
+                            == convertedXml->getStringAttribute ("engineVersion")
+                     && beforeXml->getStringAttribute ("calibrationProfileId")
+                            == convertedXml->getStringAttribute ("calibrationProfileId")
+                     && beforeCompatibility != nullptr && afterCompatibility != nullptr
+                     && beforeCompatibility->getStringAttribute ("sourceVersion")
+                            == afterCompatibility->getStringAttribute ("sourceVersion")
+                     && beforeCompatibility->getStringAttribute ("migratedAtVersion")
+                            == afterCompatibility->getStringAttribute ("migratedAtVersion")
+                     && beforeCompatibility->getStringAttribute ("sourceHash")
+                            == afterCompatibility->getStringAttribute ("sourceHash")
+                     && beforeXml->getChildByName ("ui")->toString()
+                            == convertedXml->getChildByName ("ui")->toString()
+                     && beforeXml->getChildByName ("recreation")->toString()
+                            == convertedXml->getChildByName ("recreation")->toString()
+                     && beforeXml->getChildByName ("extensions")->toString()
+                            == convertedXml->getChildByName ("extensions")->toString()
+                     && findParameterXml (*beforeXml, "filterCutoff")->getStringAttribute ("value")
+                            == findParameterXml (*convertedXml, "filterCutoff")->getStringAttribute ("value"),
+                 "conversion must preserve source identity, extensions, UI, recreation, engine/calibration and unrelated parameters");
+    const auto* beforeLog = beforeXml == nullptr ? nullptr : beforeXml->getChildByName ("migrationLog");
+    bool priorLogPreserved = beforeLog != nullptr && convertedLog != nullptr
+                          && convertedLog->getNumChildElements()
+                                 == beforeLog->getNumChildElements() + 1;
+    if (priorLogPreserved)
+        for (int index = 0; index < beforeLog->getNumChildElements(); ++index)
+            priorLogPreserved = priorLogPreserved
+                && beforeLog->getChildElement (index)->toString()
+                       == convertedLog->getChildElement (index)->toString();
+    test.expect (priorLogPreserved,
+                 "conversion must retain every prior migration-log entry in order");
+    MoogMiniAudioProcessor reload;
+    test.expect (reload.restoreState (convertedBytes.getData(),
+                                     static_cast<int> (convertedBytes.getSize())).succeeded()
+                     && serialiseProcessorStateBytes (reload) == convertedBytes,
+                 "converted source-0 canonical state must validate and reload deterministically");
+    const auto undo = conversion.undoContourConversion();
+    test.expect (undo.codeString() == "undo_restored"sv
+                     && serialiseProcessorStateBytes (conversion) == beforeBytes
+                     && conversion.getContourContract()
+                            == StateContract::ContourContract::legacyCrossedContours,
+                 "one-level undo must restore exact complete pre-conversion bytes and marker");
+    const auto afterUndoBytes = serialiseProcessorStateBytes (conversion);
+    const auto secondUndoGeneration = conversion.getStateGeneration();
+    test.expect (conversion.undoContourConversion().codeString() == "no_undo_available"sv
+                     && afterUndoBytes == serialiseProcessorStateBytes (conversion)
+                     && secondUndoGeneration == conversion.getStateGeneration(),
+                 "second undo must be a stable mutation-free no-op");
+
+    MoogMiniAudioProcessor canonicalNoOp;
+    const auto nativePreparation = StateContract::prepareLegacyContourConversion (
+        StateContract::makeNativeState (canonicalNoOp.apvts.copyState()));
+    test.expect (nativePreparation.result.code == StateContract::RestoreCode::invalidCompatibility,
+                 "conversion preparation must reject a non-legacy source before mutation");
+    const auto canonicalBytes = serialiseProcessorStateBytes (canonicalNoOp);
+    const auto canonicalGeneration = canonicalNoOp.getStateGeneration();
+    test.expect (canonicalNoOp.convertLegacyContours (
+                     { true, MoogMiniAudioProcessor::HostAutomationKnowledge::knownPresent })
+                         .codeString() == "already_canonical"sv
+                     && canonicalBytes == serialiseProcessorStateBytes (canonicalNoOp)
+                     && canonicalGeneration == canonicalNoOp.getStateGeneration(),
+                 "canonical conversion must return already_canonical without mutation");
+
+    MoogMiniAudioProcessor knownAbsent;
+    knownAbsent.restoreState (distinctLegacyBytes.getData(), static_cast<int> (distinctLegacyBytes.getSize()));
+    test.expect (knownAbsent.convertLegacyContours (
+                     { true, MoogMiniAudioProcessor::HostAutomationKnowledge::knownAbsent })
+                         .warningString() == "none"sv,
+                 "known-absent confirmation may omit the UI automation warning");
+    const auto knownAbsentXml = serialiseProcessorState (knownAbsent);
+    const auto* knownAbsentLog = knownAbsentXml == nullptr ? nullptr
+                                                           : knownAbsentXml->getChildByName ("migrationLog");
+    const auto* knownAbsentFinal = knownAbsentLog == nullptr || knownAbsentLog->getNumChildElements() == 0
+                                     ? nullptr
+                                     : knownAbsentLog->getChildElement (
+                                           knownAbsentLog->getNumChildElements() - 1);
+    test.expect (knownAbsentFinal != nullptr
+                     && knownAbsentFinal->getStringAttribute ("warningCode")
+                            == "legacy.hostAutomationNotRewritten",
+                 "known-absent conversion must still retain deterministic conversion history");
+    MoogMiniAudioProcessor knownPresent;
+    knownPresent.restoreState (distinctLegacyBytes.getData(), static_cast<int> (distinctLegacyBytes.getSize()));
+    test.expect (knownPresent.convertLegacyContours (
+                     { true, MoogMiniAudioProcessor::HostAutomationKnowledge::knownPresent })
+                         .warningString() == "host_automation_not_rewritten"sv,
+                 "known-present confirmation must retain the stable automation warning");
+    const auto externalBytes = serialiseProcessorStateBytes (native);
+    knownAbsent.restoreState (externalBytes.getData(), static_cast<int> (externalBytes.getSize()));
+    test.expect (knownAbsent.undoContourConversion().codeString() == "no_undo_available"sv,
+                 "later successful external restore must clear pending conversion undo");
+
+    auto malformedConverted = copyStateXml (*convertedXml);
+    auto* malformedLog = malformedConverted->getChildByName ("migrationLog");
+    malformedLog->removeChildElement (
+        malformedLog->getChildElement (malformedLog->getNumChildElements() - 1), true);
+    const auto malformedBytes = binaryFromXml (*malformedConverted);
+    MoogMiniAudioProcessor atomicSentinel;
+    atomicSentinel.restoreState (distinctLegacyBytes.getData(), static_cast<int> (distinctLegacyBytes.getSize()));
+    const auto sentinelBytes = serialiseProcessorStateBytes (atomicSentinel);
+    test.expect (atomicSentinel.restoreState (malformedBytes.getData(),
+                                             static_cast<int> (malformedBytes.getSize())).code
+                     == StateContract::RestoreCode::invalidMigrationLog
+                     && serialiseProcessorStateBytes (atomicSentinel) == sentinelBytes,
+                 "source-0 canonical provenance without conversion history must reject atomically");
+    auto duplicateConverted = copyStateXml (*convertedXml);
+    auto duplicateNamedEntry = std::make_unique<juce::XmlElement> ("ENTRY");
+    duplicateNamedEntry->setAttribute ("from", 0);
+    duplicateNamedEntry->setAttribute ("to", 2);
+    duplicateNamedEntry->setAttribute ("action", "convertLegacyContours");
+    duplicateNamedEntry->setAttribute ("warningCode", "legacy.contourRoutingPreserved");
+    duplicateConverted->getChildByName ("migrationLog")->prependChildElement (
+        duplicateNamedEntry.release());
+    const auto duplicateConvertedBytes = binaryFromXml (*duplicateConverted);
+    test.expect (atomicSentinel.restoreState (
+                     duplicateConvertedBytes.getData(),
+                     static_cast<int> (duplicateConvertedBytes.getSize())).code
+                     == StateContract::RestoreCode::invalidMigrationLog
+                     && serialiseProcessorStateBytes (atomicSentinel) == sentinelBytes,
+                 "converted provenance must reject any additional conversion-named history");
+    auto legacyWithConversionHistory = copyStateXml (*serialiseProcessorState (conversion));
+    auto* legacyCompatibility = legacyWithConversionHistory->getChildByName ("compatibility");
+    legacyCompatibility->setAttribute ("contourContract", "legacyCrossedContours");
+    auto exactConversionEntry = std::make_unique<juce::XmlElement> ("ENTRY");
+    exactConversionEntry->setAttribute ("from", 2);
+    exactConversionEntry->setAttribute ("to", 2);
+    exactConversionEntry->setAttribute ("action", "convertLegacyContours");
+    exactConversionEntry->setAttribute ("warningCode", "legacy.hostAutomationNotRewritten");
+    legacyWithConversionHistory->getChildByName ("migrationLog")
+        ->addChildElement (exactConversionEntry.release());
+    const auto legacyHistoryBytes = binaryFromXml (*legacyWithConversionHistory);
+    test.expect (atomicSentinel.restoreState (legacyHistoryBytes.getData(),
+                                             static_cast<int> (legacyHistoryBytes.getSize())).code
+                     == StateContract::RestoreCode::invalidMigrationLog
+                     && serialiseProcessorStateBytes (atomicSentinel) == sentinelBytes,
+                 "legacy marker must reject conversion history atomically");
+
+    const auto captureStart = processorSource.indexOf (
+        "MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::captureContourSnapshot");
+    const auto captureEnd = processorSource.indexOf (
+        captureStart, "MoogMiniAudioProcessor::ContourSnapshot MoogMiniAudioProcessor::getSignalFlowContourSnapshot");
+    const auto captureSource = processorSource.substring (captureStart, captureEnd);
+    test.expect (captureStart >= 0 && captureEnd > captureStart
+                     && captureSource.contains ("maximumAttempts = 3")
+                     && ! captureSource.contains ("juce::String")
+                     && ! captureSource.contains ("getRawParameterValue")
+                     && ! captureSource.contains ("ValueTree")
+                     && ! captureSource.contains ("ScopedLock")
+                     && ! captureSource.contains ("while"),
+                 "audio contour snapshot must be prepared, bounded, lock/string/tree/allocation-free");
+
+    MoogMiniAudioProcessor nativeGenerationSource;
+    setDistinct (nativeGenerationSource);
+    const auto nativeGenerationBytes = serialiseProcessorStateBytes (nativeGenerationSource);
+    auto legacyGenerationXml = copyStateXml (*distinctLegacyXml);
+    for (const auto& [id, value] : std::to_array<std::pair<const char*, const char*>> ({
+             { "filterAttackTimeKnob", "0.14" }, { "filterDecayTimeKnob", "0.25" },
+             { "filterSustainKnob", "4" }, { "loudnessAttackTimeKnob", "0.68" },
+             { "loudnessDecayTimeKnob", "0.79" }, { "loudnessSustainLevelKnob", "8" } }))
+        findParameterXml (*legacyGenerationXml, id)->setAttribute ("value", value);
+    const auto legacyGenerationBytes = binaryFromXml (*legacyGenerationXml);
+    MoogMiniAudioProcessor concurrent;
+    concurrent.restoreState (nativeGenerationBytes.getData(),
+                             static_cast<int> (nativeGenerationBytes.getSize()));
+    auto fallback = concurrent.captureContourSnapshot ({});
+    std::atomic<int> mixedSnapshots { 0 };
+    std::atomic<bool> beginCapture { false };
+    std::thread captureReader ([&]
+    {
+        while (! beginCapture.load (std::memory_order_acquire))
+            std::this_thread::yield();
+        for (int iteration = 0; iteration < 1000; ++iteration)
+        {
+            const auto snapshot = concurrent.captureContourSnapshot (fallback);
+            if (! snapshot.usedFallback)
+                fallback = snapshot;
+            const auto isNative = snapshot.contract
+                                   == StateContract::ContourContract::canonicalContours
+                && close (snapshot.controls.filterAttack, 0.11f)
+                && close (snapshot.controls.filterDecay, 0.22f)
+                && close (snapshot.controls.filterSustain, 0.3f)
+                && close (snapshot.controls.loudnessAttack, 0.66f)
+                && close (snapshot.controls.loudnessDecay, 0.77f)
+                && close (snapshot.controls.loudnessSustain, 0.9f);
+            const auto isLegacy = snapshot.contract
+                                   == StateContract::ContourContract::legacyCrossedContours
+                && close (snapshot.controls.filterAttack, 0.14f)
+                && close (snapshot.controls.filterDecay, 0.25f)
+                && close (snapshot.controls.filterSustain, 0.4f)
+                && close (snapshot.controls.loudnessAttack, 0.68f)
+                && close (snapshot.controls.loudnessDecay, 0.79f)
+                && close (snapshot.controls.loudnessSustain, 0.8f);
+            if ((! isNative && ! isLegacy) || (snapshot.generation & 1u) != 0u)
+                mixedSnapshots.fetch_add (1, std::memory_order_relaxed);
+        }
+    });
+    beginCapture.store (true, std::memory_order_release);
+    for (int iteration = 0; iteration < 300; ++iteration)
+    {
+        const auto& bytes = iteration % 2 == 0 ? legacyGenerationBytes : nativeGenerationBytes;
+        concurrent.restoreState (bytes.getData(), static_cast<int> (bytes.getSize()));
+    }
+    captureReader.join();
+    test.expect (mixedSnapshots.load (std::memory_order_relaxed) == 0,
+                 "bounded concurrent contour captures must return only complete generations or coherent fallback");
+}
+
 void testMidiSampleZeroSmoke (TestContext& test)
 {
     MoogMiniAudioProcessor processor;
@@ -2668,6 +3218,8 @@ int runMode (std::string_view mode)
         testStateV2FailuresAreAtomic (test);
         testStatePublicationBoundary (test);
     }
+    else if (mode == "contours")
+        testContourTask3BContract (test);
     else if (mode == "fixtures")
         testLegacyParameterFixtures (test);
     else if (mode == "registry")

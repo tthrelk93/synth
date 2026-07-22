@@ -209,6 +209,7 @@ private:
     int initialKeyIndex;
     SmokeComponent smokeComponent;
     SignalFlowOverlay signalFlowOverlay;
+    MoogMiniAudioProcessor::ContourSnapshot signalFlowContourSnapshot;
     juce::ComboBox presetComboBox;
     juce::TextButton savePresetButton;
     juce::TextButton loadPresetButton;
