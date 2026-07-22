@@ -452,6 +452,28 @@ public:
                                     R"({"sample": 0, "sequence": 2, "parameterId": "noiseOnOffSwitch", "normalizedValue": 1.0})"),
                                 "fixture.stochastic-state");
 
+        const auto transition =
+            R"({"sample": 512, "sequence": 3, "parameterId": "filterCutoff", "normalizedValue": 0.25})";
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    transition,
+                                    juce::String { transition }
+                                        + R"(,
+    {"sample": 768, "sequence": 5, "parameterId": "noiseOnOffSwitch", "normalizedValue": 1.0})"),
+                                "fixture.stochastic-state");
+        expectFixtureValid (sourceRoot, validText.replaceFirstOccurrenceOf (
+                               transition,
+                               juce::String { transition }
+                                   + R"(,
+    {"sample": 768, "sequence": 6, "parameterId": "oscModSwitch", "normalizedValue": 0.0},
+    {"sample": 768, "sequence": 5, "parameterId": "oscModSwitch", "normalizedValue": 1.0})"));
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    transition,
+                                    juce::String { transition }
+                                        + R"(,
+    {"sample": 768, "sequence": 6, "parameterId": "filterModSwitch", "normalizedValue": 1.0},
+    {"sample": 768, "sequence": 5, "parameterId": "filterModSwitch", "normalizedValue": 0.0})"),
+                                "fixture.stochastic-state");
+
         const TemporaryDirectory wavRoot { "model-d-reference-wav-negative" };
         expect (wavRoot.isOwned(), "WAV negative root must be owned");
         if (wavRoot.isOwned()) {
@@ -641,6 +663,26 @@ private:
         const auto fixtureFile = fixtureRoot.directory.getChildFile ("fixture.json");
         fixtureFile.replaceWithText (contents);
         expectDiagnostic (ReferenceHarness::loadRenderFixture (fixtureRoot.directory, fixtureFile), code);
+    }
+
+    void expectFixtureValid (const juce::File& sourceRoot, const juce::String& contents)
+    {
+        const TemporaryDirectory fixtureRoot { "model-d-reference-fixture-positive" };
+        expect (fixtureRoot.isOwned(), "positive fixture root must be owned");
+        if (! fixtureRoot.isOwned())
+            return;
+        const auto stateDirectory = fixtureRoot.directory.getChildFile ("Tests/fixtures/state");
+        stateDirectory.createDirectory();
+        for (const auto stateName : { "native-default-state-v2.xml",
+                                      "migrated-default-state-v2.xml",
+                                      "migrated-representative-state-v2.xml" })
+            expect (sourceRoot.getChildFile ("Tests/fixtures/state").getChildFile (stateName)
+                        .copyFileTo (stateDirectory.getChildFile (stateName)),
+                    "positive fixture must copy each referenced state");
+        const auto fixtureFile = fixtureRoot.directory.getChildFile ("fixture.json");
+        fixtureFile.replaceWithText (contents);
+        expect (ReferenceHarness::loadRenderFixture (fixtureRoot.directory, fixtureFile).ok(),
+                "same-sample enable then disable must leave stochastic processing off");
     }
 };
 

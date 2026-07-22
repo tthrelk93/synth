@@ -13,6 +13,7 @@
 #include <iterator>
 #include <limits>
 #include <set>
+#include <tuple>
 #include <utility>
 
 namespace ReferenceHarness {
@@ -734,26 +735,54 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         fixture.automation.push_back (event);
     }
 
-    const auto stochasticConsumerEnabled = [&] (const ParameterRegistry::Key key) {
-        auto enabled = stateParameterValue (*stateXml, ParameterRegistry::descriptor (key).id)
-                           .value_or (0.0) >= 0.5;
-        std::vector<const AutomationEvent*> sampleZero;
-        for (const auto& event : fixture.automation)
-            if (event.sample == 0 && event.key == key)
-                sampleZero.push_back (&event);
-        std::sort (sampleZero.begin(), sampleZero.end(), [] (const auto* left, const auto* right) {
-            return left->sequence < right->sequence;
-        });
-        for (const auto* event : sampleZero)
-            enabled = event->normalizedValue >= 0.5f;
-        return enabled;
+    constexpr std::array stochasticKeys {
+        ParameterRegistry::Key::noiseOnOffSwitch,
+        ParameterRegistry::Key::oscModSwitch,
+        ParameterRegistry::Key::filterModSwitch,
     };
-    if (stochasticConsumerEnabled (ParameterRegistry::Key::noiseOnOffSwitch)
-        || stochasticConsumerEnabled (ParameterRegistry::Key::oscModSwitch)
-        || stochasticConsumerEnabled (ParameterRegistry::Key::filterModSwitch))
+    std::array<bool, stochasticKeys.size()> stochasticEnabled {};
+    for (size_t index = 0; index < stochasticKeys.size(); ++index)
+        stochasticEnabled[index]
+            = stateParameterValue (*stateXml, ParameterRegistry::descriptor (stochasticKeys[index]).id)
+                  .value_or (0.0) >= 0.5;
+
+    std::vector<const AutomationEvent*> orderedAutomation;
+    orderedAutomation.reserve (fixture.automation.size());
+    for (const auto& event : fixture.automation)
+        orderedAutomation.push_back (&event);
+    std::sort (orderedAutomation.begin(), orderedAutomation.end(), [] (const auto* left,
+                                                                       const auto* right) {
+        return std::tie (left->sample, left->sequence) < std::tie (right->sample, right->sequence);
+    });
+    const auto anyStochasticConsumerEnabled = [&] {
+        return std::any_of (stochasticEnabled.begin(), stochasticEnabled.end(), [] (const auto enabled) {
+            return enabled;
+        });
+    };
+    const auto stochasticFailure = [] {
         return failure<RenderFixture> (
             "fixture.stochastic-state",
-            "production random consumers must be disabled by final sample-zero automation");
+            "production random consumers must remain disabled for every rendered interval");
+    };
+
+    std::uint64_t intervalStart = 0;
+    size_t eventIndex = 0;
+    while (eventIndex < orderedAutomation.size()) {
+        const auto boundary = orderedAutomation[eventIndex]->sample;
+        if (boundary > intervalStart && anyStochasticConsumerEnabled())
+            return stochasticFailure();
+        while (eventIndex < orderedAutomation.size()
+               && orderedAutomation[eventIndex]->sample == boundary) {
+            const auto& event = *orderedAutomation[eventIndex++];
+            const auto key = std::find (stochasticKeys.begin(), stochasticKeys.end(), event.key);
+            if (key != stochasticKeys.end())
+                stochasticEnabled[static_cast<size_t> (std::distance (stochasticKeys.begin(), key))]
+                    = event.normalizedValue >= 0.5f;
+        }
+        intervalStart = boundary;
+    }
+    if (fixture.config.totalSamples > intervalStart && anyStochasticConsumerEnabled())
+        return stochasticFailure();
 
     const auto* midiValue = requiredProperty (*root, "midi");
     const auto* midi = midiValue == nullptr ? nullptr : midiValue->getArray();
