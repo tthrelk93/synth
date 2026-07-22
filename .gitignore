@@ -4,3 +4,7 @@ Builds/MacOSX/
 # Ignore other unnecessary files
 .DS_Store
 *.log
+
+# Local Codex execution worktrees and subagent progress ledgers
+.worktrees/
+.superpowers/
