@@ -1,11 +1,27 @@
 # Agent 07 — Workstream 03 Continuation Kickoff
 
+## Closeout status
+
+This kickoff's implementation action has been completed. The automated
+parameter/state contract freeze landed in commits `3206baa` through `f79faa1`;
+the consolidated result is the [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md).
+
+PAR-001/003/005/008/009 are `pass`. PAR-002/004/007 remain `in-progress`
+because their designated-host exercises are `not-run`, and PAR-006 remains
+`in-progress` until Workstream 12/later DSP work supplies the approved-manifest
+click/step evidence. BLD-006/011/012 also remain `in-progress` external
+pre-release gates. The successor's first engineering action is Workstream 12
+harness/manifest coordination against the frozen 48-parameter registry and v2
+state contract; Workstream 04 follows in roadmap order.
+
+The instructions below are preserved as the historical execution contract.
+
 You are Agent 07. Continue the synthesizer remediation on branch
 `codex/workstream-02-build`, but take primary ownership of **Workstream 03 —
 Parameter, Automation, and State Contract**. Workstream 02 remains open only for
 the explicitly deferred pre-release evidence described below.
 
-## Mandatory preflight
+## Mandatory preflight — completed
 
 Before editing:
 
@@ -24,7 +40,7 @@ Before editing:
 4. Run a proportionate local build/CTest baseline before changing parameter or
    state behavior.
 
-## First implementation action
+## First implementation action — completed
 
 Begin Workstream 03 at its first dependency-ordered action:
 

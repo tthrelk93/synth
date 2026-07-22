@@ -20,7 +20,26 @@ Make every control’s identity, display, automation, normalization, default, sm
 | PAR-008 | Preserve unknown safe extensions, reject unknown future major versions atomically, and test corrupt/partial states. |
 | PAR-009 | Remove stringly typed parameter lookup from render loops and expose typed, prepared parameter snapshots. |
 
-## Current-code evidence
+## Implementation freeze status
+
+The automated Workstream 03 contract freeze is complete through implementation
+commit `f79faa1`. It does not convert unrun host or later-DSP acceptance into a
+pass. The authoritative command record, immutable fixture hashes, and review
+scope are in the [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md).
+
+| ID | Status | Durable result / remaining acceptance |
+|---|---|---|
+| PAR-001 | pass | One frozen typed registry supplies the APVTS layout, state fixtures, complete processor snapshot, and editor bindings. |
+| PAR-002 | in-progress | All 48 descriptors pass automated metadata/mapping/default/flag oracles; designated-host generic UI enumeration remains `not-run`. |
+| PAR-003 | pass | New v2 state defaults Tune to `Zero`; migrated v0 states preserve saved values. |
+| PAR-004 | in-progress | Canonical/legacy adapters, provenance, explicit conversion, and undo pass automated traces; designated-DAW automation and warning/cancel capture remain `not-run`. |
+| PAR-005 | pass | Strict deterministic v2 state, atomic v0 migration, synchronized publication, and rollback are committed and tested. |
+| PAR-006 | in-progress | Smoothing classes are declared and statically audited; Workstream 12/later DSP still owns approved-manifest click/step measurement. |
+| PAR-007 | in-progress | Stable typed priority/trigger/Main/Phones defaults, state, restore, and bindings pass; designated-host enumeration/automation/save/reload remains `not-run`. |
+| PAR-008 | pass | The fault corpus and bounded safe-extension round trip pass. |
+| PAR-009 | pass | One prepared 48-value snapshot feeds rendering and shared typed attachments feed the editor without duplicated string maps or APVTS polling. |
+
+## Pre-remediation code evidence
 
 - `MoogMiniAudioProcessor::createParameterLayout` is a long sequence of inline constructors. Six unrelated controls, including External Input, Glide, Mod Mix, Loudness Sustain, and Phones, are named “Output Volume.” Both keyboard-control switches share the same name.
 - The `tune` choice lists `Zero` at index 5 but uses default index 0.
@@ -158,20 +177,20 @@ Floating-point comparison policy comes from Workstream 12’s derived-software m
 
 ## Manual and host validation
 
-In designated VST3/AU hosts, capture automation lists before/after, reopen a legacy project, automate each contour control, save/reload, and compare audible routing plus displayed values. Verify corrected names/units in generic host UI, UI gestures, undo, latch/write/read automation, legacy-mode diagnostics, and the explicit conversion warning/cancel path.
+Status: **not-run**. In designated VST3/AU hosts, capture automation lists before/after, reopen a legacy project, automate each contour control, save/reload, and compare audible routing plus displayed values. Verify corrected names/units in generic host UI, UI gestures, undo, latch/write/read automation, legacy-mode diagnostics, and the explicit conversion warning/cancel path. These obligations keep PAR-002/004/007 `in-progress`; they are pre-release evidence, not a reason to falsify the automated result.
 
 ## Definition of done
 
-- [ ] PAR-001 through PAR-009 pass.
-- [ ] Registry is the only metadata source.
-- [ ] Legacy IDs and automation remain addressable.
-- [ ] v0 migration is atomic and visibly marked legacy; v2 is deterministic.
-- [ ] New instances have canonical contour semantics and correct defaults.
-- [ ] All later workstreams can consume typed snapshots without inventing mappings.
+- [ ] PAR-001 through PAR-009 pass. Automated implementation is frozen, but PAR-002/004/006/007 retain the explicit manual/Workstream 12 obligations above.
+- [x] Registry is the only metadata source.
+- [x] Legacy IDs and automation remain addressable.
+- [x] v0 migration is atomic and visibly marked legacy; v2 is deterministic.
+- [x] New instances have canonical contour semantics and correct defaults.
+- [x] All later workstreams can consume typed snapshots without inventing mappings.
 
 ## Completion-report evidence
 
-Include legacy/current registry exports and diff; descriptor validation output; default snapshot; v0/v2 fixtures and hashes; routing-trace comparisons; failure/rollback test output; host automation screenshots; conversion-warning capture; real-time instrumentation; and a migration table listing every added/defaulted property.
+Automated evidence is retained under [evidence/workstream-03](evidence/workstream-03/), with the consolidated ledger in the [verification summary](evidence/workstream-03/workstream-03-verification-summary.md). Host automation screenshots and the conversion-warning/cancel capture remain `not-run` and must be appended by designated-host validation; no placeholder image is treated as evidence.
 
 ## Primary technical references
 

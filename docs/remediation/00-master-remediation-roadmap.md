@@ -1,18 +1,18 @@
 # Synthesizer Remediation Roadmap
 
-Status: implementation in progress — Workstream 03 / Agent 07, with Workstream 02 external validation retained as pre-release gates.
+Status: Workstream 03 automated parameter/state contract freeze landed; Workstream 12 harness coordination is next, while Workstream 02 and Workstream 03 external/manual validation remain pre-release gates.
 Repository baseline inspected: `main` at `c30038d` (`Update README.md`).
 Audit corpus: the attached **Synthesizer Remediation Planning Suite** specification. It is the only supplied original-audit text, so every sentence-level deficit and proposed product improvement in that specification is treated as a finding. The line-by-line ownership audit is in the [traceability matrix](01-traceability-matrix.md).
 
 ## Implementation control
 
-The core planning baseline is this roadmap, the traceability matrix, and Workstreams 02–15. Operational execution is coordinated through the [Agent 07 Workstream 03 kickoff](18-agent-07-workstream-03-kickoff.md) and the canonical [implementation handoff](17-implementation-handoff.md). The implementing agent must update this table, its active workstream plan, and the handoff as work progresses; the matrix is updated in the same change whenever implementation evidence invalidates a finding, dependency, requirement, acceptance criterion, or ownership decision.
+The core planning baseline is this roadmap, the traceability matrix, and Workstreams 02–15. Operational execution is coordinated through the canonical [implementation handoff](17-implementation-handoff.md); the [Agent 07 Workstream 03 kickoff](18-agent-07-workstream-03-kickoff.md) is now a completed execution record. The implementing agent must update this table, its active workstream plan, and the handoff as work progresses; the matrix is updated in the same change whenever implementation evidence invalidates a finding, dependency, requirement, acceptance criterion, or ownership decision.
 
 | Phase | Active workstream | Status | Entry gate | Exit/next owner |
 |---|---|---|---|---|
 | F0 — reproducible baseline | [02 Build, Packaging, and Host Validation](02-build-packaging-host-validation.md) | In progress as a pre-release validation track; exact run `29728203657` passes all eight supported rows, BLD-007 now passes through the [owner identity/deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md), and BLD-006/011/012 remain in progress pending external host/account/tool evidence | Approved planning baseline | Retain BLD-006/011/012 as visible pre-release gates; accept owner-supplied external evidence later without blocking Workstream 03. |
-| F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | In progress — Agent 07 under the owner-approved temporary scheduling exception | Workstream 02 automated build/test seams pass; owner-approved exception carries BLD-006/011/012 as pre-release gates | Workstream 03 contract freeze plus Workstream 12 harness coordination. |
-| F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Not started | Workstream 02 test/offline targets and Workstream 03 contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4. |
+| F0 — reproducible baseline | [03 Parameter, Automation, and State Contract](03-parameter-automation-state-contract.md) | Automated contract freeze complete; PAR-001/003/005/008/009 pass, while PAR-002/004/006/007 remain in progress for designated-host or later DSP/harness evidence | Workstream 02 automated build/test seams pass; owner-approved exception carries BLD-006/011/012 as pre-release gates | Preserve the frozen contracts; close the named manual/pre-release obligations through Workstream 12 and designated-host validation. |
+| F0 — reproducible baseline | [12 Reference/Test harness](12-hardware-reference-regression-system.md) | Next — coordinate the manifest and executable evidence that consume the frozen Workstream 03 registry/state contracts | Workstream 02 test/offline targets and Workstream 03 automated contracts are stable | F0 harness and manifest schema accepted; full suite continues through F4, then Workstream 04 proceeds in roadmap order. |
 | F1–F6 | Workstreams 04–15 | Not started | The phase gates below | Follow the fixed roadmap order; no agent skips an unmet gate. |
 
 ## Successor handoff package policy

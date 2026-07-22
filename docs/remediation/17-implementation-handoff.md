@@ -11,18 +11,18 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 | Field | Current value |
 |---|---|
 | Prepared | 2026-07-21 |
-| Current owner | Agent 07 successor |
+| Current owner | Workstream 12 successor |
 | Roadmap phase | F0 — reproducible baseline |
-| Workstream | 03 — Parameter, Automation, and State Contract; Workstream 02 BLD-006/011/012 continue as pre-release validation gates |
-| Overall status | in-progress; exact identity/CI correction run `29869102847` passes all eight supported rows at `7177557`, the owner-approved TTH Model One identity closes BLD-007, and the temporary scheduling exception permits Workstream 03 while BLD-006/011/012 remain visibly in progress pending external evidence |
+| Workstream | 12 — Reference/Test harness coordination next; Workstream 03 automated contract freeze landed, with PAR-002/004/006/007 and Workstream 02 BLD-006/011/012 retained as pre-release validation obligations |
+| Overall status | Workstream 03 implementation is frozen through `f79faa1`: PAR-001/003/005/008/009 pass committed automated acceptance, while PAR-002/004/006/007 remain `in-progress` for explicitly `not-run` host or later-DSP/harness evidence. BLD-006/011/012 remain `in-progress`; no release-complete claim is made. |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
-| Source prompt | Agent 06 continuation plus the [owner identity/deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md); durable build results remain in the [Agent 03 recovery report](evidence/workstream-02/agent-03-hosted-ci-recovery.md), [dependency/license decision](evidence/workstream-02/dependency-license-review.md#product-owner-decision), and [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md). |
-| Successor package | Planned untracked artifact `Agent-07-Workstream-03-Continuation-Context.zip`; it supersedes the older Agent 07 Workstream 02 archive and must be built from the final committed ledger state. |
-| First action | Inventory and freeze every existing parameter ID and capture host enumeration plus unversioned APVTS state fixtures before changing metadata or serialization. |
-| First unmet gate | PAR-001 — centralized typed parameter descriptor registry, beginning with legacy inventory/fixtures |
-| Next owner if incomplete | Workstream 03 / F0 continuation at the first dependency-ordered non-passing PAR requirement; carry BLD-006/011/012 as pre-release obligations |
-| Next owner if complete | Workstream 12 harness coordination, then Workstream 04 in roadmap order after the Workstream 03 contract freeze. |
+| Source prompt | Agent 07 Workstream 03 continuation context plus the completed [kickoff](18-agent-07-workstream-03-kickoff.md); the authoritative closeout is the [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md). |
+| Successor package | Planned untracked artifact `Agent-07-Workstream-03-Complete-Context.zip`; it must be built from the final committed ledger state and supersedes without deleting any predecessor archive. |
+| First action | Coordinate Workstream 12's acceptance manifest and executable harness with the frozen 48-parameter registry, smoothing-class declarations, v2 state fixtures, and contour compatibility traces. |
+| First unmet gate | PAR-006 — approved-manifest click/step fixtures and measured acceptance bounds; PAR-002/004/007 also retain designated-host validation. |
+| Next owner if incomplete | Workstream 12 / F0 harness continuation; carry PAR-002/004/006/007 and BLD-006/011/012 as visible pre-release obligations. |
+| Next owner if complete | Workstream 04 in roadmap order after Workstream 12 accepts the F0 harness/manifest seam. |
 
 ## Workstream 02 requirement ledger
 
@@ -43,16 +43,32 @@ Keep this table synchronized with the progress table in [Workstream 02](02-build
 | BLD-011 | in-progress | [Validator and linked-manifest evidence](evidence/workstream-02/validation-evidence.md) · [Hosted CI attempt](evidence/workstream-02/hosted-ci-execution.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) · [Owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | Automated hosted validators pass; the authorized designated-account AU, Steinberg validator, and commercial-host checks are deferred, unrun, and required before release. |
 | BLD-012 | in-progress | [Artifact staging/build manifest](evidence/workstream-02/artifact-staging-manifest.md) · [Linked validation evidence](evidence/workstream-02/validation-evidence.md) · [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md) · [Agent 06 preflight](evidence/workstream-02/agent-06-continuation-preflight.md) · [Owner decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | All eight exact-head linked manifests deep-verify and upload; development manifests remain usable, while distribution aggregation waits for BLD-006/011 external evidence. |
 
+## Workstream 03 requirement ledger
+
+The [verification summary](evidence/workstream-03/workstream-03-verification-summary.md) records the exact commit series, immutable artifacts, serial Release verification, and independent review.
+
+| Requirement | Status | Durable evidence | Blocker or next action |
+|---|---|---|---|
+| PAR-001 | pass | [Legacy inventory](evidence/workstream-03/legacy-parameter-inventory.md) · [registry foundation](evidence/workstream-03/parameter-registry-foundation.md) · [registry v2](evidence/workstream-03/parameter-registry-v2.md) · [typed bindings](evidence/workstream-03/typed-editor-bindings.md) | Preserve the sole registry and typed key order. |
+| PAR-002 | in-progress | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) proves all 48 automated descriptor oracles. | Capture approved name/unit/flag enumeration in designated generic VST3/AU host UIs; currently `not-run`. |
+| PAR-003 | pass | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) · [state v2 migration](evidence/workstream-03/state-v2-migration.md) | Preserve Tune `Zero` for new state and saved legacy values during migration. |
+| PAR-004 | in-progress | [Contour compatibility/conversion](evidence/workstream-03/contour-compatibility-conversion.md) proves canonical/legacy routing, explicit acknowledged conversion, and exact undo. | Run designated-DAW legacy contour automation plus warning/cancel evidence; currently `not-run`. |
+| PAR-005 | pass | [State v2 migration](evidence/workstream-03/state-v2-migration.md) | Preserve strict parse/validate/migrate/commit, deterministic bytes, and rollback. |
+| PAR-006 | in-progress | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) freezes and audits smoothing classes. | Workstream 12/later DSP must define and pass approved-manifest click/step fixtures; currently `not-run`. |
+| PAR-007 | in-progress | [Registry v2](evidence/workstream-03/parameter-registry-v2.md) · [state v2 migration](evidence/workstream-03/state-v2-migration.md) · [typed bindings](evidence/workstream-03/typed-editor-bindings.md) prove typed contracts/defaults/restore/UI gestures. | Run designated-host enumeration, automation, save, and reload; currently `not-run`. |
+| PAR-008 | pass | [State v2 migration](evidence/workstream-03/state-v2-migration.md) proves the fault corpus and safe-extension round trip. | Preserve atomic failure and bounded extension policy. |
+| PAR-009 | pass | [Prepared snapshot](evidence/workstream-03/prepared-parameter-snapshot.md) · [typed bindings](evidence/workstream-03/typed-editor-bindings.md) | Preserve the prepared 48-value snapshot and attachment-only editor boundary. |
+
 ## Current change inventory
 
 | Category | Details |
 |---|---|
-| Starting branch/commit | Overall baseline `main` / `c30038d1ee39e7e06f4fcf64605defd51b3cdae2`; this owner-decision continuation resumed `codex/workstream-02-build` at Agent 06 ledger commit `022f67f35859254ac8b7882407992713cdc699a3`. |
-| Ending commit/working tree | Hosted matrix baseline remains `ff7b3693c2b92e139d3f6d544f35f254e787fcf9`; current implementation through `a18444e8336626ecf5c627558454264f55d823ea` adds the approved identity, hardened shared identity validation, dynamic AU CI safety, fresh local evidence, and the Agent 07 Workstream 03 handoff. Only preserved predecessor inputs and the verified Workstream 03 successor ZIP remain untracked after cleanup. |
-| Pre-existing changes | Agent 06 preserves the Agent 01 through Agent 06 continuation ZIPs and predecessor extracted orientation copies without staging or modification. |
-| Implementation files changed | Earlier implementation remains `42d42c2`–`a42ec79`. Agent 03 commits `ddbb50e`–`ff7b369` fix supported-platform build/validation defects. Commit `a18444e` centralizes identity validation across configure/staging/manifests, adds negative configure contracts, and makes ephemeral macOS AU install/cleanup derive the staged component name safely. |
-| Planning files changed | The owner-decision continuation synchronizes roadmap ownership, BLD traceability/status, Workstream 02, the Agent 07 kickoff, and this canonical handoff so Workstream 03 may begin without falsifying deferred validation. |
-| Artifacts/evidence produced | [Preflight](evidence/workstream-02/preflight.md); [build foundation](evidence/workstream-02/build-foundation.md); [dependency/license review](evidence/workstream-02/dependency-license-review.md); [warning baseline](evidence/workstream-02/warning-baseline.md); [wrapper/bus contract](evidence/workstream-02/wrapper-bus-contract.md); [CTest/CI](evidence/workstream-02/ctest-ci-enforcement.md); [artifact staging](evidence/workstream-02/artifact-staging-manifest.md); [standalone lifecycle](evidence/workstream-02/standalone-lifecycle.md); [validator/linked manifest](evidence/workstream-02/validation-evidence.md); [Agent 02 continuation preflight](evidence/workstream-02/continuation-preflight.md); [hosted CI execution](evidence/workstream-02/hosted-ci-execution.md); [Agent 03 recovery](evidence/workstream-02/agent-03-hosted-ci-recovery.md); [Agent 04 continuation preflight](evidence/workstream-02/agent-04-continuation-preflight.md); [Agent 06 continuation preflight](evidence/workstream-02/agent-06-continuation-preflight.md); [owner identity and deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md). |
+| Starting branch/commit | Workstream 03 resumed `codex/workstream-02-build` at `b28db12`, the exact retained Workstream 02 identity ledger. |
+| Ending commit/working tree | Implementation commits `3206baa` through `f79faa1` freeze Workstream 03 behavior. The final planning/evidence commit contains this ledger; the successor package's `GIT-STATE.md` records its exact full hash without creating a self-referential tracked document. Only preserved predecessor inputs and the verified complete-context ZIP remain untracked. |
+| Pre-existing changes | Agent 07 preserves every predecessor ZIP and extracted orientation copy without staging, deletion, or modification. |
+| Implementation files changed | `ParameterRegistry.*`, `StateContract.*`, `ContourRouting.*`, `ParameterSnapshotCapture.h`, processor/editor sources, new `ParameterBinding.*`, CMake test registration, `ModelDTests.cpp`, and nine frozen parameter/state fixtures. The series centralizes 48 descriptors, adds state v2 and contour compatibility, publishes coherent prepared snapshots, and replaces editor string maps/polling with typed attachments. |
+| Planning files changed | Workstream 03 evidence reports, roadmap, traceability matrix, owner plan, kickoff, PAR-009 plan, and this handoff distinguish the completed automated freeze from the four remaining manual/later-DSP acceptance rows. |
+| Artifacts/evidence produced | [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md) and the seven task reports under [evidence/workstream-03](evidence/workstream-03/), plus immutable JSON/XML fixtures under `Tests/fixtures/parameters` and `Tests/fixtures/state`. |
 | Temporary scaffolding | Bounded pre-change, identity, final baseline, successor construction, and extraction trees are created only under `/private/tmp` and removed after their verification purpose. Predecessor context copies remain orientation inputs, not implementation sources; retained predecessor evidence and recovery paths remain untouched. |
 
 ## Verification ledger
@@ -82,6 +98,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-21 13:35 PDT; owner-decision continuation; macOS 13.0.1 arm64 Release | Observe the distribution guard fail on placeholders; install the approved identity; configure with distribution validation and strict warnings in a fresh space-bearing path; build all targets; run CTest and per-label discovery; inspect generated JUCE/AU/VST3 metadata | RED guard fails for the intended placeholder reasons; GREEN configure accepts TTH Audio / TTH Model One at exact JUCE `3af3ce…9fab`; strict build passes; CTest passes 9/9 with all seven labels represented; generated metadata records `TTHA` / `TM01`, VST3 `Instrument\|Synth`, and AU `aumu`. No designated-account or commercial-host test ran. | [Owner identity and deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md) | BLD-006–007, BLD-011–012 |
 | 2026-07-21 14:08 PDT; independent-review correction; macOS 13.0.1 arm64 Release | Add RED/GREEN negative distribution-configure cases; centralize identity validation; replace literal AU basename with dynamic safe install/cleanup; run `actionlint`; fresh exact-commit strict space-path configure/build; 10/10 CTest; actual-wrapper/pluginval; linked-manifest verification; bounded AU workflow simulation | Commit `a18444e` rejects empty/placeholder/malformed/duplicate/reserved/unapproved identity, discovers `TTH Model One.component` dynamically, and passes zero-error workflow lint. Strict build and 10/10 CTest pass with all seven labels; actual-wrapper/pluginval pass 3/3; identity aggregate passes while auval and release remain blocked. No designated-account, Steinberg SDK, or commercial-host test ran. | [Owner identity and deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md#independent-review-correction-and-final-local-verification) | BLD-007, BLD-010–012 |
 | 2026-07-21 14:29 PDT; exact-head GitHub Actions push run `29869102847`; eight supported rows | Strict build; full and per-label CTest; standalone lifecycle; actual-wrapper/pluginval/auval; dynamic AU install/cleanup on four macOS rows; linked-manifest verification and upload | All eight platform/configuration rows pass at exact source `7177557`; each passes 10/10 CTest and every required label. All four macOS dynamic AU install/cleanup steps pass. The sentinel skips by design. Designated-account AU, Steinberg SDK, and commercial-host gates remain separate and unrun. | [Owner identity and deferral decision](evidence/workstream-02/owner-identity-and-deferral-decision.md#exact-head-hosted-confirmation) | BLD-007, BLD-010–012 |
+| 2026-07-21 19:10 PDT; Agent 07; fresh macOS arm64 Release path with spaces | Configure against exact JUCE `3af3ce…9fab` with validators, warnings-as-errors, and distribution identity validation; build all targets; serial `ctest -C Release -j1`; six production captures/`cmp`; nine immutable SHA-256 checks; source guards; `git diff --check`; local Markdown-link audit | Configure/build pass; CTest passes 16/16 in 36.95 seconds with all seven labels; all six captures compare byte-equal; all nine hashes match; source guards, diff check, and seven-file local-link audit pass. Designated-host and PAR-006 measurement procedures remain `not-run`. | [Workstream 03 verification summary](evidence/workstream-03/workstream-03-verification-summary.md) | PAR-001–009 |
 
 ## Decisions, assumptions, and blockers
 
@@ -95,6 +112,9 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 - Early lifecycle diagnostics exposed two pre-existing unconditional user writes. The newly created real settings file and Desktop log were moved recoverably to `/tmp/model-d-task7-settings-recovery.q2FbjJ/MiniMoog.settings` and `/tmp/model-d-task7-desktop-log-recovery.mRiFyV/my_plugin_log.txt`; the original user locations are absent. No pre-existing file was overwritten or deleted.
 - The product owner supplied explicit remote-mutation authority. Branch `codex/workstream-02-build` and draft PR #1 are published. The Actions incident recovered; the complete diagnostic chain is retained, and exact implementation run `29728203657` passes all eight supported rows. That authority does not supply legal identity, distribution history, SDK-validator access, or commercial-host access.
 - The JUCE licensing approval closes BLD-003, and the later owner identity/history decision closes BLD-007. BLD-006/011/012 remain gated by designated external tools, hosts, and release evidence, but the owner-approved scheduling exception permits Workstream 03 to proceed in parallel.
+- Workstream 03's automated contract freeze is committed through `f79faa1`. The frozen seam is 48 stable typed registry keys, `modelDState` v2 with explicit v0 migration, canonical/legacy contour adapters with opt-in conversion, one coherent prepared render snapshot, and attachment-driven editor bindings.
+- PAR-002/004/007 remain `in-progress` because their designated-host checks are `not-run`; PAR-006 remains `in-progress` because Workstream 12/later DSP owns measured click/step acceptance. These are evidence obligations, not known automated contract failures.
+- A shared mutable build directory cannot safely host concurrent full CTest runs because standalone lifecycle/identity tests intentionally manipulate common staged output. All final acceptance is serial; the earlier overlap collision was reproduced and serial reruns passed without a production-code workaround.
 
 ## Successor handoff package protocol
 
@@ -127,25 +147,23 @@ assistant response reports the outer ZIP SHA-256. The successor's
 
 ## Exact resumption point
 
-The branch and draft PR are published, exact implementation run `29728203657`
-passes all eight supported rows, and the owner-approved identity closes
-BLD-007. BLD-006/011/012 remain explicitly in progress because commercial-host
-category/menu evidence, designated-account AU validation, the Steinberg VST3
-SDK validator, and final distribution aggregation are still unavailable. They
-remain pre-release gates and must not be represented as run or passed.
+Workstream 03's automated contract freeze is complete through `f79faa1`; begin
+with Workstream 12's harness and acceptance-manifest coordination. Consume the
+frozen 48-key registry export, parameter snapshot, native/migrated v2 state
+fixtures, and contour conversion trace without inventing alternate IDs,
+normalization, state roots, or compatibility semantics. The first open
+acceptance is PAR-006's approved-manifest click/step evidence. After Workstream
+12 accepts the F0 seam, continue to Workstream 04 in roadmap order.
 
-Under the product owner's temporary scheduling exception, resume in Workstream
-03. First inventory every existing host parameter ID and capture host
-enumeration plus representative unversioned APVTS state fixtures. Only then add
-the typed descriptor registry and versioned state/migration contract in the
-dependency order defined by Workstream 03. Preserve the frozen target names,
-JUCE pin, wrapper/bus topology, approved TTH identity, existing parameter IDs,
-and passing CTest seams.
+In parallel, designated-host validation may close PAR-002/004/007 by recording
+generic UI enumeration, legacy contour automation and warning/cancel behavior,
+and priority/trigger/Main/Phones automation/save/reload. These procedures are
+currently `not-run` and must not be represented as passing.
 
 When the owner is locally available, the separately authorized standard macOS
 validation account may be created through an administrator prompt without
 exposing a password. BLD-006/011/012 evidence can then be captured and
-reconciled in parallel with Workstream 03. No agent may purchase hosts, accept
+reconciled in parallel with Workstream 12. No agent may purchase hosts, accept
 third-party legal terms, release, distribute, notarize, or submit the product
 without additional owner action and the required passing evidence.
 
