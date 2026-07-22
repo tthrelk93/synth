@@ -1,0 +1,342 @@
+#include "ReferenceData.h"
+
+#include <juce_cryptography/juce_cryptography.h>
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <filesystem>
+#include <set>
+#include <utility>
+
+namespace ReferenceHarness {
+namespace {
+
+constexpr auto fixtureSchema = "model-d.fixture-index.v1";
+constexpr auto fixtureVersion = 1;
+constexpr auto frozenArtifactCount = 9;
+
+struct ExpectedFrozenArtifact {
+    const char* id;
+    const char* relativePath;
+    const char* sha256;
+    std::initializer_list<const char*> requirements;
+};
+
+const std::array<ExpectedFrozenArtifact, frozenArtifactCount> expectedFrozenArtifacts {{
+    { "legacy-parameter-inventory", "Tests/fixtures/parameters/legacy-parameter-inventory.json",
+      "7ade5c456c54e0822e41082558aed0c94860b6b46f9368713fc3ac103b5bc21d", { "PAR-001" } },
+    { "parameter-registry-v2", "Tests/fixtures/parameters/parameter-registry-v2.json",
+      "2d7d6339fffb3875541aa60547f6e2f2f7b6fb8d288da109bf653291a6b7d284",
+      { "PAR-001", "PAR-002", "PAR-003", "PAR-006", "PAR-007" } },
+    { "parameter-snapshot-v2", "Tests/fixtures/parameters/parameter-snapshot-v2.json",
+      "cbfefbf2e918818fed1fd6b340ca4c015981d6e020080a7b71bbfd006e398f16", { "PAR-009" } },
+    { "contour-conversion-trace", "Tests/fixtures/state/contour-routing-conversion-trace.json",
+      "ce998775a66ac12a997dbfc613ee00a417c293836443fea5842b3df9d1dd8c0c", { "PAR-004" } },
+    { "legacy-default-state", "Tests/fixtures/state/legacy-default-state.xml",
+      "07d2069f7c3f274b83e31beab503165064d3fcffd346967281eb2e0157844b21", { "PAR-003", "PAR-005" } },
+    { "legacy-representative-state", "Tests/fixtures/state/legacy-representative-state.xml",
+      "e0d769001dd411425c6dfea6c572b0f9358fdf6cf27b36731eccc3f6526ff0fa", { "PAR-003", "PAR-005" } },
+    { "native-default-state-v2", "Tests/fixtures/state/native-default-state-v2.xml",
+      "ff369e874e4c786830ea51731b8849e54c44f81151313cb1ceefdcab9b8f2507", { "PAR-003", "PAR-005" } },
+    { "migrated-default-state-v2", "Tests/fixtures/state/migrated-default-state-v2.xml",
+      "4fa0dbbfec6b9816657f41d68411285e6d4e17e176d93c596141054c7a7d4958", { "PAR-003", "PAR-005" } },
+    { "migrated-representative-v2", "Tests/fixtures/state/migrated-representative-state-v2.xml",
+      "f2ebb2afc79668c02ee9580f29fdc900a3545530e8175068690df5ebec8f9a40", { "PAR-003", "PAR-005" } },
+}};
+
+template <typename T>
+LoadResult<T> failure (std::string code, std::string message)
+{
+    return { std::nullopt, { { std::move (code), std::move (message) } } };
+}
+
+bool isLowercaseSha256 (const std::string& hash)
+{
+    return hash.size() == 64
+        && std::all_of (hash.begin(), hash.end(), [] (const unsigned char character) {
+               return std::isdigit (character) != 0
+                   || (character >= 'a' && character <= 'f');
+           });
+}
+
+bool hasDisallowedPathSyntax (std::string_view relativePath, std::string& code)
+{
+    if (relativePath.empty()) {
+        code = "path.empty";
+        return true;
+    }
+
+    if (relativePath.find ('\\') != std::string_view::npos) {
+        code = "path.backslash";
+        return true;
+    }
+
+    if (juce::File::isAbsolutePath (juce::String::fromUTF8 (relativePath.data(),
+                                                             static_cast<int> (relativePath.size())))
+        || (relativePath.size() >= 2 && std::isalpha (static_cast<unsigned char> (relativePath[0])) != 0
+            && relativePath[1] == ':')
+        || relativePath.starts_with ("//")) {
+        code = "path.absolute";
+        return true;
+    }
+
+    size_t start = 0;
+    while (start <= relativePath.size()) {
+        const auto end = relativePath.find ('/', start);
+        const auto component = relativePath.substr (start, end - start);
+        if (component.empty() || component == ".") {
+            code = "path.component";
+            return true;
+        }
+        if (component == "..") {
+            code = "path.traversal";
+            return true;
+        }
+        if (end == std::string_view::npos)
+            break;
+        start = end + 1;
+    }
+
+    return false;
+}
+
+juce::var canonicalizeJson (const juce::var& value)
+{
+    if (const auto* array = value.getArray()) {
+        juce::Array<juce::var> canonicalArray;
+        canonicalArray.ensureStorageAllocated (array->size());
+        for (const auto& element : *array)
+            canonicalArray.add (canonicalizeJson (element));
+        return canonicalArray;
+    }
+
+    if (const auto* object = value.getDynamicObject()) {
+        std::vector<std::pair<juce::String, juce::var>> properties;
+        const auto& sourceProperties = object->getProperties();
+        properties.reserve (static_cast<size_t> (sourceProperties.size()));
+        for (int index = 0; index < sourceProperties.size(); ++index)
+            properties.emplace_back (sourceProperties.getName (index).toString(),
+                                     sourceProperties.getValueAt (index));
+
+        std::sort (properties.begin(), properties.end(), [] (const auto& left, const auto& right) {
+            return left.first.compare (right.first) < 0;
+        });
+
+        auto canonicalObject = std::make_unique<juce::DynamicObject>();
+        for (const auto& [name, property] : properties)
+            canonicalObject->setProperty (name, canonicalizeJson (property));
+        return juce::var { canonicalObject.release() };
+    }
+
+    return value;
+}
+
+const juce::var* requiredProperty (const juce::DynamicObject& object, const char* name)
+{
+    return object.getProperties().getVarPointer (juce::Identifier { name });
+}
+
+bool readRequiredString (const juce::DynamicObject& object,
+                         const char* name,
+                         std::string& destination)
+{
+    const auto* property = requiredProperty (object, name);
+    if (property == nullptr || ! property->isString() || property->toString().isEmpty())
+        return false;
+    destination = property->toString().toStdString();
+    return true;
+}
+
+bool readArtifact (const juce::var& value, IndexedArtifact& artifact)
+{
+    const auto* object = value.getDynamicObject();
+    if (object == nullptr
+        || ! readRequiredString (*object, "id", artifact.id)
+        || ! readRequiredString (*object, "relativePath", artifact.relativePath)
+        || ! readRequiredString (*object, "sha256", artifact.sha256))
+        return false;
+
+    const auto* requirements = requiredProperty (*object, "requirements");
+    const auto* requirementArray = requirements == nullptr ? nullptr : requirements->getArray();
+    if (requirementArray == nullptr || requirementArray->isEmpty())
+        return false;
+
+    artifact.requirements.clear();
+    artifact.requirements.reserve (static_cast<size_t> (requirementArray->size()));
+    for (const auto& requirement : *requirementArray) {
+        if (! requirement.isString() || requirement.toString().isEmpty())
+            return false;
+        artifact.requirements.push_back (requirement.toString().toStdString());
+    }
+
+    return true;
+}
+
+bool readArtifactSection (const juce::DynamicObject& root,
+                          const char* name,
+                          std::vector<IndexedArtifact>& artifacts)
+{
+    const auto* section = requiredProperty (root, name);
+    const auto* array = section == nullptr ? nullptr : section->getArray();
+    if (array == nullptr)
+        return false;
+
+    artifacts.clear();
+    artifacts.reserve (static_cast<size_t> (array->size()));
+    for (const auto& value : *array) {
+        IndexedArtifact artifact;
+        if (! readArtifact (value, artifact))
+            return false;
+        artifacts.push_back (std::move (artifact));
+    }
+    return true;
+}
+
+} // namespace
+
+std::string statusName (const Status status)
+{
+    switch (status) {
+        case Status::pass: return "pass";
+        case Status::fail: return "fail";
+        case Status::notRun: return "not-run";
+        case Status::awaitingApprovedReference: return "awaiting-approved-reference";
+    }
+
+    return "unknown";
+}
+
+std::string sha256File (const juce::File& file)
+{
+    if (! file.existsAsFile())
+        return {};
+    return juce::SHA256 { file }.toHexString().toStdString();
+}
+
+LoadResult<juce::File> resolveBoundedRegularFile (const juce::File& root,
+                                                   const std::string_view relativePath)
+{
+    std::string syntaxCode;
+    if (hasDisallowedPathSyntax (relativePath, syntaxCode))
+        return failure<juce::File> (syntaxCode, "fixture path must be a bounded relative path");
+
+    std::error_code error;
+    const auto canonicalRoot = std::filesystem::canonical (root.getFullPathName().toStdString(), error);
+    if (error)
+        return failure<juce::File> ("path.root", "fixture root cannot be canonicalized");
+
+    const auto candidate = canonicalRoot / std::filesystem::path { std::string { relativePath } };
+    if (! std::filesystem::exists (candidate, error) || error)
+        return failure<juce::File> ("path.missing", "fixture path does not exist");
+    if (! std::filesystem::is_regular_file (candidate, error) || error)
+        return failure<juce::File> ("path.non-regular", "fixture path is not a regular file");
+
+    const auto canonicalCandidate = std::filesystem::canonical (candidate, error);
+    if (error)
+        return failure<juce::File> ("path.missing", "fixture path cannot be canonicalized");
+
+    const auto relativeCandidate = canonicalCandidate.lexically_relative (canonicalRoot);
+    if (relativeCandidate.empty() || relativeCandidate == "."
+        || *relativeCandidate.begin() == std::filesystem::path { ".." })
+        return failure<juce::File> ("path.escape", "fixture path resolves outside its root");
+
+    return { juce::File { canonicalCandidate.string() }, {} };
+}
+
+juce::String canonicalJson (const juce::var& value)
+{
+    const auto options = juce::JSON::FormatOptions {}
+                             .withSpacing (juce::JSON::Spacing::none);
+    return juce::JSON::toString (canonicalizeJson (value), options) + "\n";
+}
+
+LoadResult<FixtureIndex> loadFixtureIndex (const juce::File& sourceRoot,
+                                           const juce::File& indexFile)
+{
+    if (! indexFile.existsAsFile())
+        return failure<FixtureIndex> ("index.missing", "fixture index does not exist");
+
+    juce::var parsed;
+    if (juce::JSON::parse (indexFile.loadFileAsString(), parsed).failed())
+        return failure<FixtureIndex> ("index.parse", "fixture index is not valid JSON");
+
+    const auto* root = parsed.getDynamicObject();
+    if (root == nullptr)
+        return failure<FixtureIndex> ("index.shape", "fixture index root must be an object");
+
+    FixtureIndex index;
+    if (! readRequiredString (*root, "schema", index.schema))
+        return failure<FixtureIndex> ("index.schema", "fixture index schema is required");
+    if (index.schema != fixtureSchema)
+        return failure<FixtureIndex> ("index.schema", "fixture index schema is unsupported");
+
+    const auto* version = requiredProperty (*root, "version");
+    if (version == nullptr || ! version->isInt() || static_cast<int> (*version) != fixtureVersion)
+        return failure<FixtureIndex> ("index.version", "fixture index version is unsupported");
+    index.version = static_cast<int> (*version);
+
+    if (! readArtifactSection (*root, "frozenArtifacts", index.frozenArtifacts)
+        || ! readArtifactSection (*root, "renderFixtures", index.renderFixtures)
+        || ! readArtifactSection (*root, "smoothingFixtures", index.smoothingFixtures))
+        return failure<FixtureIndex> ("index.artifact", "fixture index artifacts are malformed");
+
+    if (index.frozenArtifacts.size() != frozenArtifactCount)
+        return failure<FixtureIndex> ("index.frozen-count", "fixture index must contain nine frozen artifacts");
+
+    std::set<std::string> identifiers;
+    std::set<std::string> paths;
+    const auto validateArtifactIdentity = [&] (const std::vector<IndexedArtifact>& artifacts) -> std::optional<Diagnostic> {
+        for (const auto& artifact : artifacts) {
+            if (! identifiers.insert (artifact.id).second)
+                return Diagnostic { "index.duplicate-id", "fixture artifact identifiers must be unique" };
+            if (! paths.insert (artifact.relativePath).second)
+                return Diagnostic { "index.duplicate-path", "fixture artifact paths must be unique" };
+            if (! isLowercaseSha256 (artifact.sha256))
+                return Diagnostic { "index.hash-format", "fixture artifact hash must be lowercase SHA-256" };
+        }
+        return std::nullopt;
+    };
+
+    const auto validateArtifactBytes = [&] (const std::vector<IndexedArtifact>& artifacts) -> std::optional<Diagnostic> {
+        for (const auto& artifact : artifacts) {
+            const auto resolved = resolveBoundedRegularFile (sourceRoot, artifact.relativePath);
+            if (! resolved.ok())
+                return resolved.diagnostics.front();
+            if (sha256File (*resolved.value) != artifact.sha256)
+                return Diagnostic { "index.sha256", "fixture artifact hash does not match its bytes" };
+        }
+        return std::nullopt;
+    };
+
+    for (const auto* section : { &index.frozenArtifacts, &index.renderFixtures, &index.smoothingFixtures }) {
+        if (const auto diagnostic = validateArtifactIdentity (*section); diagnostic.has_value())
+            return { std::nullopt, { std::move (*diagnostic) } };
+    }
+    for (const auto* section : { &index.frozenArtifacts, &index.renderFixtures, &index.smoothingFixtures }) {
+        if (const auto diagnostic = validateArtifactBytes (*section); diagnostic.has_value())
+            return { std::nullopt, { std::move (*diagnostic) } };
+    }
+
+    for (size_t indexPosition = 0; indexPosition < expectedFrozenArtifacts.size(); ++indexPosition) {
+        const auto& actual = index.frozenArtifacts[indexPosition];
+        const auto& expected = expectedFrozenArtifacts[indexPosition];
+        if (actual.id != expected.id
+            || actual.relativePath != expected.relativePath
+            || actual.sha256 != expected.sha256
+            || actual.requirements.size() != expected.requirements.size())
+            return failure<FixtureIndex> ("index.frozen-set",
+                                          "fixture index frozen artifacts must match the approved set");
+
+        size_t requirementPosition = 0;
+        for (const auto* requirement : expected.requirements) {
+            if (actual.requirements[requirementPosition++] != requirement)
+                return failure<FixtureIndex> ("index.frozen-set",
+                                              "fixture index frozen artifacts must match the approved set");
+        }
+    }
+
+    return { std::move (index), {} };
+}
+
+} // namespace ReferenceHarness

@@ -1,0 +1,20 @@
+#pragma once
+
+#include "ReferenceTypes.h"
+
+#include <juce_core/juce_core.h>
+
+#include <string>
+#include <string_view>
+
+namespace ReferenceHarness {
+
+std::string statusName (Status);
+std::string sha256File (const juce::File&);
+LoadResult<juce::File> resolveBoundedRegularFile (
+    const juce::File& root, std::string_view relativePath);
+juce::String canonicalJson (const juce::var&);
+LoadResult<FixtureIndex> loadFixtureIndex (
+    const juce::File& sourceRoot, const juce::File& indexFile);
+
+} // namespace ReferenceHarness

@@ -626,6 +626,18 @@ target_link_libraries(ModelDOfflineRenderer PRIVATE ModelDCore SynthProjectOptio
 
 if(SYNTH_BUILD_TESTS)
     enable_testing()
+    execute_process(
+        COMMAND git rev-parse HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE _model_d_source_commit_status
+        OUTPUT_VARIABLE _model_d_source_commit
+        ERROR_VARIABLE _model_d_source_commit_error
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _model_d_source_commit_status EQUAL 0 OR _model_d_source_commit STREQUAL "")
+        message(FATAL_ERROR
+            "SYNTH_BUILD_TESTS requires git rev-parse HEAD: ${_model_d_source_commit_error}")
+    endif()
+
     add_executable(ModelDTests Tests/ModelDTests.cpp)
     synth_enable_project_warnings(Tests/ModelDTests.cpp)
     target_include_directories(ModelDTests
@@ -645,6 +657,50 @@ if(SYNTH_BUILD_TESTS)
         add_test(NAME "${test_name}" COMMAND ModelDTests "${test_mode}")
         set_tests_properties("${test_name}" PROPERTIES LABELS "${test_label}")
     endfunction()
+
+    function(synth_add_reference_test test_name test_mode)
+        add_test(NAME "${test_name}" COMMAND ModelDReferenceTests "${test_mode}")
+    endfunction()
+
+    add_executable(ModelDReferenceTests Tests/ReferenceHarnessTests.cpp)
+    add_library(ModelDReferenceHarness STATIC
+        Tools/ReferenceHarness/ReferenceData.cpp)
+    synth_enable_project_warnings(
+        Tests/ReferenceHarnessTests.cpp
+        Tools/ReferenceHarness/ReferenceData.cpp)
+    target_include_directories(ModelDReferenceHarness
+        PUBLIC
+            Tools/ReferenceHarness)
+    target_link_libraries(ModelDReferenceHarness
+        PUBLIC
+            juce::juce_core
+            juce::juce_cryptography
+        PRIVATE
+            SynthProjectOptions)
+    set(_model_d_reference_build_definitions
+        SYNTH_SOURCE_ROOT="${CMAKE_CURRENT_SOURCE_DIR}"
+        SYNTH_CONFIGURED_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
+        SYNTH_CONFIGURED_PLATFORM="${CMAKE_SYSTEM_NAME}"
+        SYNTH_CONFIGURED_ARCHITECTURE="${CMAKE_SYSTEM_PROCESSOR}"
+        SYNTH_RESOLVED_JUCE_COMMIT="${SYNTH_RESOLVED_JUCE_COMMIT}"
+        SYNTH_SOURCE_COMMIT="${_model_d_source_commit}")
+    target_compile_definitions(ModelDReferenceHarness
+        PUBLIC
+            ${_model_d_reference_build_definitions})
+    target_include_directories(ModelDReferenceTests
+        BEFORE PRIVATE
+            Source
+            cmake/plugin_compat
+            Tools/ReferenceHarness
+            "${juce_SOURCE_DIR}/modules")
+    target_link_libraries(ModelDReferenceTests
+        PRIVATE
+            ModelDPlugin
+            ModelDReferenceHarness
+            SynthProjectOptions
+            juce::juce_cryptography)
+    synth_add_reference_test(ModelDReferenceManifestContract manifest)
+    set_tests_properties(ModelDReferenceManifestContract PROPERTIES LABELS "unit;state")
 
     synth_add_model_d_test(ModelDUnitContract unit unit)
     synth_add_model_d_test(ModelDStateSmoke state state)

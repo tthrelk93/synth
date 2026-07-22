@@ -1,0 +1,62 @@
+{
+  "schema": "model-d.fixture-index.v1",
+  "version": 1,
+  "frozenArtifacts": [
+    {
+      "id": "legacy-parameter-inventory",
+      "relativePath": "Tests/fixtures/parameters/legacy-parameter-inventory.json",
+      "sha256": "7ade5c456c54e0822e41082558aed0c94860b6b46f9368713fc3ac103b5bc21d",
+      "requirements": ["PAR-001"]
+    },
+    {
+      "id": "parameter-registry-v2",
+      "relativePath": "Tests/fixtures/parameters/parameter-registry-v2.json",
+      "sha256": "2d7d6339fffb3875541aa60547f6e2f2f7b6fb8d288da109bf653291a6b7d284",
+      "requirements": ["PAR-001", "PAR-002", "PAR-003", "PAR-006", "PAR-007"]
+    },
+    {
+      "id": "parameter-snapshot-v2",
+      "relativePath": "Tests/fixtures/parameters/parameter-snapshot-v2.json",
+      "sha256": "cbfefbf2e918818fed1fd6b340ca4c015981d6e020080a7b71bbfd006e398f16",
+      "requirements": ["PAR-009"]
+    },
+    {
+      "id": "contour-conversion-trace",
+      "relativePath": "Tests/fixtures/state/contour-routing-conversion-trace.json",
+      "sha256": "ce998775a66ac12a997dbfc613ee00a417c293836443fea5842b3df9d1dd8c0c",
+      "requirements": ["PAR-004"]
+    },
+    {
+      "id": "legacy-default-state",
+      "relativePath": "Tests/fixtures/state/legacy-default-state.xml",
+      "sha256": "07d2069f7c3f274b83e31beab503165064d3fcffd346967281eb2e0157844b21",
+      "requirements": ["PAR-003", "PAR-005"]
+    },
+    {
+      "id": "legacy-representative-state",
+      "relativePath": "Tests/fixtures/state/legacy-representative-state.xml",
+      "sha256": "e0d769001dd411425c6dfea6c572b0f9358fdf6cf27b36731eccc3f6526ff0fa",
+      "requirements": ["PAR-003", "PAR-005"]
+    },
+    {
+      "id": "native-default-state-v2",
+      "relativePath": "Tests/fixtures/state/native-default-state-v2.xml",
+      "sha256": "ff369e874e4c786830ea51731b8849e54c44f81151313cb1ceefdcab9b8f2507",
+      "requirements": ["PAR-003", "PAR-005"]
+    },
+    {
+      "id": "migrated-default-state-v2",
+      "relativePath": "Tests/fixtures/state/migrated-default-state-v2.xml",
+      "sha256": "4fa0dbbfec6b9816657f41d68411285e6d4e17e176d93c596141054c7a7d4958",
+      "requirements": ["PAR-003", "PAR-005"]
+    },
+    {
+      "id": "migrated-representative-v2",
+      "relativePath": "Tests/fixtures/state/migrated-representative-state-v2.xml",
+      "sha256": "f2ebb2afc79668c02ee9580f29fdc900a3545530e8175068690df5ebec8f9a40",
+      "requirements": ["PAR-003", "PAR-005"]
+    }
+  ],
+  "renderFixtures": [],
+  "smoothingFixtures": []
+}
