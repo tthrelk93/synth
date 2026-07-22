@@ -13,6 +13,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <iostream>
 #include <limits>
 #include <memory>
@@ -35,6 +36,42 @@
 namespace
 {
 using namespace std::literals;
+
+#if ! JUCE_MAC
+class ConditionalDispatchLoopStopper final : private juce::Timer
+{
+public:
+    ConditionalDispatchLoopStopper (std::function<bool()> completionCondition,
+                                    double watchdogMilliseconds)
+        : condition (std::move (completionCondition)),
+          deadline (juce::Time::getMillisecondCounterHiRes() + watchdogMilliseconds)
+    {
+        startTimer (5);
+    }
+
+    bool completed() const noexcept
+    {
+        return conditionWasMet;
+    }
+
+private:
+    void timerCallback() override
+    {
+        conditionWasMet = condition();
+
+        if (! conditionWasMet
+            && juce::Time::getMillisecondCounterHiRes() < deadline)
+            return;
+
+        stopTimer();
+        juce::MessageManager::getInstance()->stopDispatchLoop();
+    }
+
+    std::function<bool()> condition;
+    double deadline;
+    bool conditionWasMet = false;
+};
+#endif
 
 class TestContext
 {
@@ -3977,8 +4014,10 @@ void testParameterBindingContract (TestContext& test)
     auto beginOffThreadChanges = std::make_shared<juce::WaitableEvent>();
     std::atomic<bool> restoreSucceeded { false };
     std::atomic<bool> offThreadChangesFinished { false };
+    constexpr auto delayedWorkerMilliseconds = 600;
     std::thread hostUpdate ([&, beginOffThreadChanges] {
         beginOffThreadChanges->wait();
+        juce::Thread::sleep (delayedWorkerMilliseconds);
         continuousParameter->setValueNotifyingHost (0.35f);
         const auto restore = restoredProcessor.restoreState (
             stateBytes.getData(), static_cast<int> (stateBytes.getSize()));
@@ -3989,24 +4028,45 @@ void testParameterBindingContract (TestContext& test)
         beginOffThreadChanges->signal();
     });
 
+    const auto bindingUpdatesApplied = [&] {
+        return offThreadChangesFinished.load (std::memory_order_acquire)
+            && close (static_cast<float> (continuousSlider.getValue()), 0.35f)
+            && restoredSlider.getValue() == 7.0;
+    };
+    constexpr auto callbackWatchdogMilliseconds = 5000.0;
+    bool callbacksCompleted = false;
+
 #if JUCE_MAC
-    const auto pumpDeadline = juce::Time::getMillisecondCounterHiRes() + 500.0;
-    while (juce::Time::getMillisecondCounterHiRes() < pumpDeadline
-           && (! offThreadChangesFinished.load (std::memory_order_acquire)
-               || ! close (static_cast<float> (continuousSlider.getValue()), 0.35f)
-               || restoredSlider.getValue() != 7.0))
+    const auto pumpDeadline = juce::Time::getMillisecondCounterHiRes()
+                            + callbackWatchdogMilliseconds;
+    while (! bindingUpdatesApplied()
+           && juce::Time::getMillisecondCounterHiRes() < pumpDeadline)
     {
         CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.005, true);
     }
+    callbacksCompleted = bindingUpdatesApplied();
 #else
-    juce::Timer::callAfterDelay (500, [] {
-        juce::MessageManager::getInstance()->stopDispatchLoop();
-    });
+    ConditionalDispatchLoopStopper stopWhenComplete (bindingUpdatesApplied,
+                                                      callbackWatchdogMilliseconds);
     juce::MessageManager::getInstance()->runDispatchLoop();
+    callbacksCompleted = stopWhenComplete.completed();
 #endif
 
     beginOffThreadChanges->signal();
     hostUpdate.join();
+
+#if JUCE_MAC
+    const auto postJoinDrainDeadline = juce::Time::getMillisecondCounterHiRes() + 1000.0;
+    while (! bindingUpdatesApplied()
+           && juce::Time::getMillisecondCounterHiRes() < postJoinDrainDeadline)
+    {
+        CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.005, true);
+    }
+    callbacksCompleted = bindingUpdatesApplied();
+#endif
+
+    test.expect (callbacksCompleted,
+                 "message-thread pump must drain binding callbacks within its bounded wait");
     test.expect (continuousEvents.events == std::vector<std::string> { "value" }
                      && close (static_cast<float> (continuousSlider.getValue()), 0.35f),
                  "parameter-originated UI update must not echo a value or gesture");

@@ -46,13 +46,16 @@ they never echo a component value or host gesture.
 
 The focused binding contract drives a real parameter from a worker after the
 JUCE message queue is active, pumps JUCE's macOS CoreFoundation callback-message
-run loop with a 500 ms condition bound, and observes the component update with
-only the originating host value event and no echoed gesture/value. With a
-binding alive, the same worker restores a successful v2 processor state; after
-the message loop pumps, the bound component displays the restored value without
-an editor timer poll. The cross-platform fallback uses the bounded JUCE dispatch
-loop and the start event has shared ownership so a queued callback cannot retain
-a stack reference.
+run loop until the worker and both bound components reach their expected state,
+and observes the component update with only the originating host value event
+and no echoed gesture/value. With a binding alive, the same worker restores a
+successful v2 processor state; after the message loop pumps, the bound component
+displays the restored value without an editor timer poll. A five-second watchdog
+keeps failure bounded. macOS can additionally drain CoreFoundation callbacks
+after the worker joins; the cross-platform fallback stops the JUCE dispatch loop
+when the same completion condition is true instead of at a fixed time. The start
+event retains shared ownership so a queued callback cannot retain a stack
+reference.
 
 At every editor timer tick, one `captureParameterSnapshot(timerParameterSnapshot)`
 supplies all parameter-derived visualization state: embedded toggle states,
@@ -84,6 +87,16 @@ a second test-only pitch-wheel ordering check; its corrected focused RED failed
 after the production change. The combined binding, prepared snapshot, contour,
 and state-v2 contracts passed 4/4. Required labels passed: unit 2/2, state 7/7,
 and realtime 2/2.
+
+A reviewer identified that the original test's fixed 500 ms callback-pump cutoff
+could stop dispatch before a delayed worker had queued its attachment callbacks.
+For a deterministic remediation RED, the worker was delayed by 600 ms; the old
+pump then failed 0/1 with both the parameter-originated UI and live-restore UI
+assertions. GREEN replaced the cutoff with the complete condition described
+above, retained a substantially longer bounded watchdog, and retained the 600 ms
+stress delay. The focused contract passed 10 consecutive runs, the focused group
+passed 4/4, unit passed 2/2, state passed 7/7, realtime passed 2/2, and the clean
+full suite passed 16/16 in 25.46 seconds with all seven labels.
 
 The complete Release build produced Core, Assets, shared plug-in code,
 Standalone, AU, VST3, actual-wrapper smoke, offline renderer, and tests. One
