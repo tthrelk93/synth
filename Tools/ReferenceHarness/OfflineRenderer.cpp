@@ -37,6 +37,16 @@ std::string hashFloats (const std::vector<float>& values)
     return hashBytes (values.data(), values.size() * sizeof (float));
 }
 
+std::map<std::string, std::string> fixtureInputHashes (const RenderFixture& fixture)
+{
+    std::map<std::string, std::string> hashes {
+        { "state", fixture.stateSha256 },
+    };
+    if (fixture.input.kind == InputKind::wav)
+        hashes.emplace ("audio", fixture.input.sha256);
+    return hashes;
+}
+
 juce::var stringArray (const std::vector<std::string>& strings)
 {
     juce::Array<juce::var> array;
@@ -216,17 +226,13 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
                          * static_cast<size_t> (result.mainChannels));
     result.phones.reserve (static_cast<size_t> (fixture.config.totalSamples)
                            * static_cast<size_t> (result.phonesChannels));
-    std::vector<float> renderedInput;
-    renderedInput.reserve (static_cast<size_t> (fixture.config.totalSamples) * 2u);
     result.reproducibility.sourceCommit = SYNTH_SOURCE_COMMIT;
     result.reproducibility.juceCommit = SYNTH_RESOLVED_JUCE_COMMIT;
     result.reproducibility.buildType = SYNTH_CONFIGURED_BUILD_TYPE;
     result.reproducibility.platform = SYNTH_CONFIGURED_PLATFORM;
     result.reproducibility.architecture = SYNTH_CONFIGURED_ARCHITECTURE;
     result.reproducibility.fixtureSha256 = sha256File (fixture.fixtureFile);
-    result.reproducibility.inputHashes.emplace ("state", fixture.stateSha256);
-    if (fixture.input.kind == InputKind::wav)
-        result.reproducibility.inputHashes.emplace ("wav", fixture.input.sha256);
+    result.reproducibility.inputHashes = fixtureInputHashes (fixture);
     result.reproducibility.seed = fixture.config.seed;
 
     const auto events = orderedEvents (fixture);
@@ -293,7 +299,6 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
                         position + static_cast<std::uint64_t> (sample));
                     nonFiniteInput = nonFiniteInput || ! std::isfinite (value);
                     externalInput.setSample (channel, sample, value);
-                    renderedInput.push_back (value);
                 }
             if (nonFiniteInput) {
                 processor.releaseResources();
@@ -330,7 +335,6 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
 
     processor.releaseResources();
     processor.reset();
-    result.reproducibility.inputHashes.emplace ("audio", hashFloats (renderedInput));
     result.reproducibility.outputHashes.emplace ("main", hashFloats (result.main));
     result.reproducibility.outputHashes.emplace ("phones", hashFloats (result.phones));
     const auto control = canonicalJson (controlTraceJson (result));
@@ -375,6 +379,7 @@ std::optional<Diagnostic> validateCandidateResults (
         return Diagnostic { "output.results", "candidate render results are empty" };
 
     const auto fixtureHash = sha256File (fixture.fixtureFile);
+    const auto expectedInputHashes = fixtureInputHashes (fixture);
     const auto& canonical = results.front();
     for (size_t index = 0; index < results.size(); ++index) {
         const auto& result = results[index];
@@ -392,6 +397,16 @@ std::optional<Diagnostic> validateCandidateResults (
             || result.reproducibility.fixtureSha256 != fixtureHash)
             return Diagnostic { "output.invariant",
                                 "candidate result metadata and channel sizes must match the fixture" };
+        if (result.reproducibility.sourceCommit != SYNTH_SOURCE_COMMIT
+            || result.reproducibility.juceCommit != SYNTH_RESOLVED_JUCE_COMMIT
+            || result.reproducibility.buildType != SYNTH_CONFIGURED_BUILD_TYPE
+            || result.reproducibility.platform != SYNTH_CONFIGURED_PLATFORM
+            || result.reproducibility.architecture != SYNTH_CONFIGURED_ARCHITECTURE)
+            return Diagnostic { "output.provenance",
+                                "candidate result provenance must match the configured build" };
+        if (result.reproducibility.inputHashes != expectedInputHashes)
+            return Diagnostic { "output.input-hash",
+                                "candidate input hashes must exactly match the fixture inputs" };
         if (hasNonFiniteValues (result))
             return Diagnostic { "output.non-finite",
                                 "candidate results must contain only finite audio and control values" };

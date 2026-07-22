@@ -333,8 +333,11 @@ public:
             expect (result.phones.size()
                         == static_cast<size_t> (result.phonesChannels) * 2048u,
                     "phones audio must retain its exact interleaved channel count");
-            expect (result.reproducibility.inputHashes.contains ("audio"),
-                    "generated audio input hash must be recorded");
+            expect (result.reproducibility.inputHashes
+                        == std::map<std::string, std::string> {
+                            { "state", fixtures.front().stateSha256 },
+                        },
+                    "generated input fixtures must record exactly the state input hash");
         }
 
         for (size_t fixtureIndex = 1; fixtureIndex < fixtures.size(); ++fixtureIndex) {
@@ -512,6 +515,83 @@ public:
         auto nonFinite = *firstRun.value;
         nonFinite[1].main[0] = std::numeric_limits<float>::infinity();
         expectRejectedCandidate (nonFinite, "non-finite", "output.non-finite");
+
+        auto emptyProvenance = *firstRun.value;
+        for (auto& result : emptyProvenance) {
+            result.reproducibility.sourceCommit.clear();
+            result.reproducibility.juceCommit.clear();
+            result.reproducibility.buildType.clear();
+            result.reproducibility.platform.clear();
+            result.reproducibility.architecture.clear();
+        }
+        expectRejectedCandidate (emptyProvenance, "empty-provenance", "output.provenance");
+        const auto expectWrongProvenance = [&] (
+            std::string ReferenceHarness::ReproducibilityInfo::* member,
+            const juce::String& name) {
+            auto wrongProvenance = *firstRun.value;
+            for (auto& result : wrongProvenance)
+                result.reproducibility.*member = "uniformly-forged-provenance";
+            expectRejectedCandidate (wrongProvenance, name, "output.provenance");
+        };
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::sourceCommit,
+                               "wrong-source-commit");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::juceCommit,
+                               "wrong-juce-commit");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::buildType,
+                               "wrong-build-type");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::platform,
+                               "wrong-platform");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::architecture,
+                               "wrong-architecture");
+
+        auto wrongFixtureHash = *firstRun.value;
+        for (auto& result : wrongFixtureHash)
+            result.reproducibility.fixtureSha256 = std::string (64, '0');
+        expectRejectedCandidate (wrongFixtureHash, "wrong-fixture-hash", "output.invariant");
+        auto wrongSeed = *firstRun.value;
+        for (auto& result : wrongSeed)
+            result.reproducibility.seed = 1;
+        expectRejectedCandidate (wrongSeed, "wrong-seed", "output.invariant");
+
+        auto missingStateHash = *firstRun.value;
+        for (auto& result : missingStateHash)
+            result.reproducibility.inputHashes.clear();
+        expectRejectedCandidate (missingStateHash, "missing-state-hash", "output.input-hash");
+        auto wrongStateHash = *firstRun.value;
+        for (auto& result : wrongStateHash)
+            result.reproducibility.inputHashes = { { "state", std::string (64, '0') } };
+        expectRejectedCandidate (wrongStateHash, "wrong-state-hash", "output.input-hash");
+        auto unexpectedInputHash = *firstRun.value;
+        for (auto& result : unexpectedInputHash)
+            result.reproducibility.inputHashes.emplace ("audio", std::string (64, '0'));
+        expectRejectedCandidate (unexpectedInputHash, "unexpected-input-hash", "output.input-hash");
+
+        auto wavFixture = fixtures.front();
+        wavFixture.input.kind = ReferenceHarness::InputKind::wav;
+        wavFixture.input.sha256 = std::string (64, 'a');
+        auto missingWavHash = *firstRun.value;
+        for (auto& result : missingWavHash)
+            result.reproducibility.inputHashes = {
+                { "state", fixtures.front().stateSha256 },
+            };
+        const auto missingWavDirectory = candidateRoot.getChildFile ("missing-wav-hash");
+        expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
+                              wavFixture, missingWavHash, missingWavDirectory),
+                          "output.input-hash");
+        expect (! missingWavDirectory.exists(),
+                "missing WAV input hashes must be rejected before output creation");
+        auto wrongWavHash = *firstRun.value;
+        for (auto& result : wrongWavHash)
+            result.reproducibility.inputHashes = {
+                { "audio", std::string (64, '0') },
+                { "state", fixtures.front().stateSha256 },
+            };
+        const auto wrongWavDirectory = candidateRoot.getChildFile ("wrong-wav-hash");
+        expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
+                              wavFixture, wrongWavHash, wrongWavDirectory),
+                          "output.input-hash");
+        expect (! wrongWavDirectory.exists(),
+                "invalid WAV input hashes must be rejected before output creation");
         const auto writtenA = ReferenceHarness::writeCandidateArtifacts (
             fixtures.front(), *firstRun.value, candidateA);
         const auto writtenB = nativeSecondRun.has_value()
