@@ -63,9 +63,9 @@ The immutable Workstream 03 frozen set remains nine files with the hashes in
 
 | Artifact | SHA-256 |
 |---|---|
-| `native-v2-foundation.json` | `4dba2dc10bbaa74aa3f31500c5c52d267d3d8719252adbf1f5ba815a6489b28e` |
-| `migrated-v2-foundation.json` | `549b7ef47faf267fc43c874a7c34244f5b23241f7bfdfef5ef982675127b1961` |
-| `legacy-contour-foundation.json` | `84651db327575bc87e41c8e3313a176396b836e63e898b9ed2df14d60c6991a8` |
+| `native-v2-foundation.json` | `eafeebfaabb4b01145262e9c7a6476486316bc199eea26a4cdc7bb7c3d0f98d5` |
+| `migrated-v2-foundation.json` | `8ece5350928ba5ec33419e83b191f95b68c1e8fafc8a9677bd447b61a2c01ef2` |
+| `legacy-contour-foundation.json` | `093323067ae7dc9f6f1fc214f86c2e64b75d8b5878850c44b8b4256e2ea7e399` |
 | `par-006/none-step-v1.json` | `e2346232c6d4ad68621231982c35de64377789ed83678d6dd0509dfbe1f9b6b3` |
 | `par-006/gain-control-step-v1.json` | `e44a0d7953c79f2bc8604d9b8addb527e986da73f43cd155c91e9050459ebfcf` |
 | `par-006/control-step-v1.json` | `43dded14ef88f7d7fc1b43cffd69e15fc498af95d4e59b5aff44cd258613684f` |
@@ -287,6 +287,51 @@ The `control.step.v1` calibration now places the first ideal ramp increment at
 The post-remediation report remains 127 rows and 101 gates at 14 pass, 94
 not-run, 19 awaiting approved reference, 0 fail, and `releaseReady=false`.
 Authoritative verification still exits 3 at BLD-006.
+
+## Second senior-review remediation
+
+The second review resumed at clean base
+`2d130ec3299ab41406c2643454760292d2406e67` and produced implementation commit
+`5d7e6213f6163fad62b74d6ec7688b81a8eccd0c`. RED contracts proved unsafe
+fixture IDs could escape candidate output, index identity/ownership was not
+bound, string-only analyzer declarations had no typed input semantics,
+interleaved stereo and sparse control points were analyzed as sample streams,
+render evidence trusted caller-supplied records, and a no-`.git` tests-off
+configure failed at unconditional source-commit discovery.
+
+GREEN requires one portable fixture ID component, exact indexed path/hash/ID
+and ordered requirement equality, and a canonical direct-child destination
+under the existing `renders` root. Each fixture now owns version-1 typed
+analysis requests with stable request identity, exact analyzer version/metric,
+audio tap/channel or control parameter/domain, bounded event window, and
+validated start/target endpoints. Analyzer inputs are derived only from
+immutable render results: audio is deinterleaved by requested channel and
+control is reconstructed densely from exact trace sample indices and the
+declared starting value.
+
+Render metric provenance includes the indexed fixture path/hash and request
+ID/version. Acceptance independently reloads the canonical index and fixture,
+rerenders every declared block pattern, reanalyzes every request, compares the
+selected complete record, and hashes/compares the full multi-record
+`metrics.json`. Tests reject forged fixture path, request ID, metric value,
+settings, artifact path, file bytes, and SHA-256. Registry-kind evidence retains
+its independent live-registry rerun.
+
+`ModelDReferenceHarness`, `ModelDOfflineRenderer`, reference tests, and Git
+source discovery are configured only with `SYNTH_BUILD_TESTS=ON`. New
+artifact-labeled `ModelDArchiveConfigurationContracts` extracts a Git archive
+without `.git`; tests-off/validators-off/distribution-identity configuration
+passes with exact local JUCE, while tests-on fails with the stable
+`Reference rendering requires git rev-parse HEAD` diagnostic. Before the
+documentation closeout, the four reference contracts pass 4/4 and the
+validators-off suite passes 19/19. Exact-closeout-head validators-on, labeled,
+CLI, repeat, guard, and successor-ZIP evidence is recorded in the ignored
+whole-branch remediation report to avoid self-referential tracked hashes.
+
+The updated render fixture hashes are listed above; the fixture index itself is
+`b65b99c67dac98164a99e21c9a0e82f725cfe316f0a03638774049f8e7472e49`.
+No `Source/` file, accepted policy, approval, requirement status, report count,
+hardware claim, host claim, or release claim changed.
 
 ## Honest F0 projection and next action
 

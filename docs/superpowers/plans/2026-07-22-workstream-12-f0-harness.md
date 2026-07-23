@@ -754,6 +754,32 @@ Implementation commit:
 The exact-head verification and replacement Agent-08 archive are recorded in
 the ignored whole-branch remediation report to avoid self-referential hashes.
 
+## Second senior-review remediation
+
+- [x] Reject unsafe render IDs before loading or writing; require exact indexed
+  fixture ID, ordered requirement ownership, and bytes.
+- [x] Prove candidate output is one canonical direct child below the existing
+  `renders` root before creating any fixture directory.
+- [x] Replace string-only analyzer declarations with versioned typed requests
+  for exact metric, audio tap/channel or control parameter/domain, event
+  origin/window, and required start/target endpoints.
+- [x] Deinterleave selected audio channels and reconstruct dense control samples
+  from exact trace indices; retain deterministic equality over every block
+  pattern.
+- [x] Bind render provenance to fixture path/hash and stable request identity;
+  independently reload, rerender, reanalyze, and compare full multi-record
+  artifacts before a render gate may pass.
+- [x] Gate Git discovery and all reference targets on `SYNTH_BUILD_TESTS`; add a
+  no-`.git` archive contract proving tests-off configuration passes and tests-on
+  retains the stable source-commit failure.
+- [x] Preserve the live-registry path, globally draft manifest, all open status
+  semantics, and the empty production `Source/` diff.
+
+Implementation commit:
+`5d7e6213f6163fad62b74d6ec7688b81a8eccd0c`.
+Exact final-head verification and the replacement fixed-path archive are
+recorded in the ignored whole-branch remediation report.
+
 ## Self-Review
 
 - Spec coverage: Task 1 implements canonical data, hashing, path safety, and the frozen artifact seam; Task 2 implements fixture parsing, deterministic exact-event rendering, generated inputs, output governance, and CLI compatibility; Task 3 implements analyzers, synthetic calibration, seven registry-derived PAR-006 templates, approved derived policy, and honest open results; Task 4 implements all-127 requirement mapping, canonical reports, and release enforcement; Task 5 implements evidence, planning synchronization, full serial verification, and the successor chain.

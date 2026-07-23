@@ -28,7 +28,7 @@ record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness
 
 | ID | Status | F0 result / remaining acceptance |
 |---|---|---|
-| TST-001 | in-progress | Three deterministic state/MIDI/automation fixtures render 15 hashed candidate artifacts across three block patterns. Preset/audio-input and later owner-fixture coverage remains open. |
+| TST-001 | in-progress | Three deterministic state/MIDI/automation fixtures render 18 hashed candidate artifacts across three block patterns. Preset/audio-input and later owner-fixture coverage remains open. |
 | TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, and `audio.click.v1` pass synthetic and finite-extreme contracts. The complete owner-analyzer catalog remains open. |
 | TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
 | TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
@@ -80,7 +80,8 @@ Use WAV/BWF or lossless FLAC for audio, Standard MIDI File plus a lossless JSON 
 ## Public fixture and analyzer contracts
 
 ```cpp
-struct RenderFixture { StateDocument state; EventTimeline midi; AutomationTimeline automation; OptionalAudio input; RenderConfig config; };
+struct FixtureAnalysisRequest { StableId id; AnalyzerIdentity analyzer; MetricId metric; TypedInput input; EventWindow event; OptionalEndpoints endpoints; };
+struct RenderFixture { StateDocument state; EventTimeline midi; AutomationTimeline automation; OptionalAudio input; RenderConfig config; vector<FixtureAnalysisRequest> analysisRequests; };
 struct RenderResult { AudioFile main, phones; TraceFiles traces; ReproducibilityInfo build; };
 class Analyzer { virtual Metrics analyze(const RenderResult&, const ReferenceSet&) const = 0; };
 ```
@@ -180,6 +181,29 @@ Audit a campaign from panel worksheet through raw hash, analyzer, band, calibrat
 ## Completion-report evidence
 
 The F0 subset is recorded in the [foundation evidence](evidence/workstream-12/f0-harness-foundation.md). Final Workstream 12 completion must additionally include schema files/examples; renderer reproducibility hashes; analyzer synthetic-validation results; requirement coverage report; published-source extract/page map; raw/reference/calibration/uncertainty manifests; approved acceptance/golden review records; cross-platform diffs; listening protocol/log/report; and commands to reproduce all artifacts.
+
+## Second senior-review remediation
+
+Implementation commit `5d7e6213f6163fad62b74d6ec7688b81a8eccd0c`
+binds every render metric to a versioned fixture-owned request. Requests declare
+the exact analyzer/metric, audio tap and deinterleaved channel or registry-backed
+control parameter/domain, event origin/window, and required endpoints. Control
+analysis reconstructs the full sample-domain signal from exact trace indices;
+sparse events and interleaved channels are never passed off as analyzer samples.
+
+Fixture IDs are conservative portable filename components. Index and fixture
+IDs, ordered requirement ownership, and bytes must match exactly, and candidate
+output is proven to be one canonical direct child of `renders` before creation.
+Render-kind gate evidence reloads the checked index, rerenders every block
+pattern, rederives the named request, and compares the full multi-record metric
+artifact. The live-registry evidence path and globally draft manifest remain
+unchanged.
+
+Git source identity and all reference-harness targets are now test-only. The
+artifact contract creates a source archive without `.git`: distribution
+configuration with tests and validators off succeeds against exact local JUCE,
+while tests-on configuration retains the stable mandatory-Git failure. No
+production `Source/` file or requirement status changed.
 
 ## Primary technical references
 
