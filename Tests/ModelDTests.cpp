@@ -4,6 +4,8 @@
 #include "ParameterRegistry.h"
 #include "ParameterSnapshotCapture.h"
 
+#include "PitchDomain.h"
+
 #include "ParameterBinding.h"
 
 #include <juce_cryptography/juce_cryptography.h>
@@ -4141,6 +4143,66 @@ void testRealtimeSmoke (TestContext& test)
     }
 }
 
+void testPitchDomainContract (TestContext& test)
+{
+    constexpr std::array expectedOffsets {
+        -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0,
+         1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0, 8.0
+    };
+    for (int index = 0; index < static_cast<int> (expectedOffsets.size()); ++index) {
+        const auto offset = PitchDomain::oscillatorOffset (index);
+        test.expect (offset.valid && offset.value.value == expectedOffsets[index],
+                     "oscillator offset must equal index minus eight");
+    }
+
+    const auto center = PitchDomain::oscillatorOffset (8);
+    const auto centerHz = PitchDomain::toHertz (center.value);
+    test.expect (center.valid && centerHz.valid && centerHz.value.value == 440.0,
+                 "center selector must produce a unity A4 ratio");
+
+    constexpr std::array expectedRanges { -24.0, -12.0, 0.0, 12.0, 24.0 };
+    for (int index = 1; index <= 5; ++index) {
+        const auto contribution = PitchDomain::range (index);
+        test.expect (contribution.valid
+                         && contribution.value.mode == PitchDomain::RangeMode::musical
+                         && contribution.value.semitones.value
+                                == expectedRanges[static_cast<size_t> (index - 1)],
+                     "musical range table must be exact");
+    }
+    const auto low = PitchDomain::range (0);
+    test.expect (low.valid && low.value.mode == PitchDomain::RangeMode::lowFrequency,
+                 "LO must remain an explicit special mode");
+
+    PitchDomain::Contributions contributions {
+        .note = { -5.0 },
+        .range = { 12.0 },
+        .masterTune = { 1.5 },
+        .oscillatorOffset = { -3.0 },
+        .pitchWheel = { 2.0 },
+        .calibration = { 0.25 },
+        .modulation = { -0.75 },
+    };
+    const auto composed = PitchDomain::compose (contributions);
+    test.expect (composed.valid && composed.coordinate.value == 7.0,
+                 "all pitch terms must add in semitone space");
+    test.expect (composed.valid
+                     && std::abs (composed.hertz.value
+                                  - 440.0 * std::exp2 (7.0 / 12.0)) < 1.0e-12,
+                 "composed pitch must convert once with the analytic formula");
+
+    const auto ratio = PitchDomain::ratioToSemitones (1.25);
+    test.expect (ratio.valid
+                     && std::abs (std::exp2 (ratio.value.value / 12.0) - 1.25) < 1.0e-12,
+                 "positive compatibility ratios must round-trip");
+    test.expect (! PitchDomain::oscillatorOffset (-1).valid
+                     && ! PitchDomain::oscillatorOffset (17).valid
+                     && ! PitchDomain::masterTune (11).valid
+                     && ! PitchDomain::ratioToSemitones (0.0).valid
+                     && ! PitchDomain::fromHertz (
+                            std::numeric_limits<double>::infinity()).valid,
+                 "invalid pitch inputs must reject without a fabricated value");
+}
+
 int runMode (std::string_view mode)
 {
     juce::ScopedJuceInitialiser_GUI juceInitialiser;
@@ -4152,6 +4214,8 @@ int runMode (std::string_view mode)
 
     if (mode == "unit")
         testUnitContract (test);
+    else if (mode == "pitch-domain")
+        testPitchDomainContract (test);
     else if (mode == "state")
         testStateSmoke (test);
     else if (mode == "state-v2")

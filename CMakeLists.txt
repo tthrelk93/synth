@@ -86,6 +86,7 @@ set(MODEL_D_CORE_SOURCES
     Source/LadderFilter.cpp
     Source/ModWheel.cpp
     Source/Oscillator.cpp
+    Source/PitchDomain.cpp
     Source/PresetLibrary.cpp
     Source/SynthPreset.cpp)
 
@@ -758,6 +759,7 @@ target_link_libraries(ModelDOfflineRenderer
     set_tests_properties(ModelDReferenceRequirementContract PROPERTIES LABELS "artifact;state")
 
     synth_add_model_d_test(ModelDUnitContract unit unit)
+    synth_add_model_d_test(ModelDPitchDomainContract "unit;dsp" pitch-domain)
     synth_add_model_d_test(ModelDStateSmoke state state)
     synth_add_model_d_test(ModelDStateV2Contract state state-v2)
     synth_add_model_d_test(ModelDContourContract state contours)
