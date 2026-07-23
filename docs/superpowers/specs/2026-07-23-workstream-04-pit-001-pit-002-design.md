@@ -186,7 +186,7 @@ Register `audio.pitch.v1` version 1 in the existing analyzer registry. Extend
 `AnalysisRequest` with the render sample rate, populated from the immutable
 `RenderResult`.
 
-For a finite mono analysis window, the analyzer:
+For a finite mono single-pitch periodic analysis window, the analyzer:
 
 1. removes the mean;
 2. rejects silence, non-finite samples, insufficient duration, and fewer than
@@ -213,8 +213,9 @@ Add two `model-d.render-fixture.v1` files and index them immutably.
 ### PIT-001 oscillator selector sweep
 
 `pit-001-oscillator-offset-sweep-v1.json` renders Oscillator 2 and Oscillator 3
-individually as stable sine sources under MIDI control at 8', zero master tune,
-neutral pitch wheel, zero modulation, and the zero calibration baseline. It
+individually with the existing stable triangle waveform under MIDI control at
+8', zero master tune, neutral pitch wheel, zero modulation, and the zero
+calibration baseline. It
 contains all 17 selector positions for both oscillators. Every position has a
 settling prefix followed by a same-value event anchor and an
 `audio.pitch.v1` analysis window.
