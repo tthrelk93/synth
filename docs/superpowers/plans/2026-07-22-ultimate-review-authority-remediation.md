@@ -298,7 +298,7 @@ SHA-256.
   entry/manifest counts, and remaining open obligations. Commit the tracked
   checklist update.
 
-- [ ] **Step 4: Rebuild automatically and reverify the final exact head**
+- [x] **Step 4: Rebuild automatically and reverify the final exact head**
 
   Without manual reconfigure, rebuild so generated source identity binds the
   post-checklist commit. Rerun authoritative CLI/release checks, then rebuild
