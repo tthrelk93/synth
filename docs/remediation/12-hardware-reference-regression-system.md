@@ -205,6 +205,25 @@ configuration with tests and validators off succeeds against exact local JUCE,
 while tests-on configuration retains the stable mandatory-Git failure. No
 production `Source/` file or requirement status changed.
 
+## Closure-review endpoint and provenance remediation
+
+Implementation commit `0f223df2bc54a6039e352cb457095da0650aa7fe`
+makes fixture loading authoritative for control-analysis endpoints. The loader
+restores the declared v2 state, applies prior same-key automation in exact
+`(sample,sequence)` order, requires same-key automation at the event origin,
+and selects the final same-sample target. Endpoint comparison uses the live
+parameter's float/domain representation, including ordinary values such as
+`0.1`, and dense analysis consumes only the derived endpoints.
+
+Every foundation render fixture now requires a meaningful purpose and the
+supported typed readiness status `foundation-reviewed`. Both fields are bound
+through render and metric provenance and fixture hashes. Compiler ID and
+version are likewise configured by CMake and bound through reproducibility,
+serialization, candidate validation, and authoritative replay. Missing,
+placeholder, unsupported, or forged metadata rejects. These readiness and
+reproducibility fields do not approve the globally draft acceptance manifest
+or change any requirement, hardware, host, listening, or release status.
+
 ## Primary technical references
 
 - Moog [Model D manual](../../Minimoog_Model_D_Manual.pdf), especially pp. 43–51 and 80–81.

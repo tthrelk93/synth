@@ -63,9 +63,9 @@ The immutable Workstream 03 frozen set remains nine files with the hashes in
 
 | Artifact | SHA-256 |
 |---|---|
-| `native-v2-foundation.json` | `eafeebfaabb4b01145262e9c7a6476486316bc199eea26a4cdc7bb7c3d0f98d5` |
-| `migrated-v2-foundation.json` | `8ece5350928ba5ec33419e83b191f95b68c1e8fafc8a9677bd447b61a2c01ef2` |
-| `legacy-contour-foundation.json` | `093323067ae7dc9f6f1fc214f86c2e64b75d8b5878850c44b8b4256e2ea7e399` |
+| `native-v2-foundation.json` | `55be6ae9df5e8e4384843f17798125608870c73c462988c5a39c4848dda51a6a` |
+| `migrated-v2-foundation.json` | `50400f7e792e1eba71d42bc3715290428d74bb1ea592db49b5ff8cff419b0a9a` |
+| `legacy-contour-foundation.json` | `5c904acc8a0763ca01216f345208f7eb867e10430d4597d7b0a01063f4c26f6e` |
 | `par-006/none-step-v1.json` | `e2346232c6d4ad68621231982c35de64377789ed83678d6dd0509dfbe1f9b6b3` |
 | `par-006/gain-control-step-v1.json` | `e44a0d7953c79f2bc8604d9b8addb527e986da73f43cd155c91e9050459ebfcf` |
 | `par-006/control-step-v1.json` | `43dded14ef88f7d7fc1b43cffd69e15fc498af95d4e59b5aff44cd258613684f` |
@@ -329,9 +329,39 @@ CLI, repeat, guard, and successor-ZIP evidence is recorded in the ignored
 whole-branch remediation report to avoid self-referential tracked hashes.
 
 The updated render fixture hashes are listed above; the fixture index itself is
-`b65b99c67dac98164a99e21c9a0e82f725cfe316f0a03638774049f8e7472e49`.
+`6b60e8a3d26a97367035090b4f576d8e34108c5e3f8c71b29e93bb820c904975`.
 No `Source/` file, accepted policy, approval, requirement status, report count,
 hardware claim, host claim, or release claim changed.
+
+## Closure-review endpoint and metadata remediation
+
+Closure review resumed at clean base
+`45dd246a1b578fbc64962476f95e24ab07563404` and produced implementation
+commit `0f223df2bc54a6039e352cb457095da0650aa7fe`. RED contracts rejected the old
+behavior for a wrong-but-in-range control start, an unrelated event anchor, a
+first-record rather than final-sequence target, and ordinary `0.1` float
+representation. GREEN restores the fixture state through the live processor,
+derives the pre-event start from restored state plus prior same-key automation
+in `(sample,sequence)` order, requires same-key automation at the origin, and
+uses the final same-sample target. The canonical float/domain endpoints replace
+the declarations before dense analysis.
+
+All three foundation fixtures now carry a meaningful `purpose` and typed
+`foundation-reviewed` readiness status. Missing, empty, placeholder, or
+unsupported governance values reject. Render manifests and render metric
+provenance bind both fields, while acceptance remains globally `draft` and no
+gate, requirement, hardware, host, listening, or release status is promoted.
+The three refreshed fixture hashes and current index hash are recorded above.
+
+CMake-configured compiler ID and version now flow through render and registry
+metric reproducibility, canonical render/metric JSON, cross-pattern equality,
+candidate validation, and authoritative replay. Missing or forged compiler
+identity rejects candidate evidence. The focused renderer/analyzer/requirement
+contracts pass, followed by a validators-on all-target build and serial 21/21
+CTest pre-commit matrix. Exact documentation-head labels, CLI repeats/tamper
+checks, guards, report hashes, and successor-package verification are retained
+in the ignored whole-branch remediation report after final execution. No
+production `Source/` file changed.
 
 ## Honest F0 projection and next action
 

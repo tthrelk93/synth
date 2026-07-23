@@ -780,6 +780,26 @@ Implementation commit:
 Exact final-head verification and the replacement fixed-path archive are
 recorded in the ignored whole-branch remediation report.
 
+## Closure-review endpoint and metadata remediation
+
+- [x] Derive control-analysis start from restored live parameter state plus all
+  earlier same-key automation in `(sample,sequence)` order.
+- [x] Require same-key automation at the origin and select the final ordered
+  same-sample target; validate values in the processor's float/domain form.
+- [x] Feed dense analysis the derived endpoints and cover wrong start,
+  unrelated anchors, final-sequence target, and ordinary `0.1`.
+- [x] Require meaningful fixture purpose and supported typed review status;
+  bind both through render/metric provenance and refreshed fixture hashes.
+- [x] Bind configured compiler ID/version through reproducibility, render and
+  metric serialization, equality, validation, and authoritative replay.
+- [x] Reject missing/forged governance and compiler metadata without promoting
+  acceptance, hardware, requirement, or release status.
+
+Implementation commit:
+`0f223df2bc54a6039e352cb457095da0650aa7fe`.
+Exact final-head verification and the replacement archive are recorded in the
+ignored whole-branch remediation report.
+
 ## Self-Review
 
 - Spec coverage: Task 1 implements canonical data, hashing, path safety, and the frozen artifact seam; Task 2 implements fixture parsing, deterministic exact-event rendering, generated inputs, output governance, and CLI compatibility; Task 3 implements analyzers, synthetic calibration, seven registry-derived PAR-006 templates, approved derived policy, and honest open results; Task 4 implements all-127 requirement mapping, canonical reports, and release enforcement; Task 5 implements evidence, planning synchronization, full serial verification, and the successor chain.
