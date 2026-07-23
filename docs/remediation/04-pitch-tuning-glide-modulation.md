@@ -19,9 +19,34 @@ Panel tuning, oscillator ranges, fine frequency controls, pitch wheel, oscillato
 | PIT-007 | Define glide transitions for first note, legato, retrigger, bypass, target changes, priority fallback, and live knob changes. |
 | PIT-008 | Remove repeated per-sample exponent/power calculations through cached or incremental ratios without changing the control contract. |
 
-## Current-code evidence
+## Pitch foundation progress
 
-- `Oscillator::calculateDetunedFrequency` raises 2 to `detuneAmount / 12`; the enum value is 0…16, so the center selector at index 8 becomes +8 semitones rather than zero.
+The [PIT-001/PIT-002 evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md)
+records the exact commit chronology, RED/GREEN history, analyzer calibration,
+fixture and candidate hashes, nine bound gates, authoritative report, negative
+diagnostics, and exact claim boundary.
+
+| ID | Status | Durable result / remaining boundary |
+|---|---|---|
+| PIT-001 | pass | Typed selector mapping is exactly `-8...+8`; six bound processor-output gates and all 34 governed selector records pass. |
+| PIT-002 | pass | The musical path composes typed semitone contributions and converts once; three bound composed-pitch gates pass. Existing bend, modulation, glide, and LO compatibility behavior is deliberately retained. |
+| PIT-003 | not-started | The new analyzer is reusable evidence infrastructure, but complete six-range/control/sample-rate/calibration-profile software and hardware bands have not begun under PIT-003. |
+| PIT-004 | not-started | Published centered symmetric ±7-semitone pitch bend is not implemented. |
+| PIT-005 | not-started | Nonzero audio-rate modulation semantics and approved sideband/safety evidence are not implemented. |
+| PIT-006 | not-started | Published time-per-octave glide endpoints and measured taper are not implemented. |
+| PIT-007 | not-started | The complete glide transition table is not implemented. |
+| PIT-008 | not-started | Static-ratio caching, bounded audio-rate conversion, counters, and CPU/equivalence evidence remain open. |
+
+The live fixture-index schema uses `relativePath`. Task 4 Step 5's mistaken
+`path` wording is corrected in the implementation plan under the user's
+explicit compatibility approval; no schema migration is performed.
+
+## Current and original code evidence
+
+- The canonical musical path now bypasses legacy setters, maps the Oscillator
+  2/3 selector through `index - 8`, and composes pitch through `PitchDomain`.
+  The old direct-index behavior remains only on the deliberately preserved LO
+  compatibility path pending PIT-003 calibration.
 - `MoogMiniAudioProcessor::processBlock` maps pitch wheel to a linear multiplier from 2/3 to 1.5 rather than equal-tempered ±7 semitones.
 - Oscillator modulation multiplies frequency by `1 + modulationEffect`, limited to −0.9…0.9; the domain is neither semitones nor volts/octave.
 - `calculateGlideRate` says seconds per semitone, but the render loop uses it as a generic first-order denominator `(target-current)/(rate*sampleRate)`, so travel time is not the published time per octave and never completes by defined duration.
@@ -134,7 +159,8 @@ Compare tuner readings for all A/C notes across ranges, center/end fine tune, be
 
 ## Definition of done
 
-- [ ] PIT-001 through PIT-008 pass.
+- [x] PIT-001 and PIT-002 pass with governed processor-output evidence and authoritative report replay.
+- [ ] PIT-003 through PIT-008 pass.
 - [ ] Pitch/glide interfaces are frozen and used by the engine.
 - [ ] Published bend and glide endpoints pass.
 - [ ] No unit-specific calibration value was guessed.

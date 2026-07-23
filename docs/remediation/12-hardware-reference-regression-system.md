@@ -28,13 +28,13 @@ record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness
 
 | ID | Status | F0 result / remaining acceptance |
 |---|---|---|
-| TST-001 | in-progress | Three deterministic state/MIDI/automation fixtures produce 18 hashed per-render artifacts plus one root metric artifact and one report, for 20 candidate files total. Preset/audio-input and later owner-fixture coverage remains open. |
-| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, and `audio.click.v1` pass synthetic and finite-extreme contracts. The complete owner-analyzer catalog remains open. |
+| TST-001 | in-progress | Five deterministic state/MIDI/automation fixtures produce 30 hashed per-render artifacts plus one root metric artifact and one report, for 32 candidate files total. The two Workstream 04 fixtures add 37 governed pitch requests; preset/audio-input and later owner-fixture coverage remains open. |
+| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, and `audio.pitch.v1` pass synthetic, finite-extreme, and owner-fixture contracts. The pitch analyzer's synthetic maximum error is `0.000419994` semitone; the complete owner-analyzer catalog remains open. |
 | TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
 | TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
 | TST-005 | in-progress | Missing hardware provenance remains visible as `awaiting-approved-reference`; no hardware capture campaign or reference-instrument record has run. |
-| TST-006 | in-progress | The machine-readable manifest remains globally `draft`; exactly four derived PAR-006 policies are approved. Published, measured-hardware, performance, and owner-DSP evidence remains incomplete. |
-| TST-007 | in-progress | The map exactly covers 127 requirements and the canonical report/release verifier is authoritative. The F0 report is intentionally not release-ready. |
+| TST-006 | in-progress | The machine-readable manifest remains globally `draft`; four derived PAR-006 policies plus nine bound PIT-001/PIT-002 policies are approved. Published, measured-hardware, performance, and later owner-DSP evidence remains incomplete. |
+| TST-007 | in-progress | The map exactly covers 127 requirements and the 110-gate canonical report/release verifier is authoritative. The honest report is 16 pass / 92 not-run / 19 awaiting / 0 fail and not release-ready. |
 | TST-008 | in-progress | F0 proves repeat equality across three block partitions and records state/build provenance on Darwin arm64. The full sample-rate/reset/platform/architecture/host matrix remains open. |
 | TST-009 | in-progress | The status model prevents listening from replacing numerical gates. No blinded, randomized, level-matched listening campaign has run. |
 
@@ -181,6 +181,13 @@ Audit a campaign from panel worksheet through raw hash, analyzer, band, calibrat
 ## Completion-report evidence
 
 The F0 subset is recorded in the [foundation evidence](evidence/workstream-12/f0-harness-foundation.md). Final Workstream 12 completion must additionally include schema files/examples; renderer reproducibility hashes; analyzer synthetic-validation results; requirement coverage report; published-source extract/page map; raw/reference/calibration/uncertainty manifests; approved acceptance/golden review records; cross-platform diffs; listening protocol/log/report; and commands to reproduce all artifacts.
+
+The Workstream 04 extension is recorded in the
+[PIT-001/PIT-002 pitch foundation evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md).
+It adds two governed fixtures, `audio.pitch.v1`, nine reciprocal derived gates,
+32-file deterministic candidates, and authoritative candidate/release replay.
+It does not approve the global manifest, close any TST requirement, or supply
+hardware, host, listening, or release evidence.
 
 ## Second senior-review remediation
 
