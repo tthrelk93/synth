@@ -235,6 +235,8 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
     result.reproducibility.buildType = SYNTH_CONFIGURED_BUILD_TYPE;
     result.reproducibility.platform = SYNTH_CONFIGURED_PLATFORM;
     result.reproducibility.architecture = SYNTH_CONFIGURED_ARCHITECTURE;
+    result.reproducibility.compilerId = SYNTH_CONFIGURED_COMPILER_ID;
+    result.reproducibility.compilerVersion = SYNTH_CONFIGURED_COMPILER_VERSION;
     result.reproducibility.fixtureSha256 = sha256File (fixture.fixtureFile);
     result.reproducibility.inputHashes = fixtureInputHashes (fixture);
     result.reproducibility.seed = fixture.config.seed;
@@ -405,7 +407,9 @@ std::optional<Diagnostic> validateCandidateResults (
             || result.reproducibility.juceCommit != SYNTH_RESOLVED_JUCE_COMMIT
             || result.reproducibility.buildType != SYNTH_CONFIGURED_BUILD_TYPE
             || result.reproducibility.platform != SYNTH_CONFIGURED_PLATFORM
-            || result.reproducibility.architecture != SYNTH_CONFIGURED_ARCHITECTURE)
+            || result.reproducibility.architecture != SYNTH_CONFIGURED_ARCHITECTURE
+            || result.reproducibility.compilerId != SYNTH_CONFIGURED_COMPILER_ID
+            || result.reproducibility.compilerVersion != SYNTH_CONFIGURED_COMPILER_VERSION)
             return Diagnostic { "output.provenance",
                                 "candidate result provenance must match the configured build" };
         if (result.reproducibility.inputHashes != expectedInputHashes)
@@ -427,7 +431,10 @@ std::optional<Diagnostic> validateCandidateResults (
             || result.reproducibility.juceCommit != canonical.reproducibility.juceCommit
             || result.reproducibility.buildType != canonical.reproducibility.buildType
             || result.reproducibility.platform != canonical.reproducibility.platform
-            || result.reproducibility.architecture != canonical.reproducibility.architecture)
+            || result.reproducibility.architecture != canonical.reproducibility.architecture
+            || result.reproducibility.compilerId != canonical.reproducibility.compilerId
+            || result.reproducibility.compilerVersion
+                   != canonical.reproducibility.compilerVersion)
             return Diagnostic { "output.divergence",
                                 "candidate results diverge across declared block patterns" };
     }
@@ -579,6 +586,8 @@ LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetricsImpl (
         MetricProvenance provenance;
         provenance.kind = MetricSubjectKind::render;
         provenance.fixtureId = fixture.id;
+        provenance.fixturePurpose = fixture.purpose;
+        provenance.fixtureReviewStatus = fixture.reviewStatus;
         provenance.fixturePath = fixture.fixtureRelativePath;
         provenance.fixtureSha256 = sha256File (fixture.fixtureFile);
         provenance.requestId = fixtureRequest.id;
@@ -770,6 +779,9 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     auto reproducibility = std::make_unique<juce::DynamicObject>();
     reproducibility->setProperty ("architecture", juce::String { canonical.reproducibility.architecture });
     reproducibility->setProperty ("buildType", juce::String { canonical.reproducibility.buildType });
+    reproducibility->setProperty ("compilerId", juce::String { canonical.reproducibility.compilerId });
+    reproducibility->setProperty ("compilerVersion", juce::String {
+        canonical.reproducibility.compilerVersion });
     reproducibility->setProperty ("fixtureSha256", juce::String { canonical.reproducibility.fixtureSha256 });
     reproducibility->setProperty ("inputHashes", stringMap (canonical.reproducibility.inputHashes));
     reproducibility->setProperty ("juceCommit", juce::String { canonical.reproducibility.juceCommit });
@@ -784,8 +796,11 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     root->setProperty ("fixtureId", juce::String { fixture.id });
     root->setProperty ("mainChannels", canonical.mainChannels);
     root->setProperty ("phonesChannels", canonical.phonesChannels);
+    root->setProperty ("purpose", juce::String { fixture.purpose });
     root->setProperty ("reproducibility", juce::var { reproducibility.release() });
     root->setProperty ("requirements", stringArray (fixture.requirements));
+    root->setProperty ("reviewStatus", juce::String {
+        fixtureReviewStatusName (fixture.reviewStatus).data() });
     root->setProperty ("sampleRate", canonical.sampleRate);
     root->setProperty ("schema", "model-d.render-result.v1");
     root->setProperty ("totalSamples", static_cast<juce::int64> (fixture.config.totalSamples));
@@ -829,6 +844,8 @@ LoadResult<GateMetricEvidence> writeRegistryMetricEvidence (
     provenance.registrySha256 = sha256File (*registryFile.value);
     provenance.registryCount = ParameterRegistry::descriptors().size();
     provenance.reproducibility.sourceCommit = SYNTH_SOURCE_COMMIT;
+    provenance.reproducibility.compilerId = SYNTH_CONFIGURED_COMPILER_ID;
+    provenance.reproducibility.compilerVersion = SYNTH_CONFIGURED_COMPILER_VERSION;
     GateMetricEvidence evidence;
     evidence.gateId = "hard.registry.count";
     evidence.record = { analyzed.value->front(), std::move (provenance) };

@@ -205,8 +205,8 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
                                       ? nullptr : property (*reproducibility, "outputHashes");
     const auto* outputHashes = outputHashesValue == nullptr
                                  ? nullptr : outputHashesValue->getDynamicObject();
-    if (root == nullptr || root->getProperties().size() != 10
-        || reproducibility == nullptr || reproducibility->getProperties().size() != 9
+    if (root == nullptr || root->getProperties().size() != 12
+        || reproducibility == nullptr || reproducibility->getProperties().size() != 11
         || outputHashes == nullptr
         || outputHashes->getProperties().size() != 5)
         return failure<BoundCandidate> (
@@ -231,6 +231,8 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
 
     std::string schema;
     std::string fixtureId;
+    std::string fixturePurpose;
+    std::string fixtureReviewStatus;
     double sampleRate = 0.0;
     int mainChannels = 0;
     int phonesChannels = 0;
@@ -238,6 +240,10 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
     if (! readString (*root, "schema", schema) || schema != "model-d.render-result.v1"
         || ! readString (*root, "fixtureId", fixtureId)
         || fixtureId != evidence.fixture.id
+        || ! readString (*root, "purpose", fixturePurpose)
+        || fixturePurpose != evidence.fixture.purpose
+        || ! readString (*root, "reviewStatus", fixtureReviewStatus)
+        || fixtureReviewStatus != fixtureReviewStatusName (evidence.fixture.reviewStatus)
         || ! readNumber (*root, "sampleRate", sampleRate)
         || sampleRate != evidence.fixture.config.sampleRate
         || sampleRate != evidence.render.sampleRate
@@ -264,6 +270,8 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
     std::string buildType;
     std::string platform;
     std::string architecture;
+    std::string compilerId;
+    std::string compilerVersion;
     std::string fixtureSha256;
     std::uint64_t seed = 0;
     std::map<std::string, std::string> expectedInputHashes {
@@ -281,6 +289,12 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
         || platform != evidence.render.reproducibility.platform
         || ! readString (*reproducibility, "architecture", architecture)
         || architecture != evidence.render.reproducibility.architecture
+        || ! readString (*reproducibility, "compilerId", compilerId)
+        || compilerId != evidence.render.reproducibility.compilerId
+        || compilerId != SYNTH_CONFIGURED_COMPILER_ID
+        || ! readString (*reproducibility, "compilerVersion", compilerVersion)
+        || compilerVersion != evidence.render.reproducibility.compilerVersion
+        || compilerVersion != SYNTH_CONFIGURED_COMPILER_VERSION
         || ! readString (*reproducibility, "fixtureSha256", fixtureSha256)
         || fixtureSha256 != evidence.render.reproducibility.fixtureSha256
         || ! evidence.fixture.fixtureFile.existsAsFile()
@@ -969,6 +983,10 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
                            && provenance.registryCount == ParameterRegistry::descriptors().size()
                            && provenance.registryCount == 48
                            && provenance.reproducibility.sourceCommit == SYNTH_SOURCE_COMMIT
+                           && provenance.reproducibility.compilerId
+                                  == SYNTH_CONFIGURED_COMPILER_ID
+                           && provenance.reproducibility.compilerVersion
+                                  == SYNTH_CONFIGURED_COMPILER_VERSION
                            && registryFile.ok()
                            && provenance.registrySha256 == sha256File (*registryFile.value);
             std::vector<double> immutableRegistry;

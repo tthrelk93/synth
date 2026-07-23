@@ -1053,7 +1053,7 @@ public:
                 "real smoothing evidence must copy the validated v2 state");
         const auto fixtureFile = candidateRoot.directory.getChildFile ("fixture.json");
         fixtureFile.replaceWithText (
-            juce::String { R"({"schema":"model-d.render-fixture.v1","id":"none-step-evidence","state":{"kind":"hostState","path":"state.xml","sha256":")" }
+            juce::String { R"({"schema":"model-d.render-fixture.v1","id":"none-step-evidence","purpose":"Exercise acceptance binding for a generated no-smoothing control trace.","reviewStatus":"foundation-reviewed","state":{"kind":"hostState","path":"state.xml","sha256":")" }
             + sha256File (stateFile)
             + R"(","version":2,"contourContract":"canonicalContours"},"render":{"sampleRate":48000,"totalSamples":512,"seed":0,"blockPatterns":[[64],[17,31]]},"automation":[{"sample":0,"sequence":0,"parameterId":"a440HzOnOff","normalizedValue":0.0},{"sample":256,"sequence":1,"parameterId":"a440HzOnOff","normalizedValue":1.0}],"midi":[],"input":{"kind":"silence"},"analysisRequests":[{"requestId":"main-left-count","version":1,"analyzer":{"id":"signal.stats.v1","version":1},"metric":"sample-count","input":{"kind":"audio","tap":"main","channel":0},"event":{"originSample":0,"windowSamples":512}}],"requirements":["PAR-006"]})");
         const auto evidenceFixture = loadRenderFixture (candidateRoot.directory, fixtureFile);
@@ -1144,6 +1144,12 @@ public:
         auto mismatchedProvenance = validEvidence;
         mismatchedProvenance.render.reproducibility.sourceCommit = "mismatch";
         expectEvidenceFailure (std::move (mismatchedProvenance), "smoothing.trace-mismatch");
+        auto mismatchedCompilerId = validEvidence;
+        mismatchedCompilerId.render.reproducibility.compilerId = "forged-compiler";
+        expectEvidenceFailure (std::move (mismatchedCompilerId), "smoothing.trace-mismatch");
+        auto mismatchedCompilerVersion = validEvidence;
+        mismatchedCompilerVersion.render.reproducibility.compilerVersion = "0.0-forged";
+        expectEvidenceFailure (std::move (mismatchedCompilerVersion), "smoothing.trace-mismatch");
         auto mismatchedFixture = validEvidence;
         mismatchedFixture.fixture.id = "mismatch";
         expectEvidenceFailure (std::move (mismatchedFixture), "smoothing.trace-mismatch");
@@ -1165,6 +1171,46 @@ public:
         auto missingEvidence = validEvidence;
         missingEvidence.candidateDirectory = missingDirectory;
         expectEvidenceFailure (std::move (missingEvidence), "smoothing.artifact-hash");
+
+        const auto missingCompilerDirectory = candidateRoot.directory.getChildFile (
+            "missing-compiler-candidate");
+        expect (candidateDirectory.copyDirectoryTo (missingCompilerDirectory),
+                "candidate must be copied for a missing compiler identity probe");
+        const auto missingCompilerRender = missingCompilerDirectory.getChildFile ("render.json");
+        juce::var missingCompilerJson;
+        expect (juce::JSON::parse (missingCompilerRender.loadFileAsString(),
+                                  missingCompilerJson).wasOk(),
+                "missing compiler probe render manifest must parse");
+        if (auto* missingCompilerRoot = missingCompilerJson.getDynamicObject())
+            if (auto* reproducibility = missingCompilerRoot->getProperty (
+                    "reproducibility").getDynamicObject())
+                reproducibility->removeProperty ("compilerId");
+        expect (missingCompilerRender.replaceWithText (
+                    canonicalJson (missingCompilerJson), false, false, "\n"),
+                "missing compiler probe must rewrite render manifest");
+        auto missingCompilerEvidence = validEvidence;
+        missingCompilerEvidence.candidateDirectory = missingCompilerDirectory;
+        expectEvidenceFailure (std::move (missingCompilerEvidence), "smoothing.artifact-hash");
+
+        const auto forgedCompilerDirectory = candidateRoot.directory.getChildFile (
+            "forged-compiler-candidate");
+        expect (candidateDirectory.copyDirectoryTo (forgedCompilerDirectory),
+                "candidate must be copied for a forged compiler identity probe");
+        const auto forgedCompilerRender = forgedCompilerDirectory.getChildFile ("render.json");
+        juce::var forgedCompilerJson;
+        expect (juce::JSON::parse (forgedCompilerRender.loadFileAsString(),
+                                  forgedCompilerJson).wasOk(),
+                "forged compiler probe render manifest must parse");
+        if (auto* forgedCompilerRoot = forgedCompilerJson.getDynamicObject())
+            if (auto* reproducibility = forgedCompilerRoot->getProperty (
+                    "reproducibility").getDynamicObject())
+                reproducibility->setProperty ("compilerVersion", "0.0-forged");
+        expect (forgedCompilerRender.replaceWithText (
+                    canonicalJson (forgedCompilerJson), false, false, "\n"),
+                "forged compiler probe must rewrite render manifest");
+        auto forgedCompilerEvidence = validEvidence;
+        forgedCompilerEvidence.candidateDirectory = forgedCompilerDirectory;
+        expectEvidenceFailure (std::move (forgedCompilerEvidence), "smoothing.trace-mismatch");
     }
 
 private:
@@ -1315,6 +1361,10 @@ public:
             expect (restored.succeeded(), juce::String { path } + " state must restore");
             expect (processor.getContourContract() == loaded.value->expectedContourContract,
                     juce::String { path } + " contour marker must survive restore");
+            expect (loaded.value->purpose.size() > 20
+                        && loaded.value->reviewStatus
+                               == ReferenceHarness::FixtureReviewStatus::foundationReviewed,
+                    juce::String { path } + " governance metadata must load into typed fields");
             fixtures.push_back (*loaded.value);
         }
         expectEquals (static_cast<int> (fixtures.size()), 3);
@@ -1393,6 +1443,9 @@ public:
                             { "state", fixtures.front().stateSha256 },
                         },
                     "generated input fixtures must record exactly the state input hash");
+            expect (! result.reproducibility.compilerId.empty()
+                        && ! result.reproducibility.compilerVersion.empty(),
+                    "generated render provenance must include configured compiler identity");
         }
 
         for (size_t fixtureIndex = 1; fixtureIndex < fixtures.size(); ++fixtureIndex) {
@@ -1505,6 +1558,28 @@ public:
                                     R"("signal.stats.v2")"),
                                 "fixture.analysis-analyzer");
 
+        beginTest ("render fixture purpose and review status are mandatory governance metadata");
+        constexpr auto purpose = R"(  "purpose": "Exercise native v2 state restoration, deterministic rendering, and typed audio analysis.",
+)";
+        constexpr auto reviewStatus = R"(  "reviewStatus": "foundation-reviewed",
+)";
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (purpose, {}),
+                                "fixture.purpose");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    "Exercise native v2 state restoration, deterministic rendering, and typed audio analysis.",
+                                    ""),
+                                "fixture.purpose");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    "Exercise native v2 state restoration, deterministic rendering, and typed audio analysis.",
+                                    "TBD"),
+                                "fixture.purpose");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (reviewStatus, {}),
+                                "fixture.review-status");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("reviewStatus": "foundation-reviewed")",
+                                    R"("reviewStatus": "accepted")"),
+                                "fixture.review-status");
+
         beginTest ("render fixture IDs are safe single portable components");
         const auto fixtureId = R"("id": "native-v2-foundation")";
         expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
@@ -1536,6 +1611,52 @@ public:
             rightAudioRequest, controlRequest);
         expectFixtureValid (sourceRoot, validText);
         expectFixtureValid (sourceRoot, controlText);
+
+        beginTest ("control analysis endpoints come from restored state and ordered automation");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("start": 0.5, "target": 0.25)",
+                                    R"("start": 0.4, "target": 0.25)"),
+                                "fixture.analysis-endpoints");
+        const auto unrelatedControlRequest = R"JSON({"requestId": "filter-cutoff-count", "version": 1,
+     "analyzer": {"id": "signal.stats.v1", "version": 1},
+     "metric": "sample-count",
+     "input": {"kind": "control", "parameterId": "filterCutoff", "domain": "normalized"},
+     "event": {"originSample": 1024, "windowSamples": 1024},
+     "start": 0.25})JSON";
+        expectFixtureDiagnostic (
+            sourceRoot, validText.replaceFirstOccurrenceOf (
+                            rightAudioRequest, unrelatedControlRequest),
+            "fixture.analysis-event");
+        const auto transition =
+            R"({"sample": 512, "sequence": 3, "parameterId": "filterCutoff", "normalizedValue": 0.25})";
+        const auto sameSampleFinal = controlText
+            .replaceFirstOccurrenceOf (
+                transition,
+                juce::String { transition }
+                    + R"(,
+    {"sample": 512, "sequence": 5, "parameterId": "filterCutoff", "normalizedValue": 0.75})")
+            .replaceFirstOccurrenceOf (
+                R"("start": 0.5, "target": 0.25)",
+                R"("start": 0.5, "target": 0.75)");
+        expectFixtureValid (sourceRoot, sameSampleFinal);
+        const auto decimalEndpoint = controlText
+            .replaceFirstOccurrenceOf (
+                R"("normalizedValue": 0.25)", R"("normalizedValue": 0.1)")
+            .replaceFirstOccurrenceOf (
+                R"("start": 0.5, "target": 0.25)",
+                R"("start": 0.5, "target": 0.1)");
+        expectFixtureValid (sourceRoot, decimalEndpoint);
+        const auto priorSameKey = controlText
+            .replaceFirstOccurrenceOf (
+                transition,
+                R"({"sample": 256, "sequence": 5, "parameterId": "filterCutoff", "normalizedValue": 0.1},
+    {"sample": 512, "sequence": 3, "parameterId": "filterCutoff", "normalizedValue": 0.25})")
+            .replaceFirstOccurrenceOf (
+                R"("start": 0.5, "target": 0.25)",
+                R"("start": 0.1000000001, "target": 0.25)");
+        expectFixtureValid (
+            sourceRoot, priorSameKey,
+            static_cast<double> (static_cast<float> (0.1)));
         expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
                                     R"("requestId": "main-left-count")",
                                     R"("requestId": "../escape")"),
@@ -1598,8 +1719,6 @@ public:
                                     R"({"sample": 0, "sequence": 2, "parameterId": "noiseOnOffSwitch", "normalizedValue": 1.0})"),
                                 "fixture.stochastic-state");
 
-        const auto transition =
-            R"({"sample": 512, "sequence": 3, "parameterId": "filterCutoff", "normalizedValue": 0.25})";
         expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
                                     transition,
                                     juce::String { transition }
@@ -1717,6 +1836,8 @@ public:
             result.reproducibility.buildType.clear();
             result.reproducibility.platform.clear();
             result.reproducibility.architecture.clear();
+            result.reproducibility.compilerId.clear();
+            result.reproducibility.compilerVersion.clear();
         }
         expectRejectedCandidate (emptyProvenance, "empty-provenance", "output.provenance");
         const auto expectWrongProvenance = [&] (
@@ -1737,6 +1858,10 @@ public:
                                "wrong-platform");
         expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::architecture,
                                "wrong-architecture");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::compilerId,
+                               "wrong-compiler-id");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::compilerVersion,
+                               "wrong-compiler-version");
 
         auto wrongFixtureHash = *firstRun.value;
         for (auto& result : wrongFixtureHash)
@@ -1798,6 +1923,57 @@ public:
                                   fixtures.front(), *nativeSecondRun->value, candidateBRoot)
                             : ReferenceHarness::LoadResult<std::vector<juce::File>> {};
         expect (writtenA.ok() && writtenB.ok(), "both fresh candidate directories must be written");
+        juce::var parsedCandidateRender;
+        const auto candidateRenderParsed = juce::JSON::parse (
+            candidateA.getChildFile ("render.json").loadFileAsString(), parsedCandidateRender);
+        const auto* candidateRender = parsedCandidateRender.getDynamicObject();
+        expect (candidateRenderParsed.wasOk() && candidateRender != nullptr
+                    && candidateRender->getProperty ("purpose").toString().toStdString()
+                           == fixtures.front().purpose
+                    && candidateRender->getProperty ("reviewStatus").toString()
+                           == "foundation-reviewed",
+                "candidate render provenance must carry governed fixture purpose and review status");
+        const auto* candidateReproducibility = candidateRender == nullptr
+                                                 ? nullptr
+                                                 : candidateRender->getProperty (
+                                                       "reproducibility").getDynamicObject();
+        expect (candidateReproducibility != nullptr
+                    && candidateReproducibility->getProperty (
+                           "compilerId").toString().toStdString()
+                           == firstRun.value->front().reproducibility.compilerId
+                    && candidateReproducibility->getProperty (
+                           "compilerVersion").toString().toStdString()
+                           == firstRun.value->front().reproducibility.compilerVersion,
+                "candidate render provenance must serialize configured compiler identity");
+        juce::var parsedCandidateMetrics;
+        const auto candidateMetricsParsed = juce::JSON::parse (
+            candidateA.getChildFile ("metrics.json").loadFileAsString(), parsedCandidateMetrics);
+        const auto* candidateMetricsRoot = parsedCandidateMetrics.getDynamicObject();
+        const auto* candidateMetricRecords = candidateMetricsRoot == nullptr
+                                               ? nullptr
+                                               : candidateMetricsRoot->getProperty ("records").getArray();
+        const auto* candidateMetricRecord = candidateMetricRecords == nullptr
+                                              || candidateMetricRecords->isEmpty()
+                                            ? nullptr
+                                            : candidateMetricRecords->getReference (0).getDynamicObject();
+        const auto* candidateMetricProvenance = candidateMetricRecord == nullptr
+                                                   ? nullptr
+                                                   : candidateMetricRecord->getProperty (
+                                                         "provenance").getDynamicObject();
+        expect (candidateMetricsParsed.wasOk() && candidateMetricProvenance != nullptr
+                    && candidateMetricProvenance->getProperty (
+                           "fixturePurpose").toString().toStdString() == fixtures.front().purpose
+                    && candidateMetricProvenance->getProperty (
+                           "fixtureReviewStatus").toString() == "foundation-reviewed",
+                "metric provenance must carry governed fixture purpose and review status");
+        expect (candidateMetricProvenance != nullptr
+                    && candidateMetricProvenance->getProperty (
+                           "compilerId").toString().toStdString()
+                           == firstRun.value->front().reproducibility.compilerId
+                    && candidateMetricProvenance->getProperty (
+                           "compilerVersion").toString().toStdString()
+                           == firstRun.value->front().reproducibility.compilerVersion,
+                "metric provenance must serialize configured compiler identity");
         for (const auto name : { "render.json", "control-trace.json", "event-trace.json",
                                  "metrics.json" })
             expect (candidateA.getChildFile (name).hasIdenticalContentTo (
@@ -1842,7 +2018,10 @@ private:
         expectDiagnostic (ReferenceHarness::loadRenderFixture (fixtureRoot.directory, fixtureFile), code);
     }
 
-    void expectFixtureValid (const juce::File& sourceRoot, const juce::String& contents)
+    void expectFixtureValid (
+        const juce::File& sourceRoot,
+        const juce::String& contents,
+        const std::optional<double> expectedPriorNormalized = std::nullopt)
     {
         const TemporaryDirectory fixtureRoot { "model-d-reference-fixture-positive" };
         expect (fixtureRoot.isOwned(), "positive fixture root must be owned");
@@ -1858,8 +2037,36 @@ private:
                     "positive fixture must copy each referenced state");
         const auto fixtureFile = fixtureRoot.directory.getChildFile ("fixture.json");
         fixtureFile.replaceWithText (contents);
-        expect (ReferenceHarness::loadRenderFixture (fixtureRoot.directory, fixtureFile).ok(),
+        const auto loaded = ReferenceHarness::loadRenderFixture (
+            fixtureRoot.directory, fixtureFile);
+        expect (loaded.ok(),
                 "same-sample enable then disable must leave stochastic processing off");
+        if (loaded.value.has_value() && expectedPriorNormalized.has_value()) {
+            const auto& request = loaded.value->analysisRequests.back();
+            expect (request.start.has_value(), "control request must retain its effective start");
+            MoogMiniAudioProcessor processor;
+            const auto* parameter = processor.getPreparedParameter (request.parameterKey);
+            expect (parameter != nullptr, "control request parameter must be prepared");
+            if (request.start.has_value() && parameter != nullptr) {
+                const auto normalized = parameter->convertTo0to1 (
+                    parameter->convertFrom0to1 (
+                        static_cast<float> (*expectedPriorNormalized)));
+                const auto expected = request.controlDomain == ReferenceHarness::ControlDomain::normalized
+                                        ? normalized
+                                        : parameter->convertFrom0to1 (normalized);
+                expectWithinAbsoluteError (
+                    *request.start, static_cast<double> (expected), 0.0,
+                    "loaded control start must be the processor-domain float value");
+            }
+            const auto rendered = ReferenceHarness::renderFixture (*loaded.value);
+            const auto metrics = rendered.ok()
+                                   ? ReferenceHarness::analyzeFixtureMetrics (
+                                         *loaded.value, *rendered.value)
+                                   : ReferenceHarness::LoadResult<std::vector<
+                                         ReferenceHarness::MetricEvidenceRecord>> {};
+            expect (rendered.ok() && metrics.ok(),
+                    "dense control analysis must consume the derived effective endpoints");
+        }
     }
 };
 
@@ -2144,6 +2351,25 @@ public:
         forgedRenderPath.record.provenance.fixturePath =
             "Tests/reference/fixtures/migrated-v2-foundation.json";
         expectRenderForgery (std::move (forgedRenderPath), "fixture-path");
+        expect (renderEvidence.record.provenance.fixturePurpose
+                    == indexedRender.value->purpose
+                    && renderEvidence.record.provenance.fixtureReviewStatus
+                           == indexedRender.value->reviewStatus,
+                "render metric evidence must retain typed fixture governance provenance");
+        auto forgedRenderPurpose = renderEvidence;
+        forgedRenderPurpose.record.provenance.fixturePurpose = "Forged fixture purpose";
+        expectRenderForgery (std::move (forgedRenderPurpose), "fixture-purpose");
+        auto forgedRenderReviewStatus = renderEvidence;
+        forgedRenderReviewStatus.record.provenance.fixtureReviewStatus =
+            static_cast<FixtureReviewStatus> (999);
+        expectRenderForgery (std::move (forgedRenderReviewStatus), "fixture-review-status");
+        auto forgedRenderCompilerId = renderEvidence;
+        forgedRenderCompilerId.record.provenance.reproducibility.compilerId = "forged-compiler";
+        expectRenderForgery (std::move (forgedRenderCompilerId), "compiler-id");
+        auto forgedRenderCompilerVersion = renderEvidence;
+        forgedRenderCompilerVersion.record.provenance.reproducibility.compilerVersion =
+            "0.0-forged";
+        expectRenderForgery (std::move (forgedRenderCompilerVersion), "compiler-version");
         auto forgedRenderRequest = renderEvidence;
         forgedRenderRequest.record.provenance.requestId = "forged-request";
         expectRenderForgery (std::move (forgedRenderRequest), "request-id");

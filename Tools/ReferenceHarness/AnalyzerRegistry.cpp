@@ -487,8 +487,14 @@ juce::String metricEvidenceJson (const std::span<const MetricEvidenceRecord> rec
             provenance->setProperty ("architecture", juce::String { source.reproducibility.architecture });
             provenance->setProperty ("blockPatterns", blockPatterns (source.blockPatterns));
             provenance->setProperty ("buildType", juce::String { source.reproducibility.buildType });
+            provenance->setProperty ("compilerId", juce::String { source.reproducibility.compilerId });
+            provenance->setProperty ("compilerVersion", juce::String {
+                source.reproducibility.compilerVersion });
             provenance->setProperty ("fixtureId", juce::String { source.fixtureId });
             provenance->setProperty ("fixturePath", juce::String { source.fixturePath });
+            provenance->setProperty ("fixturePurpose", juce::String { source.fixturePurpose });
+            provenance->setProperty ("fixtureReviewStatus", juce::String {
+                fixtureReviewStatusName (source.fixtureReviewStatus).data() });
             provenance->setProperty ("fixtureSha256", juce::String { source.fixtureSha256 });
             provenance->setProperty ("inputHashes", stringMap (source.reproducibility.inputHashes));
             provenance->setProperty ("juceCommit", juce::String { source.reproducibility.juceCommit });
@@ -501,6 +507,9 @@ juce::String metricEvidenceJson (const std::span<const MetricEvidenceRecord> rec
             provenance->setProperty ("sourceCommit", juce::String { source.reproducibility.sourceCommit });
             provenance->setProperty ("totalSamples", static_cast<juce::int64> (source.totalSamples));
         } else {
+            provenance->setProperty ("compilerId", juce::String { source.reproducibility.compilerId });
+            provenance->setProperty ("compilerVersion", juce::String {
+                source.reproducibility.compilerVersion });
             provenance->setProperty ("registryCount", static_cast<juce::int64> (source.registryCount));
             provenance->setProperty ("registryPath", juce::String { source.registryPath });
             provenance->setProperty ("registrySha256", juce::String { source.registrySha256 });

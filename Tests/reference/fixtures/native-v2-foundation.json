@@ -1,6 +1,8 @@
 {
   "schema": "model-d.render-fixture.v1",
   "id": "native-v2-foundation",
+  "purpose": "Exercise native v2 state restoration, deterministic rendering, and typed audio analysis.",
+  "reviewStatus": "foundation-reviewed",
   "state": {
     "kind": "hostState",
     "path": "Tests/fixtures/state/native-default-state-v2.xml",

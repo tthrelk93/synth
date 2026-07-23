@@ -2,6 +2,7 @@
 
 #include "AnalyzerRegistry.h"
 #include "ParameterRegistry.h"
+#include "PluginProcessor.h"
 #include "StateContract.h"
 
 #include <juce_cryptography/juce_cryptography.h>
@@ -75,6 +76,31 @@ bool isLowercaseSha256 (const std::string& hash)
            });
 }
 
+bool isPlaceholderPurpose (const std::string& purpose)
+{
+    const auto first = std::find_if_not (purpose.begin(), purpose.end(), [] (const unsigned char value) {
+        return std::isspace (value) != 0;
+    });
+    const auto last = std::find_if_not (purpose.rbegin(), purpose.rend(), [] (const unsigned char value) {
+        return std::isspace (value) != 0;
+    }).base();
+    if (first >= last)
+        return true;
+
+    std::string normalized (first, last);
+    std::transform (normalized.begin(), normalized.end(), normalized.begin(), [] (const unsigned char value) {
+        return static_cast<char> (std::tolower (value));
+    });
+    constexpr std::array placeholders {
+        std::string_view { "fixme" }, std::string_view { "n/a" },
+        std::string_view { "na" }, std::string_view { "placeholder" },
+        std::string_view { "tbd" }, std::string_view { "todo" },
+        std::string_view { "unknown" },
+    };
+    return std::find (placeholders.begin(), placeholders.end(), normalized)
+        != placeholders.end();
+}
+
 bool metricBelongsToAnalyzer (const std::string_view analyzer,
                               const std::string_view metric)
 {
@@ -93,16 +119,6 @@ bool metricBelongsToAnalyzer (const std::string_view analyzer,
             || metric == "post-rms" || metric == "peak-over-steady-state"
             || metric == "finite-count";
     return false;
-}
-
-double physicalValueFor (const ParameterRegistry::Key key, const double normalized)
-{
-    const auto& descriptor = ParameterRegistry::descriptor (key);
-    const juce::NormalisableRange<float> range {
-        descriptor.rangeStart, descriptor.rangeEnd, descriptor.rangeInterval,
-        descriptor.rangeSkew, descriptor.symmetricSkew,
-    };
-    return static_cast<double> (range.convertFrom0to1 (static_cast<float> (normalized)));
 }
 
 bool hasDisallowedPathSyntax (std::string_view relativePath, std::string& code)
@@ -706,6 +722,16 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         || ! isPortableIdentifierComponent (fixture.id))
         return failure<RenderFixture> (
             "fixture.id", "render fixture identifier must be one portable filename component");
+    if (! readRequiredString (*root, "purpose", fixture.purpose)
+        || isPlaceholderPurpose (fixture.purpose))
+        return failure<RenderFixture> (
+            "fixture.purpose", "render fixture purpose must be a non-placeholder string");
+    std::string reviewStatus;
+    if (! readRequiredString (*root, "reviewStatus", reviewStatus)
+        || reviewStatus != fixtureReviewStatusName (FixtureReviewStatus::foundationReviewed))
+        return failure<RenderFixture> (
+            "fixture.review-status", "render fixture review status is unsupported");
+    fixture.reviewStatus = FixtureReviewStatus::foundationReviewed;
 
     const auto* stateValue = requiredProperty (*root, "state");
     const auto* state = stateValue == nullptr ? nullptr : stateValue->getDynamicObject();
@@ -749,6 +775,15 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         || compatibility->getStringAttribute ("contourContract") != juce::String { contourContract })
         return failure<RenderFixture> ("fixture.state-contract",
                                        "render state bytes do not match the declared v2 contour contract");
+    MoogMiniAudioProcessor restoredProcessor;
+    juce::MemoryBlock restoredStateBytes;
+    juce::AudioProcessor::copyXmlToBinary (*stateXml, restoredStateBytes);
+    const auto restoredState = restoredProcessor.restoreState (
+        restoredStateBytes.getData(), static_cast<int> (restoredStateBytes.getSize()));
+    if (! restoredState.succeeded()
+        || restoredProcessor.getContourContract() != fixture.expectedContourContract)
+        return failure<RenderFixture> (
+            "fixture.state-contract", "render state cannot restore through the live processor");
 
     const auto* renderValue = requiredProperty (*root, "render");
     const auto* render = renderValue == nullptr ? nullptr : renderValue->getDynamicObject();
@@ -1054,7 +1089,7 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
             }) || std::any_of (fixture.midi.begin(), fixture.midi.end(), [&] (const auto& event) {
                 return event.sample == request.eventSample;
             });
-        if (! anchored)
+        if (request.inputKind == AnalysisInputKind::audio && ! anchored)
             return failure<RenderFixture> (
                 "fixture.analysis-event", "analysis event origin must name a rendered event sample");
 
@@ -1092,25 +1127,50 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
                 || (request.target.has_value() && ! endpointInDomain (*request.target)))
                 return failure<RenderFixture> (
                     "fixture.analysis-endpoints", "control analysis endpoints are outside the domain");
-            if (request.target.has_value()) {
-                const auto targetEvent = std::find_if (
-                    fixture.automation.begin(), fixture.automation.end(), [&] (const auto& event) {
-                        return event.sample == request.eventSample
-                            && event.key == request.parameterKey;
-                    });
-                const auto expectedTarget = targetEvent == fixture.automation.end()
-                    ? std::numeric_limits<double>::quiet_NaN()
-                    : (request.controlDomain == ControlDomain::normalized
-                           ? static_cast<double> (targetEvent->normalizedValue)
-                           : physicalValueFor (targetEvent->key, targetEvent->normalizedValue));
-                if (! std::isfinite (expectedTarget)
-                    || std::abs (*request.target - expectedTarget)
-                           > 8.0 * std::numeric_limits<double>::epsilon()
-                                 * std::max (1.0, std::abs (expectedTarget)))
-                    return failure<RenderFixture> (
-                        "fixture.analysis-endpoints",
-                        "control target must match automation at the analysis event");
+            auto* parameter = restoredProcessor.getPreparedParameter (request.parameterKey);
+            if (parameter == nullptr)
+                return failure<RenderFixture> (
+                    "fixture.analysis-input", "control analysis parameter is unavailable");
+            const auto canonicalNormalized = [&] (const float normalized) {
+                return parameter->convertTo0to1 (parameter->convertFrom0to1 (normalized));
+            };
+            auto effectiveStartNormalized = canonicalNormalized (parameter->getValue());
+            const AutomationEvent* targetEvent = nullptr;
+            for (const auto* event : orderedAutomation) {
+                if (event->key != request.parameterKey)
+                    continue;
+                if (event->sample < request.eventSample)
+                    effectiveStartNormalized = canonicalNormalized (event->normalizedValue);
+                else if (event->sample == request.eventSample)
+                    targetEvent = event;
             }
+            if (targetEvent == nullptr)
+                return failure<RenderFixture> (
+                    "fixture.analysis-event",
+                    "control analysis origin must contain its own parameter automation");
+            const auto effectiveTargetNormalized = canonicalNormalized (
+                targetEvent->normalizedValue);
+            const auto inRequestedDomain = [&] (const float normalized) {
+                return request.controlDomain == ControlDomain::normalized
+                    ? normalized : parameter->convertFrom0to1 (normalized);
+            };
+            const auto effectiveStart = inRequestedDomain (effectiveStartNormalized);
+            const auto effectiveTarget = inRequestedDomain (effectiveTargetNormalized);
+            const auto sameFloatValue = [] (const double declared, const float effective) {
+                const auto declaredFloat = static_cast<float> (declared);
+                return std::isfinite (declaredFloat)
+                    && std::abs (declaredFloat - effective)
+                           <= 8.0f * std::numeric_limits<float>::epsilon()
+                                  * std::max (1.0f, std::abs (effective));
+            };
+            if (! sameFloatValue (*request.start, effectiveStart)
+                || (request.target.has_value()
+                    && ! sameFloatValue (*request.target, effectiveTarget)))
+                return failure<RenderFixture> (
+                    "fixture.analysis-endpoints",
+                    "control endpoints must match restored and ordered automation values");
+            request.start = static_cast<double> (effectiveStart);
+            request.target = static_cast<double> (effectiveTarget);
         }
         fixture.analysisRequests.push_back (std::move (request));
     }

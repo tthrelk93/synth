@@ -1,6 +1,8 @@
 {
   "schema": "model-d.render-fixture.v1",
   "id": "migrated-v2-foundation",
+  "purpose": "Exercise migrated v2 state restoration under the legacy contour compatibility contract.",
+  "reviewStatus": "foundation-reviewed",
   "state": {
     "kind": "hostState",
     "path": "Tests/fixtures/state/migrated-default-state-v2.xml",

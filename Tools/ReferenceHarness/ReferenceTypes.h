@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace ReferenceHarness {
@@ -80,6 +81,8 @@ struct ReproducibilityInfo {
     std::string buildType;
     std::string platform;
     std::string architecture;
+    std::string compilerId;
+    std::string compilerVersion;
     std::string fixtureSha256;
     std::map<std::string, std::string> inputHashes;
     std::map<std::string, std::string> outputHashes;
@@ -94,6 +97,15 @@ struct AnalyzerIdentity {
 enum class AnalysisInputKind { audio, control };
 enum class AudioTap { main, phones };
 enum class ControlDomain { normalized, physical };
+enum class FixtureReviewStatus { foundationReviewed };
+
+constexpr std::string_view fixtureReviewStatusName (const FixtureReviewStatus status) noexcept
+{
+    switch (status) {
+        case FixtureReviewStatus::foundationReviewed: return "foundation-reviewed";
+    }
+    return "unsupported";
+}
 
 struct FixtureAnalysisRequest {
     std::string id;
@@ -114,6 +126,8 @@ struct FixtureAnalysisRequest {
 
 struct RenderFixture {
     std::string id;
+    std::string purpose;
+    FixtureReviewStatus reviewStatus = FixtureReviewStatus::foundationReviewed;
     juce::File fixtureFile;
     std::string fixtureRelativePath;
     juce::File stateFile;
@@ -171,6 +185,8 @@ enum class MetricSubjectKind { render, liveRegistry };
 struct MetricProvenance {
     MetricSubjectKind kind = MetricSubjectKind::render;
     std::string fixtureId;
+    std::string fixturePurpose;
+    FixtureReviewStatus fixtureReviewStatus = FixtureReviewStatus::foundationReviewed;
     std::string fixturePath;
     std::string fixtureSha256;
     std::string requestId;
