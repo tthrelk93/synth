@@ -166,6 +166,7 @@ struct RenderResult {
 
 struct AnalysisRequest {
     std::string metric;
+    double sampleRate = 0.0;
     std::uint64_t eventSample = 0;
     std::uint64_t durationSamples = 0;
     double start = 0.0;

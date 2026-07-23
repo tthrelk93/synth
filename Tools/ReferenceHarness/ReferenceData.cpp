@@ -118,6 +118,9 @@ bool metricBelongsToAnalyzer (const std::string_view analyzer,
         return metric == "maximum-first-difference" || metric == "pre-rms"
             || metric == "post-rms" || metric == "peak-over-steady-state"
             || metric == "finite-count";
+    if (analyzer == "audio.pitch.v1")
+        return metric == "frequency-hz" || metric == "midi-semitones"
+            || metric == "confidence";
     return false;
 }
 

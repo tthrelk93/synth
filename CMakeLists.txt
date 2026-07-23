@@ -755,6 +755,8 @@ target_link_libraries(ModelDOfflineRenderer
     set_tests_properties(ModelDReferenceRendererContract PROPERTIES LABELS "dsp;state")
     synth_add_reference_test(ModelDReferenceAnalyzerContract analyzers)
     set_tests_properties(ModelDReferenceAnalyzerContract PROPERTIES LABELS "unit;dsp")
+    synth_add_reference_test(ModelDReferencePitchContract pitch)
+    set_tests_properties(ModelDReferencePitchContract PROPERTIES LABELS "unit;dsp")
     synth_add_reference_test(ModelDReferenceRequirementContract requirements)
     set_tests_properties(ModelDReferenceRequirementContract PROPERTIES LABELS "artifact;state")
 

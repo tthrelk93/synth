@@ -530,6 +530,7 @@ LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetricsImpl (
             std::vector<double> control;
             AnalysisRequest request;
             request.metric = fixtureRequest.metric;
+            request.sampleRate = result.sampleRate;
             request.eventSample = fixtureRequest.eventSample;
             request.durationSamples = fixtureRequest.windowSamples - 1;
             request.start = fixtureRequest.start.value_or (0.0);

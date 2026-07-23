@@ -463,6 +463,9 @@ bool knownMetric (const std::string_view analyzer, const std::string_view metric
         return metric == "maximum-first-difference" || metric == "pre-rms"
             || metric == "post-rms" || metric == "peak-over-steady-state"
             || metric == "finite-count";
+    if (analyzer == "audio.pitch.v1")
+        return metric == "frequency-hz" || metric == "midi-semitones"
+            || metric == "confidence";
     return false;
 }
 
@@ -470,7 +473,8 @@ bool knownUnit (const std::string_view unit)
 {
     constexpr std::array units {
         "count", "amplitude", "amplitude/sample", "samples", "boolean",
-        "normalized", "normalized/sample", "dB", "seconds",
+        "normalized", "normalized/sample", "dB", "seconds", "Hz", "semitones",
+        "ratio",
     };
     return std::find (units.begin(), units.end(), unit) != units.end();
 }

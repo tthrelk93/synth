@@ -387,6 +387,169 @@ LoadResult<Metrics> analyzeAudioClick (const AnalysisRequest& request)
     return selectMetric (std::move (metrics), request.metric);
 }
 
+LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
+{
+    const AnalyzerIdentity identity { "audio.pitch.v1", 1 };
+    const std::map<std::string, std::string> settings {
+        { "algorithm", "normalized-autocorrelation-parabolic-v1" },
+        { "ambiguity-separation", "0.02" },
+        { "confidence-threshold", "0.80" },
+        { "lag-range", "20Hz..5000Hz" },
+        { "minimum-periods", "4" },
+        { "periodic-multiple-tolerance", "0.05" },
+    };
+    const auto makeMetrics = [&] (const double frequency,
+                                  const double midi,
+                                  const double confidence,
+                                  const bool finite) {
+        return Metrics {
+            metric (identity, "frequency-hz", "Hz", frequency, 0.0, finite, settings),
+            metric (identity, "midi-semitones", "semitones", midi, 0.01, finite, settings),
+            metric (identity, "confidence", "ratio", confidence, 0.0, finite, settings),
+        };
+    };
+    const auto reject = [&] (std::string code, std::string message) {
+        return selectMetric (
+            makeMetrics (0.0, 0.0, 0.0, false), request.metric,
+            { { std::move (code), std::move (message) } });
+    };
+
+    if (! std::isfinite (request.sampleRate) || request.sampleRate <= 0.0
+        || request.sampleRate / 5000.0
+               > static_cast<double> (std::numeric_limits<size_t>::max()))
+        return reject ("analyzer.sample-rate",
+                       "pitch analysis requires a finite positive sample rate");
+    auto audio = request.audio;
+    if (request.eventSample != 0 || request.durationSamples != 0) {
+        if (request.eventSample >= request.audio.size()
+            || request.durationSamples
+                   > request.audio.size() - 1 - request.eventSample)
+            return reject ("analyzer.pitch-window",
+                           "pitch analysis event window is outside the audio input");
+        audio = request.audio.subspan (
+            static_cast<size_t> (request.eventSample),
+            static_cast<size_t> (request.durationSamples + 1));
+    }
+    if (audio.empty())
+        return reject ("analyzer.pitch-window",
+                       "pitch analysis requires at least four periods");
+    if (! std::all_of (audio.begin(), audio.end(), [] (const auto sample) {
+            return std::isfinite (sample);
+        }))
+        return reject ("analyzer.non-finite",
+                       "pitch analysis requires only finite audio samples");
+
+    const auto sampleCount = static_cast<double> (audio.size());
+    const auto mean = std::accumulate (
+        audio.begin(), audio.end(), 0.0,
+        [] (const double sum, const float sample) {
+            return sum + static_cast<double> (sample);
+        }) / sampleCount;
+    std::vector<double> centered;
+    centered.reserve (audio.size());
+    double squares = 0.0;
+    for (const auto sample : audio) {
+        const auto value = static_cast<double> (sample) - mean;
+        centered.push_back (value);
+        squares += value * value;
+    }
+    const auto rms = std::sqrt (squares / sampleCount);
+    if (! std::isfinite (rms))
+        return reject ("analyzer.overflow",
+                       "pitch analysis exceeded the finite arithmetic domain");
+    if (rms < 1.0e-7)
+        return reject ("analyzer.pitch-silence",
+                       "pitch analysis requires signal above the silence threshold");
+
+    const auto minimumLag = static_cast<size_t> (
+        std::max (2.0, std::floor (request.sampleRate / 5000.0)));
+    const auto maximumLag = static_cast<size_t> (
+        std::min (std::floor (request.sampleRate / 20.0),
+                  static_cast<double> (audio.size() / 4)));
+    if (maximumLag <= minimumLag)
+        return reject ("analyzer.pitch-window",
+                       "pitch analysis requires at least four periods in the search window");
+
+    std::vector<double> correlation (maximumLag + 2, 0.0);
+    for (auto lag = minimumLag - 1; lag <= maximumLag + 1; ++lag) {
+        double cross = 0.0;
+        double leftSquares = 0.0;
+        double rightSquares = 0.0;
+        const auto limit = centered.size() - lag;
+        for (size_t sample = 0; sample < limit; ++sample) {
+            const auto left = centered[sample];
+            const auto right = centered[sample + lag];
+            cross += left * right;
+            leftSquares += left * left;
+            rightSquares += right * right;
+        }
+        const auto normalization = std::sqrt (leftSquares * rightSquares);
+        if (normalization > 0.0 && std::isfinite (normalization))
+            correlation[lag] = std::clamp (cross / normalization, -1.0, 1.0);
+    }
+    struct Peak {
+        size_t lag = 0;
+        double correlation = 0.0;
+    };
+    std::vector<Peak> peaks;
+    if (correlation[minimumLag] > correlation[minimumLag - 1]
+        && correlation[minimumLag] > correlation[minimumLag + 1])
+        peaks.push_back ({ minimumLag, correlation[minimumLag] });
+    for (auto lag = minimumLag + 1; lag < maximumLag; ++lag)
+        if (correlation[lag] > correlation[lag - 1]
+            && correlation[lag] > correlation[lag + 1])
+            peaks.push_back ({ lag, correlation[lag] });
+    if (correlation[maximumLag] > correlation[maximumLag - 1]
+        && correlation[maximumLag] > correlation[maximumLag + 1])
+        peaks.push_back ({ maximumLag, correlation[maximumLag] });
+    if (peaks.empty())
+        return reject ("analyzer.pitch-ambiguous",
+                       "pitch analysis found no strict local correlation peak");
+
+    const auto greatestPeak = std::max_element (
+        peaks.begin(), peaks.end(), [] (const auto& left, const auto& right) {
+            return left.correlation < right.correlation;
+        })->correlation;
+    const auto selected = std::find_if (peaks.begin(), peaks.end(), [&] (const auto& peak) {
+        return peak.correlation >= 0.80
+            && peak.correlation >= greatestPeak - 0.02;
+    });
+    if (selected == peaks.end())
+        return reject ("analyzer.pitch-ambiguous",
+                       "pitch correlation confidence is below the calibrated threshold");
+    if (selected->lag == minimumLag || selected->lag == maximumLag)
+        return reject ("analyzer.pitch-window",
+                       "pitch correlation peak lies on the search boundary");
+
+    const auto interpolateLag = [&] (const size_t lag) {
+        const auto left = correlation[lag - 1];
+        const auto center = correlation[lag];
+        const auto right = correlation[lag + 1];
+        const auto denominator = left - 2.0 * center + right;
+        const auto correction = denominator == 0.0
+                              ? 0.0 : 0.5 * (left - right) / denominator;
+        return static_cast<double> (lag) + std::clamp (correction, -0.5, 0.5);
+    };
+    const auto selectedLag = interpolateLag (selected->lag);
+    const auto ambiguous = std::any_of (peaks.begin(), peaks.end(), [&] (const auto& peak) {
+        if (peak.lag == selected->lag
+            || std::abs (peak.correlation - selected->correlation) > 0.02)
+            return false;
+        const auto ratio = interpolateLag (peak.lag) / selectedLag;
+        const auto multiple = std::max (1.0, std::round (ratio));
+        return std::abs (ratio - multiple) > 0.05;
+    });
+    if (ambiguous)
+        return reject ("analyzer.pitch-ambiguous",
+                       "pitch analysis found competing non-periodic correlation peaks");
+
+    const auto center = correlation[selected->lag];
+    const auto frequency = request.sampleRate / selectedLag;
+    const auto midi = 69.0 + 12.0 * std::log2 (frequency / 440.0);
+    return selectMetric (
+        makeMetrics (frequency, midi, center, true), request.metric);
+}
+
 } // namespace
 
 AnalyzerRegistry AnalyzerRegistry::withFoundationAnalyzers()
@@ -396,6 +559,7 @@ AnalyzerRegistry AnalyzerRegistry::withFoundationAnalyzers()
         { "signal.stats.v1", 1 },
         { "control.step.v1", 1 },
         { "audio.click.v1", 1 },
+        { "audio.pitch.v1", 1 },
     };
     return registry;
 }
@@ -421,7 +585,9 @@ LoadResult<std::vector<MetricResult>> AnalyzerRegistry::analyze (
         return analyzeSignalStats (request);
     if (analyzerId == "control.step.v1")
         return analyzeControlStep (request);
-    return analyzeAudioClick (request);
+    if (analyzerId == "audio.click.v1")
+        return analyzeAudioClick (request);
+    return analyzeAudioPitch (request);
 }
 
 juce::String metricResultsJson (const std::span<const MetricResult> metrics)

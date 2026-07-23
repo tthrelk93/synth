@@ -1512,6 +1512,212 @@ private:
 
 ReferenceAnalyzerTest referenceAnalyzerTest;
 
+class ReferencePitchTest final : public juce::UnitTest {
+public:
+    ReferencePitchTest()
+        : juce::UnitTest ("ModelDReferencePitchContract", "pitch")
+    {
+    }
+
+    void runTest() override
+    {
+        using namespace ReferenceHarness;
+        const auto registry = AnalyzerRegistry::withFoundationAnalyzers();
+
+        beginTest ("versioned periodic pitch analyzer calibrates across pitch and sample rate");
+        const auto identity = registry.find ("audio.pitch.v1");
+        expect (identity.ok() && identity.value->id == "audio.pitch.v1"
+                    && identity.value->version == 1,
+                "audio.pitch.v1 must resolve at version one");
+        constexpr std::array sampleRates { 44100.0, 48000.0, 96000.0 };
+        constexpr std::array midiCoordinates { 36.0, 60.0, 69.0, 77.0, 96.0 };
+        for (const auto sampleRate : sampleRates) {
+            for (const auto midi : midiCoordinates) {
+                const auto tone = makeTone (sampleRate, midi, 8192);
+                const auto analyzed = registry.analyze (
+                    "audio.pitch.v1",
+                    AnalysisRequest {
+                        .metric = "midi-semitones",
+                        .sampleRate = sampleRate,
+                        .audio = tone,
+                    });
+                expect (analyzed.ok() && analyzed.value.has_value()
+                            && analyzed.value->size() == 1,
+                        "each analytic tone must produce one selected pitch metric");
+                if (! analyzed.value.has_value() || analyzed.value->size() != 1)
+                    continue;
+                const auto& result = analyzed.value->front();
+                const auto error = std::abs (result.value - midi);
+                logMessage ("pitch-grid sample-rate=" + juce::String { sampleRate, 0 }
+                            + " midi=" + juce::String { midi, 0 }
+                            + " error-semitones=" + juce::String { error, 9 });
+                expect (result.metric == "midi-semitones" && result.unit == "semitones",
+                        "the selected pitch coordinate must use the governed metric and unit");
+                expect (result.finite && std::isfinite (result.value),
+                        "calibrated pitch metrics must be finite");
+                expect (error < 0.005,
+                        "analytic pitch error must remain below 0.005 semitone");
+            }
+        }
+
+        beginTest ("periodic pitch reports the complete metric and settings contract");
+        const auto concertA = makeTone (48000.0, 69.0, 8192);
+        const auto complete = registry.analyze (
+            "audio.pitch.v1",
+            AnalysisRequest { .sampleRate = 48000.0, .audio = concertA });
+        expect (complete.ok() && complete.value.has_value() && complete.value->size() == 3,
+                "a periodic tone must report all three pitch metrics");
+        expectMetric (complete, "frequency-hz", "Hz", 440.0, 0.1);
+        expectMetric (complete, "midi-semitones", "semitones", 69.0, 0.005);
+        if (complete.value.has_value()) {
+            const auto midi = findMetric (*complete.value, "midi-semitones");
+            const auto confidence = findMetric (*complete.value, "confidence");
+            expect (midi != nullptr && midi->allowance == 0.01,
+                    "the governed pitch-coordinate allowance must be one cent");
+            expect (confidence != nullptr && confidence->unit == "ratio"
+                        && confidence->finite && confidence->value >= 0.80
+                        && confidence->value <= 1.0,
+                    "pitch confidence must be a finite normalized ratio above threshold");
+            expect (complete.value->front().settings == std::map<std::string, std::string> {
+                        { "algorithm", "normalized-autocorrelation-parabolic-v1" },
+                        { "ambiguity-separation", "0.02" },
+                        { "confidence-threshold", "0.80" },
+                        { "lag-range", "20Hz..5000Hz" },
+                        { "minimum-periods", "4" },
+                        { "periodic-multiple-tolerance", "0.05" },
+                    },
+                    "pitch analyzer settings must be exact and explicit");
+        }
+
+        beginTest ("fixture pitch analysis propagates the exact render sample rate");
+        RenderFixture fixture;
+        fixture.id = "pitch-sample-rate-propagation";
+        fixture.fixtureRelativePath =
+            "Tests/reference/fixtures/pitch-sample-rate-propagation.json";
+        fixture.config.sampleRate = 44100.0;
+        fixture.config.totalSamples = 8192;
+        fixture.config.blockPatterns = { { 8192 } };
+        FixtureAnalysisRequest pitchRequest;
+        pitchRequest.id = "concert-a";
+        pitchRequest.version = 1;
+        pitchRequest.analyzer = { "audio.pitch.v1", 1 };
+        pitchRequest.metric = "midi-semitones";
+        pitchRequest.inputKind = AnalysisInputKind::audio;
+        pitchRequest.audioTap = AudioTap::main;
+        pitchRequest.channel = 0;
+        pitchRequest.eventSample = 4096;
+        pitchRequest.windowSamples = 4096;
+        fixture.analysisRequests = { pitchRequest };
+        RenderResult render;
+        render.sampleRate = 48000.0;
+        render.mainChannels = 1;
+        render.main = makeTone (48000.0, 60.0, 4096);
+        const auto requestedTone = makeTone (48000.0, 69.0, 4096);
+        render.main.insert (render.main.end(), requestedTone.begin(), requestedTone.end());
+        render.blockPattern = { 8192 };
+        const std::array renders { render };
+        const auto evidence = analyzeFixtureMetrics (fixture, renders);
+        expect (evidence.ok() && evidence.value.has_value() && evidence.value->size() == 1,
+                "fixture pitch analysis must consume its requested window and render sample rate");
+        if (evidence.value.has_value() && evidence.value->size() == 1)
+            expectWithinAbsoluteError (
+                evidence.value->front().metric.value, 69.0, 0.005,
+                "fixture pitch evidence must retain the analytic MIDI coordinate");
+
+        beginTest ("pitch rejection diagnostics are stable and periodic multiples are accepted");
+        const std::vector<float> silence (4096, 0.0f);
+        const auto shortTone = makeTone (48000.0, 69.0, 32);
+        const auto boundaryFrequency = 48000.0 / std::floor (48000.0 / 5000.0);
+        const auto boundaryTone = makeTone (
+            48000.0, 69.0 + 12.0 * std::log2 (boundaryFrequency / 440.0), 4096);
+        std::vector<float> ambiguous (4096);
+        for (size_t sample = 0; sample < ambiguous.size(); ++sample) {
+            const auto time = static_cast<double> (sample) / 48000.0;
+            ambiguous[sample] = static_cast<float> (
+                std::sin (juce::MathConstants<double>::twoPi * 150.0 * time)
+                + 0.2 * std::sin (juce::MathConstants<double>::twoPi * 660.0 * time));
+        }
+        auto nonFinite = concertA;
+        nonFinite[100] = std::numeric_limits<float>::quiet_NaN();
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v1", AnalysisRequest { .sampleRate = 0.0, .audio = concertA }),
+            "analyzer.sample-rate");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v1", AnalysisRequest { .sampleRate = 48000.0, .audio = silence }),
+            "analyzer.pitch-silence");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v1", AnalysisRequest { .sampleRate = 48000.0, .audio = shortTone }),
+            "analyzer.pitch-window");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v1", AnalysisRequest { .sampleRate = 48000.0, .audio = boundaryTone }),
+            "analyzer.pitch-window");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v1", AnalysisRequest { .sampleRate = 48000.0, .audio = ambiguous }),
+            "analyzer.pitch-ambiguous");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v1", AnalysisRequest { .sampleRate = 48000.0, .audio = nonFinite }),
+            "analyzer.non-finite");
+    }
+
+private:
+    static std::vector<float> makeTone (const double sampleRate,
+                                        const double midi,
+                                        const size_t sampleCount)
+    {
+        const auto frequency = 440.0 * std::exp2 ((midi - 69.0) / 12.0);
+        std::vector<float> tone (sampleCount);
+        for (size_t sample = 0; sample < tone.size(); ++sample)
+            tone[sample] = static_cast<float> (
+                0.75 * std::sin (juce::MathConstants<double>::twoPi
+                                 * frequency * static_cast<double> (sample) / sampleRate));
+        return tone;
+    }
+
+    static const ReferenceHarness::MetricResult* findMetric (
+        const std::vector<ReferenceHarness::MetricResult>& metrics,
+        const std::string_view name)
+    {
+        const auto found = std::find_if (metrics.begin(), metrics.end(), [&] (const auto& metric) {
+            return metric.metric == name;
+        });
+        return found == metrics.end() ? nullptr : &*found;
+    }
+
+    void expectMetric (const ReferenceHarness::LoadResult<
+                           std::vector<ReferenceHarness::MetricResult>>& result,
+                       const std::string_view name,
+                       const std::string_view unit,
+                       const double expected,
+                       const double tolerance)
+    {
+        expect (result.value.has_value(), "analysis must return pitch metric records");
+        if (! result.value.has_value())
+            return;
+        const auto found = findMetric (*result.value, name);
+        expect (found != nullptr, "pitch metric must be reported: " + std::string { name });
+        if (found != nullptr) {
+            expect (found->unit == unit, "pitch metric unit must be exact: " + std::string { name });
+            expectWithinAbsoluteError (found->value, expected, tolerance,
+                                       "pitch metric must match analytic calibration");
+            expect (found->finite && std::isfinite (found->value),
+                    "pitch metric must be finite and valid");
+        }
+    }
+
+    template <typename T>
+    void expectDiagnostic (const ReferenceHarness::LoadResult<T>& result,
+                           const std::string_view code)
+    {
+        expect (! result.ok(), "negative pitch case must fail");
+        const auto actual = result.diagnostics.empty() ? "<none>" : result.diagnostics.front().code;
+        expect (! result.diagnostics.empty() && actual == code,
+                "negative pitch case must report stable diagnostic " + std::string { code }
+                    + ", got " + actual);
+    }
+};
+
+ReferencePitchTest referencePitchTest;
+
 class ReferenceRendererTest final : public juce::UnitTest {
 public:
     ReferenceRendererTest()
