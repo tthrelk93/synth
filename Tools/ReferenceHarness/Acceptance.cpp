@@ -2,6 +2,7 @@
 
 #include "OfflineRenderer.h"
 #include "ReferenceData.h"
+#include "SourceIdentity.h"
 
 #include <juce_cryptography/juce_cryptography.h>
 
@@ -64,6 +65,15 @@ bool readInteger (const juce::DynamicObject& object, const char* name, int& dest
     if (value == nullptr || ! value->isInt())
         return false;
     destination = static_cast<int> (*value);
+    return true;
+}
+
+bool readBoolean (const juce::DynamicObject& object, const char* name, bool& destination)
+{
+    const auto* value = property (object, name);
+    if (value == nullptr || ! value->isBool())
+        return false;
+    destination = static_cast<bool> (*value);
     return true;
 }
 
@@ -206,7 +216,7 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
     const auto* outputHashes = outputHashesValue == nullptr
                                  ? nullptr : outputHashesValue->getDynamicObject();
     if (root == nullptr || root->getProperties().size() != 12
-        || reproducibility == nullptr || reproducibility->getProperties().size() != 11
+        || reproducibility == nullptr || reproducibility->getProperties().size() != 14
         || outputHashes == nullptr
         || outputHashes->getProperties().size() != 5)
         return failure<BoundCandidate> (
@@ -266,6 +276,9 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
             "candidate render identity and configuration must match the supplied fixture and render");
 
     std::string sourceCommit;
+    std::string sourceTree;
+    std::string sourceContent;
+    bool sourceDirty = false;
     std::string juceCommit;
     std::string buildType;
     std::string platform;
@@ -279,8 +292,19 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
     };
     if (evidence.fixture.input.kind == InputKind::wav)
         expectedInputHashes.emplace ("audio", evidence.fixture.input.sha256);
+    const auto& builtIdentity = builtSourceIdentity();
     if (! readString (*reproducibility, "sourceCommit", sourceCommit)
         || sourceCommit != evidence.render.reproducibility.sourceCommit
+        || sourceCommit != builtIdentity.commit
+        || ! readString (*reproducibility, "sourceTree", sourceTree)
+        || sourceTree != evidence.render.reproducibility.sourceTree
+        || sourceTree != builtIdentity.tree
+        || ! readString (*reproducibility, "sourceContent", sourceContent)
+        || sourceContent != evidence.render.reproducibility.sourceContent
+        || sourceContent != builtIdentity.content
+        || ! readBoolean (*reproducibility, "sourceDirty", sourceDirty)
+        || sourceDirty != evidence.render.reproducibility.sourceDirty
+        || sourceDirty != builtIdentity.dirty
         || ! readString (*reproducibility, "juceCommit", juceCommit)
         || juceCommit != evidence.render.reproducibility.juceCommit
         || ! readString (*reproducibility, "buildType", buildType)
@@ -978,11 +1002,15 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
             const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
             const auto registryFile = resolveBoundedRegularFile (
                 sourceRoot, provenance.registryPath);
+            const auto& builtIdentity = builtSourceIdentity();
             validProvenance = provenance.registryPath
                                     == "Tests/fixtures/parameters/parameter-registry-v2.json"
                            && provenance.registryCount == ParameterRegistry::descriptors().size()
                            && provenance.registryCount == 48
-                           && provenance.reproducibility.sourceCommit == SYNTH_SOURCE_COMMIT
+                           && provenance.reproducibility.sourceCommit == builtIdentity.commit
+                           && provenance.reproducibility.sourceTree == builtIdentity.tree
+                           && provenance.reproducibility.sourceContent == builtIdentity.content
+                           && provenance.reproducibility.sourceDirty == builtIdentity.dirty
                            && provenance.reproducibility.compilerId
                                   == SYNTH_CONFIGURED_COMPILER_ID
                            && provenance.reproducibility.compilerVersion

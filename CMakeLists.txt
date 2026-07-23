@@ -623,32 +623,55 @@ endif()
 if(SYNTH_BUILD_TESTS)
 find_package(Git REQUIRED)
 execute_process(
-    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
+    COMMAND "${GIT_EXECUTABLE}" rev-parse --is-inside-work-tree
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    RESULT_VARIABLE _model_d_source_commit_status
-    OUTPUT_VARIABLE _model_d_source_commit
-    ERROR_VARIABLE _model_d_source_commit_error
+    RESULT_VARIABLE _model_d_source_repository_status
+    OUTPUT_VARIABLE _model_d_source_repository
+    ERROR_VARIABLE _model_d_source_repository_error
     OUTPUT_STRIP_TRAILING_WHITESPACE)
-if(NOT _model_d_source_commit_status EQUAL 0 OR _model_d_source_commit STREQUAL "")
+if(NOT _model_d_source_repository_status EQUAL 0
+   OR NOT _model_d_source_repository STREQUAL "true")
     message(FATAL_ERROR
-        "Reference rendering requires git rev-parse HEAD: ${_model_d_source_commit_error}")
+        "Reference rendering requires git rev-parse HEAD: ${_model_d_source_repository_error}")
 endif()
+
+set(_model_d_source_identity_directory
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/reference-harness")
+set(_model_d_source_identity_header
+    "${_model_d_source_identity_directory}/ModelDSourceIdentity.generated.h")
+add_custom_target(ModelDGenerateSourceIdentity
+    COMMAND "${CMAKE_COMMAND}"
+        "-DSYNTH_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DSYNTH_GIT_EXECUTABLE=${GIT_EXECUTABLE}"
+        "-DSYNTH_TEMPLATE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/SourceIdentity.generated.h.in"
+        "-DSYNTH_OUTPUT=${_model_d_source_identity_header}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateSourceIdentity.cmake"
+    BYPRODUCTS "${_model_d_source_identity_header}"
+    COMMENT "Refreshing exact reference-harness source identity"
+    VERBATIM)
+set_source_files_properties("${_model_d_source_identity_header}"
+    PROPERTIES GENERATED TRUE)
 
 add_library(ModelDReferenceHarness STATIC
     Tools/ReferenceHarness/Acceptance.cpp
     Tools/ReferenceHarness/AnalyzerRegistry.cpp
     Tools/ReferenceHarness/RequirementReporter.cpp
     Tools/ReferenceHarness/ReferenceData.cpp
-    Tools/ReferenceHarness/OfflineRenderer.cpp)
+    Tools/ReferenceHarness/OfflineRenderer.cpp
+    Tools/ReferenceHarness/SourceIdentity.cpp
+    "${_model_d_source_identity_header}")
+add_dependencies(ModelDReferenceHarness ModelDGenerateSourceIdentity)
 synth_enable_project_warnings(
     Tools/ReferenceHarness/Acceptance.cpp
     Tools/ReferenceHarness/AnalyzerRegistry.cpp
     Tools/ReferenceHarness/RequirementReporter.cpp
     Tools/ReferenceHarness/ReferenceData.cpp
-    Tools/ReferenceHarness/OfflineRenderer.cpp)
+    Tools/ReferenceHarness/OfflineRenderer.cpp
+    Tools/ReferenceHarness/SourceIdentity.cpp)
 target_include_directories(ModelDReferenceHarness
     PUBLIC
         Tools/ReferenceHarness
+        "${_model_d_source_identity_directory}"
     PRIVATE
         Source
         cmake/plugin_compat
@@ -668,8 +691,7 @@ set(_model_d_reference_build_definitions
     SYNTH_CONFIGURED_ARCHITECTURE="${CMAKE_SYSTEM_PROCESSOR}"
     SYNTH_CONFIGURED_COMPILER_ID="${CMAKE_CXX_COMPILER_ID}"
     SYNTH_CONFIGURED_COMPILER_VERSION="${CMAKE_CXX_COMPILER_VERSION}"
-    SYNTH_RESOLVED_JUCE_COMMIT="${SYNTH_RESOLVED_JUCE_COMMIT}"
-    SYNTH_SOURCE_COMMIT="${_model_d_source_commit}")
+    SYNTH_RESOLVED_JUCE_COMMIT="${SYNTH_RESOLVED_JUCE_COMMIT}")
 target_compile_definitions(ModelDReferenceHarness
     PUBLIC
         ${_model_d_reference_build_definitions})

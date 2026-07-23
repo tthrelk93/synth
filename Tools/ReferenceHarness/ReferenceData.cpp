@@ -325,12 +325,157 @@ std::optional<Diagnostic> semanticFailure (const char* code, const char* message
     return Diagnostic { code, message };
 }
 
+constexpr std::string_view unitKeyName (const ParameterRegistry::UnitKey value) noexcept
+{
+    using enum ParameterRegistry::UnitKey;
+    switch (value) {
+        case unspecified: return "unspecified";
+        case none: return "none";
+        case choice: return "choice";
+        case semitones: return "semitones";
+        case panelIndex: return "panelIndex";
+        case normalized: return "normalized";
+        case boolean: return "boolean";
+    }
+    return "unsupported";
+}
+
+constexpr std::string_view kindName (const ParameterRegistry::Kind value) noexcept
+{
+    using enum ParameterRegistry::Kind;
+    switch (value) {
+        case choice: return "choice";
+        case floating: return "float";
+        case boolean: return "bool";
+    }
+    return "unsupported";
+}
+
+constexpr std::string_view mappingName (const ParameterRegistry::MappingKey value) noexcept
+{
+    using enum ParameterRegistry::MappingKey;
+    switch (value) {
+        case unspecified: return "unspecified";
+        case indexedChoice: return "indexedChoice";
+        case linear: return "linear";
+        case boolean: return "boolean";
+    }
+    return "unsupported";
+}
+
+constexpr std::string_view smoothingName (
+    const ParameterRegistry::SmoothingClass value) noexcept
+{
+    using enum ParameterRegistry::SmoothingClass;
+    switch (value) {
+        case unspecified: return "unspecified";
+        case none: return "none";
+        case gainControl: return "gainControl";
+        case control: return "control";
+        case dedicatedPitch: return "dedicatedPitch";
+        case dedicatedCutoff: return "dedicatedCutoff";
+        case dedicatedGlide: return "dedicatedGlide";
+        case contourStage: return "contourStage";
+    }
+    return "unsupported";
+}
+
+constexpr std::string_view persistenceName (
+    const ParameterRegistry::PersistenceScope value) noexcept
+{
+    using enum ParameterRegistry::PersistenceScope;
+    switch (value) {
+        case unspecified: return "unspecified";
+        case apvtsState: return "apvtsState";
+    }
+    return "unsupported";
+}
+
+bool exactStringProperty (const juce::DynamicObject& object,
+                          const char* name,
+                          const std::string_view expected)
+{
+    const auto* value = requiredProperty (object, name);
+    return value != nullptr && value->isString()
+        && value->toString().toStdString() == expected;
+}
+
+bool exactIntegerProperty (const juce::DynamicObject& object,
+                           const char* name,
+                           const int expected)
+{
+    const auto* value = requiredProperty (object, name);
+    return value != nullptr && value->isInt()
+        && static_cast<int> (*value) == expected;
+}
+
+bool exactBooleanProperty (const juce::DynamicObject& object,
+                           const char* name,
+                           const bool expected)
+{
+    const auto* value = requiredProperty (object, name);
+    return value != nullptr && value->isBool()
+        && static_cast<bool> (*value) == expected;
+}
+
+bool exactFloatProperty (const juce::DynamicObject& object,
+                         const char* name,
+                         const float expected)
+{
+    double value = 0.0;
+    return readFiniteNumber (object, name, value)
+        && static_cast<float> (value) == expected;
+}
+
+bool exactChoiceValues (const juce::DynamicObject& object,
+                        const std::span<const std::string_view> expected)
+{
+    const auto* value = requiredProperty (object, "choice_values");
+    const auto* choices = value == nullptr ? nullptr : value->getArray();
+    if (choices == nullptr || static_cast<size_t> (choices->size()) != expected.size())
+        return false;
+    for (int index = 0; index < choices->size(); ++index)
+        if (! choices->getReference (index).isString()
+            || choices->getReference (index).toString().toStdString()
+                   != expected[static_cast<size_t> (index)])
+            return false;
+    return true;
+}
+
+bool exactRegistryDescriptor (const juce::DynamicObject& entry,
+                              const size_t position,
+                              const ParameterRegistry::Descriptor& descriptor)
+{
+    return entry.getProperties().size() == 19
+        && exactIntegerProperty (entry, "index", static_cast<int> (position))
+        && exactStringProperty (entry, "id", descriptor.id)
+        && exactStringProperty (entry, "semantic_key", descriptor.semanticKey)
+        && exactIntegerProperty (entry, "version_hint", descriptor.versionHint)
+        && exactStringProperty (entry, "display_name", descriptor.displayName)
+        && exactStringProperty (entry, "short_label", descriptor.shortLabel)
+        && exactStringProperty (entry, "unit_key", unitKeyName (descriptor.unitKey))
+        && exactStringProperty (entry, "kind", kindName (descriptor.kind))
+        && exactFloatProperty (entry, "range_start", descriptor.rangeStart)
+        && exactFloatProperty (entry, "range_end", descriptor.rangeEnd)
+        && exactFloatProperty (entry, "range_interval", descriptor.rangeInterval)
+        && exactFloatProperty (entry, "range_skew", descriptor.rangeSkew)
+        && exactBooleanProperty (entry, "symmetric_skew", descriptor.symmetricSkew)
+        && exactFloatProperty (entry, "physical_default", descriptor.physicalDefault)
+        && exactChoiceValues (entry, descriptor.choiceValues)
+        && exactStringProperty (entry, "mapping_key", mappingName (descriptor.mapping))
+        && exactBooleanProperty (entry, "automatable", descriptor.automatable)
+        && exactStringProperty (entry, "smoothing_class", smoothingName (descriptor.smoothing))
+        && exactStringProperty (entry, "persistence_scope",
+                                persistenceName (descriptor.persistence));
+}
+
 std::optional<Diagnostic> validateDescriptorFixture (
     const juce::File& file,
     const char* schema,
     const char* entriesName,
     std::span<const ParameterRegistry::Descriptor> expectedDescriptors,
     const bool requireVersionHint,
+    const bool requireFullRegistryDescriptor,
     const char* code)
 {
     juce::var parsed;
@@ -361,6 +506,10 @@ std::optional<Diagnostic> validateDescriptorFixture (
                 || static_cast<int> (*versionHint) != expectedDescriptors[position].versionHint)
                 return semanticFailure (code, "parameter fixture version hints do not match the live registry");
         }
+        if (requireFullRegistryDescriptor
+            && ! exactRegistryDescriptor (*entry, position, expectedDescriptors[position]))
+            return semanticFailure (
+                code, "parameter registry fixture metadata does not match every live descriptor field");
     }
 
     return std::nullopt;
@@ -374,7 +523,8 @@ std::optional<Diagnostic> validateParameterFixtures (const juce::File& sourceRoo
 
     if (const auto diagnostic = validateDescriptorFixture (
             sourceRoot.getChildFile ("Tests/fixtures/parameters/parameter-registry-v2.json"),
-            "model-d.parameter-registry.v2", "parameters", descriptors, true, "semantic.registry");
+            "model-d.parameter-registry.v2", "parameters", descriptors,
+            true, true, "semantic.registry");
         diagnostic.has_value())
         return diagnostic;
 
@@ -385,13 +535,15 @@ std::optional<Diagnostic> validateParameterFixtures (const juce::File& sourceRoo
             legacyDescriptors.push_back (descriptor);
     if (const auto diagnostic = validateDescriptorFixture (
             sourceRoot.getChildFile ("Tests/fixtures/parameters/legacy-parameter-inventory.json"),
-            "model-d.legacy-parameter-inventory.v1", "parameters", legacyDescriptors, true, "semantic.inventory");
+            "model-d.legacy-parameter-inventory.v1", "parameters", legacyDescriptors,
+            true, false, "semantic.inventory");
         diagnostic.has_value())
         return diagnostic;
 
     return validateDescriptorFixture (
         sourceRoot.getChildFile ("Tests/fixtures/parameters/parameter-snapshot-v2.json"),
-        "model-d.parameter-snapshot.v2", "fields", descriptors, false, "semantic.snapshot");
+        "model-d.parameter-snapshot.v2", "fields", descriptors,
+        false, false, "semantic.snapshot");
 }
 
 const char* contourContractName (const StateContract::ContourContract contract)

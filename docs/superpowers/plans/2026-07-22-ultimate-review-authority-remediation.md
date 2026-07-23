@@ -46,14 +46,14 @@ SHA-256.
 - Produces: absolute-sample `control.step.v1` metrics whose response window
   starts at the declared event and whose event movement includes `event - 1`.
 
-- [ ] **Step 1: Add the failing multi-prior-event contract**
+- [x] **Step 1: Add the failing multi-prior-event contract**
 
   Construct one dense request with prior same-key values `0.9`, `0.1`, and
   final pre-event `0.4`, followed at the event by `0.6` and then target `0.8`.
   Assert exact first change at the event, settling at the next sample,
   monotonic `1`, overshoot `0`, and maximum movement `0.2`.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Run the focused analyzer contract from the existing Release build:
 
@@ -64,14 +64,14 @@ SHA-256.
   Expected: FAIL because pre-event movement contributes to
   `maximum-per-sample-movement`.
 
-- [ ] **Step 3: Implement the minimum event-local fix**
+- [x] **Step 3: Implement the minimum event-local fix**
 
   In `analyzeControlStep`, begin movement iteration at
   `max<uint64_t>(1, eventSample)`. In dense reconstruction, initialize from the
   effective request start, skip trace points before `eventSample`, and replay
   same-key points from the event onward in trace order.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
   Rebuild `ModelDReferenceTests`, rerun analyzer and renderer contracts, and
   require both to pass with the exact assertions.
@@ -98,7 +98,7 @@ SHA-256.
 - Consumes: exact Git executable, source root, `HEAD`, `HEAD^{tree}`,
   `git diff --binary HEAD --`, and porcelain working-tree status.
 
-- [ ] **Step 1: Add failing identity contracts**
+- [x] **Step 1: Add failing identity contracts**
 
   Add compile-time assertions for `ReproducibilityInfo::sourceTree`,
   `sourceContent`, and `sourceDirty`. In isolated temporary Git repositories,
@@ -108,33 +108,33 @@ SHA-256.
   Assert `run` and `verify-release` call the clean/current authority before
   authoritative work.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Build `ModelDReferenceTests`.
 
   Expected: compilation fails for the missing fields and source-identity API.
 
-- [ ] **Step 3: Add the always-run build generator**
+- [x] **Step 3: Add the always-run build generator**
 
   The script must compute canonical values and configure the generated header
   only if bytes change. Add an always-run `ModelDGenerateSourceIdentity` target,
   generated-header byproduct, harness dependency, generated include directory,
   and `SourceIdentity.cpp` only inside `SYNTH_BUILD_TESTS`.
 
-- [ ] **Step 4: Implement Git inspection and pure authority validation**
+- [x] **Step 4: Implement Git inspection and pure authority validation**
 
   Execute Git with `juce::ChildProcess` argument arrays, require successful
   commands and correctly shaped IDs, compute the same SHA-256 content identity
   as CMake, and return stable diagnostics for built-dirty, current-dirty,
   stale/mismatched, and inspection failures.
 
-- [ ] **Step 5: Gate authoritative commands**
+- [x] **Step 5: Gate authoritative commands**
 
   Call the runtime validator in CLI `run` after argument validation but before
   source validation/output creation, and in `verify-release` before replay.
   Keep no-argument smoke and `validate` available while dirty.
 
-- [ ] **Step 6: Run focused GREEN where the dirty-build contract permits**
+- [x] **Step 6: Run focused GREEN where the dirty-build contract permits**
 
   Rebuild and run analyzer, renderer, and isolated source-identity assertions.
   The full CLI success path is deferred until the implementation is committed
@@ -158,28 +158,28 @@ SHA-256.
   `sourceDirty` fields in render results, render manifests, render metrics,
   registry metrics, and requirement reports.
 
-- [ ] **Step 1: Add failing serialization and forgery contracts**
+- [x] **Step 1: Add failing serialization and forgery contracts**
 
   Require every evidence kind to contain all four fields. Clear or forge commit,
   tree, content, and dirty values independently in render results, render
   manifests, metrics, registry gate evidence, and reports; require stable
   rejection.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Build the focused reference target and run renderer/requirement tests.
 
   Expected: missing serialization assertions fail and forged new fields are not
   rejected.
 
-- [ ] **Step 3: Implement canonical propagation and comparison**
+- [x] **Step 3: Implement canonical propagation and comparison**
 
   Populate evidence from `builtSourceIdentity()`, serialize all four fields,
   parse an exact JSON boolean for `sourceDirty`, and compare the full identity
   across block patterns, candidate binding, live-registry gate evidence,
   authoritative rerender, and report verification.
 
-- [ ] **Step 4: Run focused GREEN permitted by current identity**
+- [x] **Step 4: Run focused GREEN permitted by current identity**
 
   Rebuild and run non-authoritative serializer/comparison cases. Confirm dirty
   binaries reject CLI generation with the built-dirty diagnostic before output
@@ -198,7 +198,7 @@ SHA-256.
 - Produces: `semantic.registry` before fixed-set SHA validation or PAR-001 gate
   construction whenever any descriptor field differs.
 
-- [ ] **Step 1: Add SHA-coordinated mutation RED cases**
+- [x] **Step 1: Add SHA-coordinated mutation RED cases**
 
   Copy the frozen files, mutate one field, update the copied index with the new
   file SHA, and require `semantic.registry` for index, semantic key, version,
@@ -206,21 +206,21 @@ SHA-256.
   symmetric skew, ordered choices, mapping, automatable, smoothing, and
   persistence.
 
-- [ ] **Step 2: Run RED**
+- [x] **Step 2: Run RED**
 
   Run `ModelDReferenceManifestContract`.
 
   Expected: the new non-ID mutations reach only the later fixed-SHA failure,
   not `semantic.registry`.
 
-- [ ] **Step 3: Implement exact full-field comparison**
+- [x] **Step 3: Implement exact full-field comparison**
 
   Add exhaustive enum-to-fixture-name helpers; exact typed property readers;
   float-representation comparison; and ordered choice comparison. Apply the
   full contract to `parameter-registry-v2.json`, while retaining the legacy
   inventory and snapshot-specific contracts.
 
-- [ ] **Step 4: Run GREEN**
+- [x] **Step 4: Run GREEN**
 
   Rebuild and rerun the manifest contract. Require every coordinated mutation
   to fail with `semantic.registry` and the live frozen index to pass.

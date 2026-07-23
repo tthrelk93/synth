@@ -6,6 +6,7 @@
 #include "PluginProcessor.h"
 #include "ReferenceData.h"
 #include "RequirementReporter.h"
+#include "SourceIdentity.h"
 
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <juce_cryptography/juce_cryptography.h>
@@ -230,7 +231,11 @@ LoadResult<RenderResult> renderPattern (const RenderFixture& fixture,
                          * static_cast<size_t> (result.mainChannels));
     result.phones.reserve (static_cast<size_t> (fixture.config.totalSamples)
                            * static_cast<size_t> (result.phonesChannels));
-    result.reproducibility.sourceCommit = SYNTH_SOURCE_COMMIT;
+    const auto& sourceIdentity = builtSourceIdentity();
+    result.reproducibility.sourceCommit = sourceIdentity.commit;
+    result.reproducibility.sourceTree = sourceIdentity.tree;
+    result.reproducibility.sourceContent = sourceIdentity.content;
+    result.reproducibility.sourceDirty = sourceIdentity.dirty;
     result.reproducibility.juceCommit = SYNTH_RESOLVED_JUCE_COMMIT;
     result.reproducibility.buildType = SYNTH_CONFIGURED_BUILD_TYPE;
     result.reproducibility.platform = SYNTH_CONFIGURED_PLATFORM;
@@ -387,6 +392,7 @@ std::optional<Diagnostic> validateCandidateResults (
     const auto fixtureHash = sha256File (fixture.fixtureFile);
     const auto expectedInputHashes = fixtureInputHashes (fixture);
     const auto& canonical = results.front();
+    const auto& sourceIdentity = builtSourceIdentity();
     for (size_t index = 0; index < results.size(); ++index) {
         const auto& result = results[index];
         if (result.blockPattern != fixture.config.blockPatterns[index])
@@ -403,7 +409,10 @@ std::optional<Diagnostic> validateCandidateResults (
             || result.reproducibility.fixtureSha256 != fixtureHash)
             return Diagnostic { "output.invariant",
                                 "candidate result metadata and channel sizes must match the fixture" };
-        if (result.reproducibility.sourceCommit != SYNTH_SOURCE_COMMIT
+        if (result.reproducibility.sourceCommit != sourceIdentity.commit
+            || result.reproducibility.sourceTree != sourceIdentity.tree
+            || result.reproducibility.sourceContent != sourceIdentity.content
+            || result.reproducibility.sourceDirty != sourceIdentity.dirty
             || result.reproducibility.juceCommit != SYNTH_RESOLVED_JUCE_COMMIT
             || result.reproducibility.buildType != SYNTH_CONFIGURED_BUILD_TYPE
             || result.reproducibility.platform != SYNTH_CONFIGURED_PLATFORM
@@ -428,6 +437,9 @@ std::optional<Diagnostic> validateCandidateResults (
             || result.reproducibility.inputHashes != canonical.reproducibility.inputHashes
             || result.reproducibility.outputHashes != canonical.reproducibility.outputHashes
             || result.reproducibility.sourceCommit != canonical.reproducibility.sourceCommit
+            || result.reproducibility.sourceTree != canonical.reproducibility.sourceTree
+            || result.reproducibility.sourceContent != canonical.reproducibility.sourceContent
+            || result.reproducibility.sourceDirty != canonical.reproducibility.sourceDirty
             || result.reproducibility.juceCommit != canonical.reproducibility.juceCommit
             || result.reproducibility.buildType != canonical.reproducibility.buildType
             || result.reproducibility.platform != canonical.reproducibility.platform
@@ -545,14 +557,19 @@ LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetricsImpl (
                         "metrics.request-control", "dense control analysis requires a start value");
                 control.assign (fixture.config.totalSamples, *fixtureRequest.start);
                 auto cursor = std::uint64_t { 0 };
+                auto traceCursor = std::uint64_t { 0 };
                 auto current = *fixtureRequest.start;
                 auto sawEvent = false;
                 for (const auto& point : result.controlTrace) {
                     if (point.key != fixtureRequest.parameterKey)
                         continue;
-                    if (point.sample < cursor || point.sample >= fixture.config.totalSamples)
+                    if (point.sample < traceCursor
+                        || point.sample >= fixture.config.totalSamples)
                         return failure<std::vector<MetricEvidenceRecord>> (
                             "metrics.request-control", "control trace sample indices are invalid");
+                    traceCursor = point.sample;
+                    if (point.sample < fixtureRequest.eventSample)
+                        continue;
                     std::fill (control.begin() + static_cast<std::ptrdiff_t> (cursor),
                                control.begin() + static_cast<std::ptrdiff_t> (point.sample),
                                current);
@@ -789,6 +806,11 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     reproducibility->setProperty ("platform", juce::String { canonical.reproducibility.platform });
     reproducibility->setProperty ("seed", static_cast<juce::int64> (canonical.reproducibility.seed));
     reproducibility->setProperty ("sourceCommit", juce::String { canonical.reproducibility.sourceCommit });
+    reproducibility->setProperty ("sourceContent", juce::String {
+        canonical.reproducibility.sourceContent });
+    reproducibility->setProperty ("sourceDirty", canonical.reproducibility.sourceDirty);
+    reproducibility->setProperty ("sourceTree", juce::String {
+        canonical.reproducibility.sourceTree });
 
     auto root = std::make_unique<juce::DynamicObject>();
     root->setProperty ("analysisRequests", analysisRequestsJson (fixture.analysisRequests));
@@ -843,7 +865,11 @@ LoadResult<GateMetricEvidence> writeRegistryMetricEvidence (
     provenance.registryPath = registryPath;
     provenance.registrySha256 = sha256File (*registryFile.value);
     provenance.registryCount = ParameterRegistry::descriptors().size();
-    provenance.reproducibility.sourceCommit = SYNTH_SOURCE_COMMIT;
+    const auto& sourceIdentity = builtSourceIdentity();
+    provenance.reproducibility.sourceCommit = sourceIdentity.commit;
+    provenance.reproducibility.sourceTree = sourceIdentity.tree;
+    provenance.reproducibility.sourceContent = sourceIdentity.content;
+    provenance.reproducibility.sourceDirty = sourceIdentity.dirty;
     provenance.reproducibility.compilerId = SYNTH_CONFIGURED_COMPILER_ID;
     provenance.reproducibility.compilerVersion = SYNTH_CONFIGURED_COMPILER_VERSION;
     GateMetricEvidence evidence;
@@ -892,6 +918,13 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             || (run && ! exactOption (7, "--output"))) {
             std::cerr << "cli.arguments: invalid command arguments\n";
             return 2;
+        }
+        if (run) {
+            const auto sourceIdentity = validateCurrentAuthoritativeSourceIdentity();
+            if (! sourceIdentity.ok()) {
+                printDiagnostic (sourceIdentity.diagnostics.front());
+                return 1;
+            }
         }
         const auto inputs = validateInputs (
             juce::File { arguments[2] }, juce::File { arguments[4] }, juce::File { arguments[6] });
@@ -995,6 +1028,11 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
         if (arguments.size() != 3 || ! exactOption (1, "--report")) {
             std::cerr << "cli.arguments: invalid command arguments\n";
             return 2;
+        }
+        const auto sourceIdentity = validateCurrentAuthoritativeSourceIdentity();
+        if (! sourceIdentity.ok()) {
+            printDiagnostic (sourceIdentity.diagnostics.front());
+            return 1;
         }
         const auto verified = verifyReleaseReady (juce::File { arguments[2] });
         if (verified.ok())

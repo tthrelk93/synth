@@ -2,6 +2,7 @@
 
 #include "OfflineRenderer.h"
 #include "ReferenceData.h"
+#include "SourceIdentity.h"
 
 #include <algorithm>
 #include <cmath>
@@ -562,6 +563,9 @@ juce::var reportJson (const RequirementReport& report)
     provenance->setProperty ("buildType", juce::String { report.buildType });
     provenance->setProperty ("platform", juce::String { report.platform });
     provenance->setProperty ("sourceCommit", juce::String { report.sourceCommit });
+    provenance->setProperty ("sourceContent", juce::String { report.sourceContent });
+    provenance->setProperty ("sourceDirty", report.sourceDirty);
+    provenance->setProperty ("sourceTree", juce::String { report.sourceTree });
     auto root = std::make_unique<juce::DynamicObject>();
     root->setProperty ("analyzerVersion", report.analyzerVersion);
     root->setProperty ("counts", juce::var { countObject.release() });
@@ -744,7 +748,11 @@ LoadResult<RequirementReport> buildRequirementReport (
         staticGates.emplace (gate->id, gate);
 
     RequirementReport report;
-    report.sourceCommit = SYNTH_SOURCE_COMMIT;
+    const auto& sourceIdentity = builtSourceIdentity();
+    report.sourceCommit = sourceIdentity.commit;
+    report.sourceTree = sourceIdentity.tree;
+    report.sourceContent = sourceIdentity.content;
+    report.sourceDirty = sourceIdentity.dirty;
     report.buildType = SYNTH_CONFIGURED_BUILD_TYPE;
     report.platform = SYNTH_CONFIGURED_PLATFORM;
     report.architecture = SYNTH_CONFIGURED_ARCHITECTURE;
@@ -960,7 +968,12 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
         const auto value = provenance->getProperty (name);
         return value.isString() && value.toString() == expected;
     };
-    if (! exactProvenance ("sourceCommit", SYNTH_SOURCE_COMMIT)
+    const auto& sourceIdentity = builtSourceIdentity();
+    const auto dirty = provenance->getProperty ("sourceDirty");
+    if (! exactProvenance ("sourceCommit", sourceIdentity.commit.c_str())
+        || ! exactProvenance ("sourceTree", sourceIdentity.tree.c_str())
+        || ! exactProvenance ("sourceContent", sourceIdentity.content.c_str())
+        || ! dirty.isBool() || static_cast<bool> (dirty) != sourceIdentity.dirty
         || ! exactProvenance ("buildType", SYNTH_CONFIGURED_BUILD_TYPE)
         || ! exactProvenance ("platform", SYNTH_CONFIGURED_PLATFORM)
         || ! exactProvenance ("architecture", SYNTH_CONFIGURED_ARCHITECTURE))

@@ -3,6 +3,7 @@
 #include "Acceptance.h"
 #include "AnalyzerRegistry.h"
 #include "RequirementReporter.h"
+#include "SourceIdentity.h"
 #include "PluginProcessor.h"
 
 #include <array>
@@ -99,6 +100,96 @@ public:
         expect (firstTemporaryRoot.directory != secondTemporaryRoot.directory,
                 "same-prefix temporary roots must never share a cleanup target");
 
+        beginTest ("isolated Git identities reject dirty builds, dirty trees, and stale heads");
+        const TemporaryDirectory gitRoot { "model-d-source-identity" };
+        expect (gitRoot.isOwned(), "source identity Git root must be created atomically");
+        if (! gitRoot.isOwned())
+            return;
+        const auto runGit = [&] (std::initializer_list<const char*> arguments) {
+            juce::StringArray command;
+            const auto executable = ReferenceHarness::buildGitExecutable();
+            command.add (juce::String::fromUTF8 (
+                executable.data(), static_cast<int> (executable.size())));
+            command.add ("-C");
+            command.add (gitRoot.directory.getFullPathName());
+            for (const auto* argument : arguments)
+                command.add (argument);
+            juce::ChildProcess process;
+            if (! process.start (command, juce::ChildProcess::wantStdOut
+                                          | juce::ChildProcess::wantStdErr))
+                return false;
+            process.readAllProcessOutput();
+            return process.getExitCode() == 0;
+        };
+        const auto tracked = gitRoot.directory.getChildFile ("tracked.txt");
+        expect (runGit ({ "init", "--initial-branch=main" })
+                    && runGit ({ "config", "user.name", "Model D Contract" })
+                    && runGit ({ "config", "user.email", "model-d@example.invalid" })
+                    && tracked.replaceWithText ("clean\n", false, false, "\n")
+                    && runGit ({ "add", "tracked.txt" })
+                    && runGit ({ "commit", "-m", "clean identity" }),
+                "isolated source identity repository must initialize and commit");
+        const auto cleanIdentity = ReferenceHarness::inspectSourceIdentity (
+            gitRoot.directory, ReferenceHarness::buildGitExecutable());
+        expect (cleanIdentity.ok() && ! cleanIdentity.value->dirty,
+                "clean repository identity must inspect as clean");
+        if (! cleanIdentity.value.has_value())
+            return;
+        expect (ReferenceHarness::validateAuthoritativeSourceIdentity (
+                    *cleanIdentity.value, *cleanIdentity.value).ok(),
+                "matching clean build/current identities must pass");
+
+        auto malformedBuiltContent = *cleanIdentity.value;
+        malformedBuiltContent.content = std::string (64, 'g');
+        expectDiagnostic (ReferenceHarness::validateAuthoritativeSourceIdentity (
+                              malformedBuiltContent, *cleanIdentity.value),
+                          "source.identity-built");
+
+        auto malformedCurrentContent = *cleanIdentity.value;
+        malformedCurrentContent.content = std::string (64, 'A');
+        expectDiagnostic (ReferenceHarness::validateAuthoritativeSourceIdentity (
+                              *cleanIdentity.value, malformedCurrentContent),
+                          "source.identity-current");
+
+        expect (tracked.replaceWithText ("dirty build bytes\n", false, false, "\n"),
+                "dirty-build fixture must change tracked bytes");
+        const auto dirtyBuildIdentity = ReferenceHarness::inspectSourceIdentity (
+            gitRoot.directory, ReferenceHarness::buildGitExecutable());
+        expect (dirtyBuildIdentity.ok() && dirtyBuildIdentity.value->dirty,
+                "dirty-build identity must record dirty tracked bytes");
+        expect (runGit ({ "checkout", "--", "tracked.txt" }),
+                "dirty-build fixture must restore its tracked file");
+        const auto restoredIdentity = ReferenceHarness::inspectSourceIdentity (
+            gitRoot.directory, ReferenceHarness::buildGitExecutable());
+        if (dirtyBuildIdentity.value.has_value() && restoredIdentity.value.has_value())
+            expectDiagnostic (ReferenceHarness::validateAuthoritativeSourceIdentity (
+                                  *dirtyBuildIdentity.value, *restoredIdentity.value),
+                              "source.identity-built-dirty");
+
+        expect (tracked.replaceWithText ("dirty current bytes\n", false, false, "\n"),
+                "current-dirty fixture must change tracked bytes");
+        const auto dirtyCurrentIdentity = ReferenceHarness::inspectSourceIdentity (
+            gitRoot.directory, ReferenceHarness::buildGitExecutable());
+        if (dirtyCurrentIdentity.value.has_value())
+            expectDiagnostic (ReferenceHarness::validateAuthoritativeSourceIdentity (
+                                  *cleanIdentity.value, *dirtyCurrentIdentity.value),
+                              "source.identity-current-dirty");
+        expect (runGit ({ "checkout", "--", "tracked.txt" }),
+                "current-dirty fixture must restore its tracked file");
+
+        expect (tracked.replaceWithText ("new committed bytes\n", false, false, "\n")
+                    && runGit ({ "add", "tracked.txt" })
+                    && runGit ({ "commit", "-m", "new head" }),
+                "stale-head fixture must create a successor commit");
+        const auto successorIdentity = ReferenceHarness::inspectSourceIdentity (
+            gitRoot.directory, ReferenceHarness::buildGitExecutable());
+        expect (successorIdentity.ok() && ! successorIdentity.value->dirty,
+                "successor identity must inspect as clean");
+        if (successorIdentity.value.has_value())
+            expectDiagnostic (ReferenceHarness::validateAuthoritativeSourceIdentity (
+                                  *cleanIdentity.value, *successorIdentity.value),
+                              "source.identity-stale");
+
         beginTest ("bounded paths report stable negative diagnostics");
         const TemporaryDirectory temporaryRoot { "model-d-reference-harness-contract" };
         expect (temporaryRoot.isOwned(), "bounded-path temporary root must be created atomically");
@@ -170,6 +261,47 @@ public:
                              "2d7d6339fffb3875541aa60547f6e2f2f7b6fb8d288da109bf653291a6b7d284",
                              "\"id\":\"osc1Waveform\"", "\"id\":\"driftedOscillator\"",
                              "semantic.registry");
+        const auto expectRegistryDescriptorDrift = [&] (const juce::String& needle,
+                                                         const juce::String& replacement) {
+            expectSemanticProbe (
+                sourceRoot,
+                "Tests/fixtures/parameters/parameter-registry-v2.json",
+                "2d7d6339fffb3875541aa60547f6e2f2f7b6fb8d288da109bf653291a6b7d284",
+                needle, replacement, "semantic.registry");
+        };
+        expectRegistryDescriptorDrift ("\"index\":0", "\"index\":48");
+        expectRegistryDescriptorDrift (
+            "\"semantic_key\":\"oscillator_1_waveform\"",
+            "\"semantic_key\":\"drifted_semantic_key\"");
+        expectRegistryDescriptorDrift ("\"version_hint\":0", "\"version_hint\":2");
+        expectRegistryDescriptorDrift (
+            "\"display_name\":\"Oscillator 1 Waveform\"",
+            "\"display_name\":\"Drifted Display Name\"");
+        expectRegistryDescriptorDrift ("\"short_label\":\"\"",
+                                       "\"short_label\":\"Osc 1\"");
+        expectRegistryDescriptorDrift ("\"unit_key\":\"choice\"",
+                                       "\"unit_key\":\"normalized\"");
+        expectRegistryDescriptorDrift ("\"kind\":\"choice\"", "\"kind\":\"float\"");
+        expectRegistryDescriptorDrift ("\"range_start\":0.0", "\"range_start\":0.25");
+        expectRegistryDescriptorDrift ("\"range_end\":5.0", "\"range_end\":4.0");
+        expectRegistryDescriptorDrift ("\"range_interval\":1.0",
+                                       "\"range_interval\":0.5");
+        expectRegistryDescriptorDrift ("\"range_skew\":1.0", "\"range_skew\":2.0");
+        expectRegistryDescriptorDrift ("\"symmetric_skew\":false",
+                                       "\"symmetric_skew\":true");
+        expectRegistryDescriptorDrift ("\"physical_default\":0.0",
+                                       "\"physical_default\":1.0");
+        expectRegistryDescriptorDrift (
+            "\"choice_values\":[\"Triangle\",\"Sharktooth\"",
+            "\"choice_values\":[\"Sharktooth\",\"Triangle\"");
+        expectRegistryDescriptorDrift ("\"mapping_key\":\"indexedChoice\"",
+                                       "\"mapping_key\":\"linear\"");
+        expectRegistryDescriptorDrift ("\"automatable\":true",
+                                       "\"automatable\":false");
+        expectRegistryDescriptorDrift ("\"smoothing_class\":\"none\"",
+                                       "\"smoothing_class\":\"gainControl\"");
+        expectRegistryDescriptorDrift ("\"persistence_scope\":\"apvtsState\"",
+                                       "\"persistence_scope\":\"unspecified\"");
         expectSemanticProbe (sourceRoot,
                              "Tests/fixtures/parameters/legacy-parameter-inventory.json",
                              "7ade5c456c54e0822e41082558aed0c94860b6b46f9368713fc3ac103b5bc21d",
@@ -355,6 +487,21 @@ public:
         expectMetric (lateMetrics, "settled-sample", "samples", 6.0);
         expectMetric (lateMetrics, "floating-allowance", "normalized",
                       8.0 * std::numeric_limits<double>::epsilon());
+
+        const std::array<double, 8> priorSameKeyChanges {
+            0.4, 0.9, 0.1, 0.4, 0.6, 0.8, 0.8, 0.8,
+        };
+        const auto eventLocal = registry.analyze (
+            "control.step.v1",
+            AnalysisRequest { .eventSample = 4, .durationSamples = 2,
+                              .start = 0.4, .target = 0.8,
+                              .control = priorSameKeyChanges });
+        expectMetric (eventLocal, "first-change-sample", "samples", 4.0);
+        expectMetric (eventLocal, "settled-sample", "samples", 5.0);
+        expectMetric (eventLocal, "monotonic", "boolean", 1.0);
+        expectMetric (eventLocal, "overshoot", "normalized", 0.0);
+        expectMetric (eventLocal, "maximum-per-sample-movement",
+                      "normalized/sample", 0.2);
         if (five.value.has_value())
             expect (five.value->front().settings == std::map<std::string, std::string> {
                         { "allowance", "8*epsilon*max(1,travel)" },
@@ -463,6 +610,36 @@ public:
         if (denseMetrics.value.has_value() && denseMetrics.value->size() == 1)
             expectWithinAbsoluteError (denseMetrics.value->front().metric.value, 8.0, 0.0,
                                        "sparse points must reconstruct the full sample domain");
+
+        beginTest ("dense control analysis does not replay pre-origin changes over the effective start");
+        auto eventLocalFixture = denseFixture;
+        eventLocalFixture.id = "event-local-control";
+        eventLocalFixture.fixtureRelativePath =
+            "Tests/reference/fixtures/event-local-control.json";
+        auto eventLocalRequest = denseRequest;
+        eventLocalRequest.id = "event-local-minimum";
+        eventLocalRequest.metric = "minimum";
+        eventLocalRequest.eventSample = 4;
+        eventLocalRequest.windowSamples = 4;
+        eventLocalRequest.start = 0.4;
+        eventLocalFixture.analysisRequests = { eventLocalRequest };
+        auto eventLocalRender = denseRender;
+        eventLocalRender.controlTrace = {
+            { 1, ParameterRegistry::Key::filterCutoff, 0.9f, 0.9f },
+            { 2, ParameterRegistry::Key::filterCutoff, 0.1f, 0.1f },
+            { 3, ParameterRegistry::Key::filterCutoff, 0.4f, 0.4f },
+            { 4, ParameterRegistry::Key::filterCutoff, 0.6f, 0.6f },
+            { 5, ParameterRegistry::Key::filterCutoff, 0.8f, 0.8f },
+        };
+        const std::array eventLocalResults { eventLocalRender };
+        const auto eventLocalMetrics = analyzeFixtureMetrics (
+            eventLocalFixture, eventLocalResults);
+        expect (eventLocalMetrics.ok() && eventLocalMetrics.value->size() == 1,
+                "event-local dense control request must produce its selected metric");
+        if (eventLocalMetrics.value.has_value() && eventLocalMetrics.value->size() == 1)
+            expectWithinAbsoluteError (eventLocalMetrics.value->front().metric.value,
+                                       0.4, 1.0e-7,
+                                       "pre-origin events must not overwrite the derived effective start");
 
         beginTest ("finite extreme analyzer inputs never produce non-finite metrics");
         const auto maximumDouble = std::numeric_limits<double>::max();
@@ -1144,6 +1321,16 @@ public:
         auto mismatchedProvenance = validEvidence;
         mismatchedProvenance.render.reproducibility.sourceCommit = "mismatch";
         expectEvidenceFailure (std::move (mismatchedProvenance), "smoothing.trace-mismatch");
+        auto mismatchedSourceTree = validEvidence;
+        mismatchedSourceTree.render.reproducibility.sourceTree = std::string (40, '0');
+        expectEvidenceFailure (std::move (mismatchedSourceTree), "smoothing.trace-mismatch");
+        auto mismatchedSourceContent = validEvidence;
+        mismatchedSourceContent.render.reproducibility.sourceContent = std::string (64, '0');
+        expectEvidenceFailure (std::move (mismatchedSourceContent), "smoothing.trace-mismatch");
+        auto mismatchedSourceDirty = validEvidence;
+        mismatchedSourceDirty.render.reproducibility.sourceDirty =
+            ! mismatchedSourceDirty.render.reproducibility.sourceDirty;
+        expectEvidenceFailure (std::move (mismatchedSourceDirty), "smoothing.trace-mismatch");
         auto mismatchedCompilerId = validEvidence;
         mismatchedCompilerId.render.reproducibility.compilerId = "forged-compiler";
         expectEvidenceFailure (std::move (mismatchedCompilerId), "smoothing.trace-mismatch");
@@ -1444,8 +1631,12 @@ public:
                         },
                     "generated input fixtures must record exactly the state input hash");
             expect (! result.reproducibility.compilerId.empty()
-                        && ! result.reproducibility.compilerVersion.empty(),
-                    "generated render provenance must include configured compiler identity");
+                        && ! result.reproducibility.compilerVersion.empty()
+                        && ! result.reproducibility.sourceTree.empty()
+                        && ! result.reproducibility.sourceContent.empty()
+                        && result.reproducibility.sourceDirty
+                               == ReferenceHarness::builtSourceIdentity().dirty,
+                    "generated render provenance must include exact build/source identity");
         }
 
         for (size_t fixtureIndex = 1; fixtureIndex < fixtures.size(); ++fixtureIndex) {
@@ -1832,6 +2023,8 @@ public:
         auto emptyProvenance = *firstRun.value;
         for (auto& result : emptyProvenance) {
             result.reproducibility.sourceCommit.clear();
+            result.reproducibility.sourceTree.clear();
+            result.reproducibility.sourceContent.clear();
             result.reproducibility.juceCommit.clear();
             result.reproducibility.buildType.clear();
             result.reproducibility.platform.clear();
@@ -1850,6 +2043,10 @@ public:
         };
         expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::sourceCommit,
                                "wrong-source-commit");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::sourceTree,
+                               "wrong-source-tree");
+        expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::sourceContent,
+                               "wrong-source-content");
         expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::juceCommit,
                                "wrong-juce-commit");
         expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::buildType,
@@ -1862,6 +2059,10 @@ public:
                                "wrong-compiler-id");
         expectWrongProvenance (&ReferenceHarness::ReproducibilityInfo::compilerVersion,
                                "wrong-compiler-version");
+        auto wrongSourceDirty = *firstRun.value;
+        for (auto& result : wrongSourceDirty)
+            result.reproducibility.sourceDirty = ! result.reproducibility.sourceDirty;
+        expectRejectedCandidate (wrongSourceDirty, "wrong-source-dirty", "output.provenance");
 
         auto wrongFixtureHash = *firstRun.value;
         for (auto& result : wrongFixtureHash)
@@ -1943,8 +2144,18 @@ public:
                            == firstRun.value->front().reproducibility.compilerId
                     && candidateReproducibility->getProperty (
                            "compilerVersion").toString().toStdString()
-                           == firstRun.value->front().reproducibility.compilerVersion,
-                "candidate render provenance must serialize configured compiler identity");
+                           == firstRun.value->front().reproducibility.compilerVersion
+                    && candidateReproducibility->getProperty (
+                           "sourceTree").toString().toStdString()
+                           == firstRun.value->front().reproducibility.sourceTree
+                    && candidateReproducibility->getProperty (
+                           "sourceContent").toString().toStdString()
+                           == firstRun.value->front().reproducibility.sourceContent
+                    && candidateReproducibility->getProperty ("sourceDirty").isBool()
+                    && static_cast<bool> (candidateReproducibility->getProperty (
+                           "sourceDirty"))
+                           == firstRun.value->front().reproducibility.sourceDirty,
+                "candidate render provenance must serialize compiler and source identity");
         juce::var parsedCandidateMetrics;
         const auto candidateMetricsParsed = juce::JSON::parse (
             candidateA.getChildFile ("metrics.json").loadFileAsString(), parsedCandidateMetrics);
@@ -1972,8 +2183,18 @@ public:
                            == firstRun.value->front().reproducibility.compilerId
                     && candidateMetricProvenance->getProperty (
                            "compilerVersion").toString().toStdString()
-                           == firstRun.value->front().reproducibility.compilerVersion,
-                "metric provenance must serialize configured compiler identity");
+                           == firstRun.value->front().reproducibility.compilerVersion
+                    && candidateMetricProvenance->getProperty (
+                           "sourceTree").toString().toStdString()
+                           == firstRun.value->front().reproducibility.sourceTree
+                    && candidateMetricProvenance->getProperty (
+                           "sourceContent").toString().toStdString()
+                           == firstRun.value->front().reproducibility.sourceContent
+                    && candidateMetricProvenance->getProperty ("sourceDirty").isBool()
+                    && static_cast<bool> (candidateMetricProvenance->getProperty (
+                           "sourceDirty"))
+                           == firstRun.value->front().reproducibility.sourceDirty,
+                "metric provenance must serialize compiler and source identity");
         for (const auto name : { "render.json", "control-trace.json", "event-trace.json",
                                  "metrics.json" })
             expect (candidateA.getChildFile (name).hasIdenticalContentTo (
@@ -2262,6 +2483,24 @@ public:
         wrongMetricProvenance.record.provenance.registryCount = 47;
         expectMetricEvidenceFailure (std::move (wrongMetricProvenance), "wrong-provenance",
                                      "acceptance.metric-evidence-invalid");
+        auto wrongRegistrySourceTree = *registryEvidence.value;
+        wrongRegistrySourceTree.record.provenance.reproducibility.sourceTree =
+            std::string (40, '0');
+        expectMetricEvidenceFailure (std::move (wrongRegistrySourceTree),
+                                     "wrong-source-tree",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongRegistrySourceContent = *registryEvidence.value;
+        wrongRegistrySourceContent.record.provenance.reproducibility.sourceContent =
+            std::string (64, '0');
+        expectMetricEvidenceFailure (std::move (wrongRegistrySourceContent),
+                                     "wrong-source-content",
+                                     "acceptance.metric-evidence-invalid");
+        auto wrongRegistrySourceDirty = *registryEvidence.value;
+        wrongRegistrySourceDirty.record.provenance.reproducibility.sourceDirty =
+            ! wrongRegistrySourceDirty.record.provenance.reproducibility.sourceDirty;
+        expectMetricEvidenceFailure (std::move (wrongRegistrySourceDirty),
+                                     "wrong-source-dirty",
+                                     "acceptance.metric-evidence-invalid");
         auto wrongArtifactHash = *registryEvidence.value;
         wrongArtifactHash.artifactSha256 = std::string (64, '0');
         const auto wrongHashResult = evaluateAcceptance (
@@ -2370,6 +2609,18 @@ public:
         forgedRenderCompilerVersion.record.provenance.reproducibility.compilerVersion =
             "0.0-forged";
         expectRenderForgery (std::move (forgedRenderCompilerVersion), "compiler-version");
+        auto forgedRenderSourceTree = renderEvidence;
+        forgedRenderSourceTree.record.provenance.reproducibility.sourceTree =
+            std::string (40, '0');
+        expectRenderForgery (std::move (forgedRenderSourceTree), "source-tree");
+        auto forgedRenderSourceContent = renderEvidence;
+        forgedRenderSourceContent.record.provenance.reproducibility.sourceContent =
+            std::string (64, '0');
+        expectRenderForgery (std::move (forgedRenderSourceContent), "source-content");
+        auto forgedRenderSourceDirty = renderEvidence;
+        forgedRenderSourceDirty.record.provenance.reproducibility.sourceDirty =
+            ! forgedRenderSourceDirty.record.provenance.reproducibility.sourceDirty;
+        expectRenderForgery (std::move (forgedRenderSourceDirty), "source-dirty");
         auto forgedRenderRequest = renderEvidence;
         forgedRenderRequest.record.provenance.requestId = "forged-request";
         expectRenderForgery (std::move (forgedRenderRequest), "request-id");
@@ -2541,9 +2792,20 @@ public:
                 "same-commit reports must be byte-identical");
         const auto writtenJson = juce::JSON::fromString (reportA.value->loadFileAsString());
         const auto* writtenGates = writtenJson.getDynamicObject()->getProperty ("gates").getArray();
+        const auto* writtenProvenance = writtenJson.getDynamicObject()
+                                            ->getProperty ("provenance").getDynamicObject();
         expect (writtenGates != nullptr
                     && writtenGates->size() == static_cast<int> (gateResults.size()),
                 "canonical report must retain every static and dynamic gate result");
+        expect (writtenProvenance != nullptr
+                    && writtenProvenance->getProperty ("sourceTree").toString().toStdString()
+                           == report.value->sourceTree
+                    && writtenProvenance->getProperty ("sourceContent").toString().toStdString()
+                           == report.value->sourceContent
+                    && writtenProvenance->getProperty ("sourceDirty").isBool()
+                    && static_cast<bool> (writtenProvenance->getProperty ("sourceDirty"))
+                           == report.value->sourceDirty,
+                "canonical report must serialize exact build/source identity");
         expectDiagnostic (verifyReleaseReady (*reportA.value), "release.report-mismatch");
 
         auto falsePassJson = juce::JSON::fromString (reportA.value->loadFileAsString());
@@ -2600,6 +2862,18 @@ public:
                 "--output", output.getFullPathName().toStdString(),
             };
         };
+        if (ReferenceHarness::builtSourceIdentity().dirty) {
+            expectEquals (runOfflineRendererCommand (runArguments (cliA)), 1,
+                          "a dirty-build binary must reject authoritative candidate generation");
+            expect (! cliA.exists(),
+                    "dirty-build rejection must occur before candidate output creation");
+            const std::vector<std::string> dirtyVerifyArguments {
+                "verify-release", "--report", reportA.value->getFullPathName().toStdString(),
+            };
+            expectEquals (runOfflineRendererCommand (dirtyVerifyArguments), 1,
+                          "a dirty-build binary must reject authoritative release verification");
+            return;
+        }
         expectEquals (runOfflineRendererCommand (runArguments (cliA)), 0,
                       "run must succeed with honest open statuses");
         expectEquals (runOfflineRendererCommand (runArguments (cliB)), 0,
@@ -2670,6 +2944,18 @@ public:
         wrongProvenance.getDynamicObject()->getProperty ("provenance").getDynamicObject()
             ->setProperty ("sourceCommit", "forged-source-commit");
         expectReportMutation (wrongProvenance, "wrong-provenance");
+        auto wrongSourceTree = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongSourceTree.getDynamicObject()->getProperty ("provenance").getDynamicObject()
+            ->setProperty ("sourceTree", juce::String { std::string (40, '0') });
+        expectReportMutation (wrongSourceTree, "wrong-source-tree");
+        auto wrongSourceContent = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongSourceContent.getDynamicObject()->getProperty ("provenance").getDynamicObject()
+            ->setProperty ("sourceContent", juce::String { std::string (64, '0') });
+        expectReportMutation (wrongSourceContent, "wrong-source-content");
+        auto wrongSourceDirty = juce::JSON::fromString (cliReportA.loadFileAsString());
+        wrongSourceDirty.getDynamicObject()->getProperty ("provenance").getDynamicObject()
+            ->setProperty ("sourceDirty", true);
+        expectReportMutation (wrongSourceDirty, "wrong-source-dirty");
 
         auto wrongGateEvidence = juce::JSON::fromString (cliReportA.loadFileAsString());
         wrongGateEvidence.getDynamicObject()->getProperty ("gates").getArray()->getReference (0)

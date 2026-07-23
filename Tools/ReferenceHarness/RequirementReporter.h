@@ -32,6 +32,9 @@ struct RequirementReport {
     int fixtureVersion = 1;
     int analyzerVersion = 1;
     std::string sourceCommit;
+    std::string sourceTree;
+    std::string sourceContent;
+    bool sourceDirty = false;
     std::string buildType;
     std::string platform;
     std::string architecture;

@@ -2,6 +2,7 @@
 
 #include "ParameterRegistry.h"
 #include "StateContract.h"
+#include "ModelDSourceIdentity.generated.h"
 
 #include <juce_core/juce_core.h>
 
@@ -77,6 +78,9 @@ struct InputDefinition {
 
 struct ReproducibilityInfo {
     std::string sourceCommit;
+    std::string sourceTree;
+    std::string sourceContent;
+    bool sourceDirty = false;
     std::string juceCommit;
     std::string buildType;
     std::string platform;

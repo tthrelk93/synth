@@ -252,7 +252,9 @@ LoadResult<Metrics> analyzeControlStep (const AnalysisRequest& request)
         const auto direction = request.target >= request.start ? 1.0 : -1.0;
         monotonic = 1.0;
         if (! arithmeticOverflow) {
-            for (size_t sample = 1; sample < request.control.size(); ++sample) {
+            const auto firstMovement = std::max<size_t> (
+                1, static_cast<size_t> (request.eventSample));
+            for (size_t sample = firstMovement; sample < request.control.size(); ++sample) {
                 double movement = 0.0;
                 if (! safeDifference (request.control[sample], request.control[sample - 1],
                                       movement)) {
@@ -505,6 +507,11 @@ juce::String metricEvidenceJson (const std::span<const MetricEvidenceRecord> rec
             provenance->setProperty ("sampleRate", source.sampleRate);
             provenance->setProperty ("seed", static_cast<juce::int64> (source.seed));
             provenance->setProperty ("sourceCommit", juce::String { source.reproducibility.sourceCommit });
+            provenance->setProperty ("sourceContent", juce::String {
+                source.reproducibility.sourceContent });
+            provenance->setProperty ("sourceDirty", source.reproducibility.sourceDirty);
+            provenance->setProperty ("sourceTree", juce::String {
+                source.reproducibility.sourceTree });
             provenance->setProperty ("totalSamples", static_cast<juce::int64> (source.totalSamples));
         } else {
             provenance->setProperty ("compilerId", juce::String { source.reproducibility.compilerId });
@@ -514,6 +521,11 @@ juce::String metricEvidenceJson (const std::span<const MetricEvidenceRecord> rec
             provenance->setProperty ("registryPath", juce::String { source.registryPath });
             provenance->setProperty ("registrySha256", juce::String { source.registrySha256 });
             provenance->setProperty ("sourceCommit", juce::String { source.reproducibility.sourceCommit });
+            provenance->setProperty ("sourceContent", juce::String {
+                source.reproducibility.sourceContent });
+            provenance->setProperty ("sourceDirty", source.reproducibility.sourceDirty);
+            provenance->setProperty ("sourceTree", juce::String {
+                source.reproducibility.sourceTree });
         }
         auto object = std::make_unique<juce::DynamicObject>();
         object->setProperty ("metric", juce::var { metricObject.release() });
