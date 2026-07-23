@@ -66,6 +66,8 @@ constexpr std::array frozenFixturePaths {
     "Tests/reference/fixtures/par-006/dedicated-cutoff-step-v1.json",
     "Tests/reference/fixtures/par-006/dedicated-glide-step-v1.json",
     "Tests/reference/fixtures/par-006/contour-stage-step-v1.json",
+    "Tests/reference/fixtures/pit-001-oscillator-offset-sweep-v1.json",
+    "Tests/reference/fixtures/pit-002-composed-pitch-v1.json",
 };
 
 class ReferenceHarnessTest final : public juce::UnitTest {
@@ -85,6 +87,47 @@ public:
         if (index.value.has_value())
             expect (index.value->frozenArtifacts.size() == 9,
                     "fixture index must contain all nine frozen artifacts");
+        if (index.value.has_value()) {
+            expectEquals (static_cast<int> (index.value->renderFixtures.size()), 5);
+            expectEquals (static_cast<int> (frozenFixturePaths.size()), 21);
+
+            const auto findFixture = [&] (const std::string_view id) {
+                return std::find_if (
+                    index.value->renderFixtures.begin(), index.value->renderFixtures.end(),
+                    [&] (const auto& artifact) { return artifact.id == id; });
+            };
+            const auto sweepIndex = findFixture ("pit-001-oscillator-offset-sweep-v1");
+            const auto composedIndex = findFixture ("pit-002-composed-pitch-v1");
+            expect (sweepIndex != index.value->renderFixtures.end(),
+                    "PIT-001 selector sweep must be indexed");
+            expect (composedIndex != index.value->renderFixtures.end(),
+                    "PIT-002 composed pitch fixture must be indexed");
+
+            const auto sweep = sweepIndex == index.value->renderFixtures.end()
+                                 ? ReferenceHarness::LoadResult<
+                                       ReferenceHarness::RenderFixture> {}
+                                 : ReferenceHarness::loadIndexedRenderFixture (
+                                       sourceRoot, *sweepIndex);
+            const auto composed = composedIndex == index.value->renderFixtures.end()
+                                    ? ReferenceHarness::LoadResult<
+                                          ReferenceHarness::RenderFixture> {}
+                                    : ReferenceHarness::loadIndexedRenderFixture (
+                                          sourceRoot, *composedIndex);
+            expect (sweep.ok(), "indexed PIT-001 selector sweep must validate");
+            expect (composed.ok(), "indexed PIT-002 composed pitch fixture must validate");
+            if (sweep.value.has_value()) {
+                expect (sweep.value->requirements
+                            == std::vector<std::string> { "PIT-001" });
+                expectEquals (
+                    static_cast<int> (sweep.value->analysisRequests.size()), 34);
+            }
+            if (composed.value.has_value()) {
+                expect (composed.value->requirements
+                            == std::vector<std::string> { "PIT-002" });
+                expectEquals (
+                    static_cast<int> (composed.value->analysisRequests.size()), 3);
+            }
+        }
 
         beginTest ("canonical JSON sorts object properties and retains arrays");
         const auto unorderedJson = juce::JSON::fromString (
@@ -1522,6 +1565,7 @@ public:
     void runTest() override
     {
         using namespace ReferenceHarness;
+        const auto sourceRoot = juce::File { sourceRootPath };
         const auto registry = AnalyzerRegistry::withFoundationAnalyzers();
 
         beginTest ("versioned periodic pitch analyzer calibrates across pitch and sample rate");
@@ -1623,6 +1667,138 @@ public:
             expectWithinAbsoluteError (
                 evidence.value->front().metric.value, 69.0, 0.005,
                 "fixture pitch evidence must retain the analytic MIDI coordinate");
+
+        beginTest ("governed PIT fixtures produce exact repeatable block-invariant pitch metrics");
+        const auto fixtureIndex = loadFixtureIndex (
+            sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
+        expect (fixtureIndex.ok(), "fixture index must load for governed pitch evidence");
+        if (fixtureIndex.value.has_value()) {
+            const auto findIndexed = [&] (const std::string_view id) {
+                return std::find_if (
+                    fixtureIndex.value->renderFixtures.begin(),
+                    fixtureIndex.value->renderFixtures.end(),
+                    [&] (const auto& artifact) { return artifact.id == id; });
+            };
+            const auto verifyFixture = [&] (
+                const std::string_view fixtureId,
+                const std::span<const std::pair<std::string_view, double>> expected) {
+                const auto indexed = findIndexed (fixtureId);
+                expect (indexed != fixtureIndex.value->renderFixtures.end(),
+                        std::string { fixtureId } + " must be indexed");
+                if (indexed == fixtureIndex.value->renderFixtures.end())
+                    return;
+                const auto loaded = loadIndexedRenderFixture (sourceRoot, *indexed);
+                expect (loaded.ok(), std::string { fixtureId } + " must validate");
+                if (! loaded.value.has_value())
+                    return;
+                expectEquals (
+                    static_cast<int> (loaded.value->analysisRequests.size()),
+                    static_cast<int> (expected.size()));
+
+                std::optional<juce::String> canonicalMetricBytes;
+                std::vector<MetricEvidenceRecord> canonicalRecords;
+                for (int repeat = 0; repeat < 2; ++repeat) {
+                    const auto rendered = renderFixture (*loaded.value);
+                    expect (rendered.ok(),
+                            std::string { fixtureId } + " must render twice");
+                    if (! rendered.value.has_value())
+                        continue;
+                    expectEquals (static_cast<int> (rendered.value->size()), 3);
+                    for (const auto& result : *rendered.value) {
+                        const std::span<const RenderResult> singlePattern {
+                            &result, 1
+                        };
+                        const auto metrics = analyzeFixtureMetrics (
+                            *loaded.value, singlePattern);
+                        expect (metrics.ok(),
+                                std::string { fixtureId }
+                                    + " metrics must analyze for every block pattern and repeat");
+                        if (! metrics.value.has_value())
+                            continue;
+                        expectEquals (
+                            static_cast<int> (metrics.value->size()),
+                            static_cast<int> (expected.size()));
+                        std::vector<MetricResult> metricResults;
+                        metricResults.reserve (metrics.value->size());
+                        for (const auto& record : *metrics.value)
+                            metricResults.push_back (record.metric);
+                        const auto bytes = metricResultsJson (metricResults);
+                        if (canonicalMetricBytes.has_value())
+                            expect (bytes == *canonicalMetricBytes,
+                                    std::string { fixtureId }
+                                        + " canonical metric bytes must be identical across "
+                                          "three block patterns and two repeats");
+                        else {
+                            canonicalMetricBytes = bytes;
+                            canonicalRecords = *metrics.value;
+                        }
+                    }
+                }
+
+                expectEquals (
+                    static_cast<int> (canonicalRecords.size()),
+                    static_cast<int> (expected.size()));
+                for (const auto& [requestId, expectedMidi] : expected) {
+                    const auto expectedRequestId = requestId;
+                    const auto found = std::find_if (
+                        canonicalRecords.begin(), canonicalRecords.end(),
+                        [&] (const auto& record) {
+                            return record.provenance.requestId == expectedRequestId;
+                        });
+                    expect (found != canonicalRecords.end(),
+                            std::string { requestId } + " must produce one metric record");
+                    if (found != canonicalRecords.end()) {
+                        const auto error = std::abs (
+                            found->metric.value - expectedMidi);
+                        logMessage (
+                            "governed-pitch request=" + juce::String { requestId.data() }
+                            + " actual=" + juce::String { found->metric.value, 12 }
+                            + " expected=" + juce::String { expectedMidi, 12 }
+                            + " error-semitones=" + juce::String { error, 12 });
+                        expect (found->metric.metric == "midi-semitones"
+                                    && found->metric.unit == "semitones"
+                                    && found->metric.finite,
+                                std::string { requestId }
+                                    + " must produce a finite MIDI-semitone metric");
+                        expectWithinAbsoluteError (
+                            found->metric.value, expectedMidi, 0.01,
+                            std::string { requestId }
+                                + " must match its governed pitch coordinate");
+                    }
+                }
+            };
+
+            constexpr std::array selectorLabels {
+                "m08", "m07", "m06", "m05", "m04", "m03", "m02", "m01",
+                "z00",
+                "p01", "p02", "p03", "p04", "p05", "p06", "p07", "p08",
+            };
+            std::vector<std::pair<std::string_view, double>> sweepExpected;
+            std::array<std::string, 34> sweepIds;
+            for (int oscillator = 2; oscillator <= 3; ++oscillator) {
+                for (size_t selector = 0; selector < selectorLabels.size(); ++selector) {
+                    const auto index = static_cast<size_t> (
+                        (oscillator - 2) * static_cast<int> (selectorLabels.size()))
+                                     + selector;
+                    sweepIds[index] = "osc" + std::to_string (oscillator)
+                                    + "-offset-" + selectorLabels[selector];
+                    sweepExpected.emplace_back (
+                        sweepIds[index], 61.0 + static_cast<double> (selector));
+                }
+            }
+            verifyFixture ("pit-001-oscillator-offset-sweep-v1", sweepExpected);
+
+            constexpr std::array composedExpected {
+                std::pair<std::string_view, double> { "osc1-composed", 72.5 },
+                std::pair<std::string_view, double> {
+                    "osc2-composed", 51.863137138648348
+                },
+                std::pair<std::string_view, double> {
+                    "osc3-composed", 87.343587129994475
+                },
+            };
+            verifyFixture ("pit-002-composed-pitch-v1", composedExpected);
+        }
 
         beginTest ("pitch rejection diagnostics are stable and periodic multiples are accepted");
         const std::vector<float> silence (4096, 0.0f);

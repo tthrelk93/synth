@@ -75,6 +75,18 @@
       "relativePath": "Tests/reference/fixtures/legacy-contour-foundation.json",
       "sha256": "5c904acc8a0763ca01216f345208f7eb867e10430d4597d7b0a01063f4c26f6e",
       "requirements": ["PAR-004", "PAR-006"]
+    },
+    {
+      "id": "pit-001-oscillator-offset-sweep-v1",
+      "relativePath": "Tests/reference/fixtures/pit-001-oscillator-offset-sweep-v1.json",
+      "sha256": "99dd9fc5935ab43442dceee59a1d6268bc9fe4e2695c2f3c51338cc86dd2ad34",
+      "requirements": ["PIT-001"]
+    },
+    {
+      "id": "pit-002-composed-pitch-v1",
+      "relativePath": "Tests/reference/fixtures/pit-002-composed-pitch-v1.json",
+      "sha256": "63a2a95b9caee4799d814abe647e4c2433b82eb59fddebf502f38f68864e12ee",
+      "requirements": ["PIT-002"]
     }
   ],
   "smoothingFixtures": [
