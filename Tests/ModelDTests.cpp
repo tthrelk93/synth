@@ -4276,6 +4276,20 @@ void testPitchDomainContract (TestContext& test)
                      && std::abs (osc3Center / osc1Center - 1.0) < 0.02
                      && std::abs (osc3Plus8 / osc1Center - semitoneRatio) < 0.02,
                  "Oscillator 3 output selector must be centered at zero");
+
+    const auto processorSource =
+        legacyFixtureFile ("Source/PluginProcessor.cpp").loadFileAsString();
+    test.expect (
+        processorSource.contains (
+            "if (! osc1UsesMusicalPitch)\n"
+            "            osc1.setFrequency(effectiveFrequency);")
+            && processorSource.contains (
+                "if (! osc2UsesMusicalPitch)\n"
+                "            osc2.setFrequency(effectiveFrequency);")
+            && processorSource.contains (
+                "if (! osc3UsesMusicalPitch)\n"
+                "            osc3.setFrequency(osc3BaseFrequency);"),
+        "musical processor pitch paths must bypass legacy frequency setters");
 }
 
 int runMode (std::string_view mode)

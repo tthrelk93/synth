@@ -607,15 +607,25 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         // Apply pitch wheel without accumulating drift.
         float effectiveFrequency = currentGlideFrequency * legacyPitchWheelRatio;
 
-        // Set frequencies for oscillators
-        osc1.setFrequency(effectiveFrequency);
-        osc2.setFrequency(effectiveFrequency);
+        const bool osc1UsesMusicalPitch =
+            rangeSelectionOsc1 >= 1 && rangeSelectionOsc1 <= 5;
+        const bool osc2UsesMusicalPitch =
+            rangeSelectionOsc2 >= 1 && rangeSelectionOsc2 <= 5;
+        const bool osc3UsesMusicalPitch =
+            rangeSelectionOsc3 >= 1 && rangeSelectionOsc3 <= 5;
+
+        // Retain legacy setter/update work only for LO or invalid fallback ranges.
+        if (! osc1UsesMusicalPitch)
+            osc1.setFrequency(effectiveFrequency);
+        if (! osc2UsesMusicalPitch)
+            osc2.setFrequency(effectiveFrequency);
         const float osc3BaseFrequency = osc3CtrlMode ? effectiveFrequency : referenceFrequency;
-        osc3.setFrequency(osc3BaseFrequency);
+        if (! osc3UsesMusicalPitch)
+            osc3.setFrequency(osc3BaseFrequency);
 
         float osc3SampleRaw = 0.0f;
         if (osc3OnOff || filterModSwitchValue || oscModSwitchValue) {
-            if (rangeSelectionOsc3 >= 1 && rangeSelectionOsc3 <= 5) {
+            if (osc3UsesMusicalPitch) {
                 const auto osc3SourceFrequency =
                     osc3CtrlMode ? currentGlideFrequency : referenceFrequency;
                 const auto osc3PitchWheelRatio =
@@ -648,7 +658,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                 ? static_cast<double> (1.0f + pitchModulationEffect) : 1.0;
 
         if (osc1OnOff && osc1.isActive()) {
-            if (rangeSelectionOsc1 >= 1 && rangeSelectionOsc1 <= 5) {
+            if (osc1UsesMusicalPitch) {
                 osc1Sample = osc1.processNextSampleAtFrequency (
                     composeMusicalFrequency (
                         currentGlideFrequency, rangeSelectionOsc1, tuneSelectionOsc1, 8,
@@ -663,7 +673,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             osc1Peak = juce::jmax(osc1Peak, std::abs(osc1Sample) * (volSelectionOsc1 * volumeScale));
         }
         if (osc2OnOff && osc2.isActive()) {
-            if (rangeSelectionOsc2 >= 1 && rangeSelectionOsc2 <= 5) {
+            if (osc2UsesMusicalPitch) {
                 osc2Sample = osc2.processNextSampleAtFrequency (
                     composeMusicalFrequency (
                         currentGlideFrequency, rangeSelectionOsc2, tuneSelectionOsc1,
