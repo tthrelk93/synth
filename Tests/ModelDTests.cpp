@@ -4146,7 +4146,12 @@ void testRealtimeSmoke (TestContext& test)
 double renderProcessorPitch (const int oscillator,
                              const int offsetIndex,
                              const int midiNote,
-                             TestContext& test)
+                             TestContext& test,
+                             const int rangeIndex = 3,
+                             const int masterTuneIndex = 5,
+                             const float pitchWheel = 0.5f,
+                             const bool invalidateMasterTune = false,
+                             std::uint64_t* invalidDiagnosticDelta = nullptr)
 {
     constexpr double sampleRate = 48000.0;
     constexpr int totalSamples = 16384;
@@ -4159,17 +4164,17 @@ double renderProcessorPitch (const int oscillator,
     setParameter (processor, "osc1Waveform", 0.0f, test);
     setParameter (processor, "osc2Waveform", 0.0f, test);
     setParameter (processor, "osc3Waveform", 0.0f, test);
-    setParameter (processor, "osc1Range", 3.0f / 5.0f, test);
-    setParameter (processor, "osc2Range", 3.0f / 5.0f, test);
-    setParameter (processor, "osc3Range", 3.0f / 5.0f, test);
-    setParameter (processor, "tune", 5.0f / 10.0f, test);
+    setParameter (processor, "osc1Range", static_cast<float> (rangeIndex) / 5.0f, test);
+    setParameter (processor, "osc2Range", static_cast<float> (rangeIndex) / 5.0f, test);
+    setParameter (processor, "osc3Range", static_cast<float> (rangeIndex) / 5.0f, test);
+    setParameter (processor, "tune", static_cast<float> (masterTuneIndex) / 10.0f, test);
     setParameter (processor, "osc2Freq",
                   static_cast<float> (oscillator == 2 ? offsetIndex : 8) / 16.0f,
                   test);
     setParameter (processor, "osc3Freq",
                   static_cast<float> (oscillator == 3 ? offsetIndex : 8) / 16.0f,
                   test);
-    setParameter (processor, "pitchWheelValue", 0.5f, test);
+    setParameter (processor, "pitchWheelValue", pitchWheel, test);
     setParameter (processor, "osc1Vol", oscillator == 1 ? 1.0f : 0.0f, test);
     setParameter (processor, "osc2Vol", oscillator == 2 ? 1.0f : 0.0f, test);
     setParameter (processor, "osc3Vol", oscillator == 3 ? 1.0f : 0.0f, test);
@@ -4182,13 +4187,21 @@ double renderProcessorPitch (const int oscillator,
     setParameter (processor, "extInputVolSwitch", 0.0f, test);
     setParameter (processor, "osc3CtrlMode", 1.0f, test);
 
+    if (invalidateMasterTune)
+        rawParameterForTest (processor, ParameterRegistry::Key::tune)
+            ->store (std::numeric_limits<float>::quiet_NaN(), std::memory_order_relaxed);
+
     processor.setRateAndBufferSizeDetails (sampleRate, totalSamples);
     processor.prepareToPlay (sampleRate, totalSamples);
     juce::AudioBuffer<float> buffer (processor.getTotalNumOutputChannels(), totalSamples);
     buffer.clear();
     juce::MidiBuffer midi;
     midi.addEvent (juce::MidiMessage::noteOn (1, midiNote, 1.0f), 0);
+    const auto diagnosticBefore = processor.getInvalidParameterValueCount();
     processor.processBlock (buffer, midi);
+    if (invalidDiagnosticDelta != nullptr)
+        *invalidDiagnosticDelta =
+            processor.getInvalidParameterValueCount() - diagnosticBefore;
 
     int crossings = 0;
     const auto* samples = buffer.getReadPointer (0);
@@ -4217,6 +4230,20 @@ void testPitchDomainContract (TestContext& test)
     const auto centerHz = PitchDomain::toHertz (center.value);
     test.expect (center.valid && centerHz.valid && centerHz.value.value == 440.0,
                  "center selector must produce a unity A4 ratio");
+    const auto adjacentSemitoneRatio = std::exp2 (1.0 / 12.0);
+    bool adjacentSelectorRatiosExact = true;
+    for (int index = 0; index < 16; ++index) {
+        const auto lower = PitchDomain::oscillatorOffset (index);
+        const auto upper = PitchDomain::oscillatorOffset (index + 1);
+        const auto lowerHz = PitchDomain::toHertz (lower.value);
+        const auto upperHz = PitchDomain::toHertz (upper.value);
+        adjacentSelectorRatiosExact = adjacentSelectorRatiosExact
+            && lower.valid && upper.valid && lowerHz.valid && upperHz.valid
+            && std::abs (upperHz.value.value / lowerHz.value.value
+                         - adjacentSemitoneRatio) < 1.0e-12;
+    }
+    test.expect (adjacentSelectorRatiosExact,
+                 "every adjacent selector position must have one equal-tempered semitone ratio");
 
     constexpr std::array expectedRanges { -24.0, -12.0, 0.0, 12.0, 24.0 };
     for (int index = 1; index <= 5; ++index) {
@@ -4230,6 +4257,19 @@ void testPitchDomainContract (TestContext& test)
     const auto low = PitchDomain::range (0);
     test.expect (low.valid && low.value.mode == PitchDomain::RangeMode::lowFrequency,
                  "LO must remain an explicit special mode");
+
+    constexpr std::array expectedMasterTune {
+        -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5
+    };
+    bool masterTuneTableExact = true;
+    for (int index = 0; index < static_cast<int> (expectedMasterTune.size()); ++index) {
+        const auto tune = PitchDomain::masterTune (index);
+        masterTuneTableExact = masterTuneTableExact
+            && tune.valid
+            && tune.value.value == expectedMasterTune[static_cast<size_t> (index)];
+    }
+    test.expect (masterTuneTableExact,
+                 "master tune must expose the complete exact half-semitone table");
 
     PitchDomain::Contributions contributions {
         .note = { -5.0 },
@@ -4276,6 +4316,24 @@ void testPitchDomainContract (TestContext& test)
                      && std::abs (osc3Center / osc1Center - 1.0) < 0.02
                      && std::abs (osc3Plus8 / osc1Center - semitoneRatio) < 0.02,
                  "Oscillator 3 output selector must be centered at zero");
+
+    const auto composedProcessorPitch =
+        renderProcessorPitch (2, 5, 64, test, 2, 3, 0.75f);
+    const auto expectedComposedMidi =
+        64.0 - 12.0 - 1.0 - 3.0 + 12.0 * std::log2 (1.25);
+    const auto expectedComposedFrequency =
+        440.0 * std::exp2 ((expectedComposedMidi - 69.0) / 12.0);
+    test.expect (
+        std::abs (composedProcessorPitch / expectedComposedFrequency - 1.0) < 0.02,
+        "nonzero processor pitch must compose note, range, tune, offset, and bend exactly once");
+
+    std::uint64_t invalidDiagnosticDelta = 0;
+    const auto invalidFallbackPitch = renderProcessorPitch (
+        2, 8, 69, test, 3, 5, 0.5f, true, &invalidDiagnosticDelta);
+    test.expect (std::isfinite (invalidFallbackPitch)
+                     && std::abs (invalidFallbackPitch / osc2Center - 1.0) < 0.02
+                     && invalidDiagnosticDelta == 1,
+                 "invalid processor pitch input must use the declared fallback and diagnose once");
 
     const auto processorSource =
         legacyFixtureFile ("Source/PluginProcessor.cpp").loadFileAsString();

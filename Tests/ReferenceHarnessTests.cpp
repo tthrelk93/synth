@@ -1674,6 +1674,48 @@ public:
             }
         }
 
+        beginTest ("strongest local peak preserves a weak fundamental under a dominant harmonic");
+        constexpr double harmonicSampleRate = 48000.0;
+        constexpr double fundamentalFrequency = 200.0;
+        constexpr double fundamentalAmplitude = 0.075;
+        constexpr double secondHarmonicAmplitude = 0.75;
+        constexpr size_t fundamentalPeriodSamples = 240;
+        std::vector<float> harmonicRichTone (fundamentalPeriodSamples * 32);
+        for (size_t sample = 0; sample < harmonicRichTone.size(); ++sample) {
+            const auto phase = juce::MathConstants<double>::twoPi
+                             * static_cast<double> (sample % fundamentalPeriodSamples)
+                             / static_cast<double> (fundamentalPeriodSamples);
+            harmonicRichTone[sample] = static_cast<float> (
+                fundamentalAmplitude * std::sin (phase)
+                + secondHarmonicAmplitude * std::sin (2.0 * phase));
+        }
+        const auto harmonicRich = registry.analyze (
+            "audio.pitch.v1",
+            AnalysisRequest {
+                .metric = "midi-semitones",
+                .sampleRate = harmonicSampleRate,
+                .audio = harmonicRichTone,
+            });
+        const auto expectedFundamentalMidi =
+            69.0 + 12.0 * std::log2 (fundamentalFrequency / 440.0);
+        expect (harmonicRich.ok() && harmonicRich.value.has_value()
+                    && harmonicRich.value->size() == 1,
+                "harmonic-rich periodic input must produce one selected pitch metric");
+        if (harmonicRich.value.has_value() && harmonicRich.value->size() == 1) {
+            const auto error =
+                std::abs (harmonicRich.value->front().value - expectedFundamentalMidi);
+            logMessage (
+                "harmonic-rich fundamental-hz=200 fundamental-amplitude=0.075 "
+                "second-harmonic-hz=400 second-harmonic-amplitude=0.75 "
+                "error-semitones=" + juce::String { error, 9 });
+            expect (harmonicRich.value->front().metric == "midi-semitones"
+                        && harmonicRich.value->front().unit == "semitones"
+                        && harmonicRich.value->front().finite,
+                    "harmonic-rich analysis must retain the governed pitch metric contract");
+            expect (error < 0.005,
+                    "harmonic-rich pitch must report the fundamental within strict calibration");
+        }
+
         beginTest ("periodic pitch reports the complete metric and settings contract");
         const auto concertA = makeTone (48000.0, 69.0, 8192);
         const auto complete = registry.analyze (
@@ -1698,6 +1740,7 @@ public:
                         { "confidence-threshold", "0.80" },
                         { "lag-range", "20Hz..5000Hz" },
                         { "minimum-periods", "4" },
+                        { "peak-tie-tolerance", "0.00001" },
                         { "periodic-multiple-tolerance", "0.05" },
                     },
                     "pitch analyzer settings must be exact and explicit");

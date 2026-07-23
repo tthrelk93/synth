@@ -396,6 +396,7 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
         { "confidence-threshold", "0.80" },
         { "lag-range", "20Hz..5000Hz" },
         { "minimum-periods", "4" },
+        { "peak-tie-tolerance", "0.00001" },
         { "periodic-multiple-tolerance", "0.05" },
     };
     const auto makeMetrics = [&] (const double frequency,
@@ -506,21 +507,6 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
         return reject ("analyzer.pitch-ambiguous",
                        "pitch analysis found no strict local correlation peak");
 
-    const auto greatestPeak = std::max_element (
-        peaks.begin(), peaks.end(), [] (const auto& left, const auto& right) {
-            return left.correlation < right.correlation;
-        })->correlation;
-    const auto selected = std::find_if (peaks.begin(), peaks.end(), [&] (const auto& peak) {
-        return peak.correlation >= 0.80
-            && peak.correlation >= greatestPeak - 0.02;
-    });
-    if (selected == peaks.end())
-        return reject ("analyzer.pitch-ambiguous",
-                       "pitch correlation confidence is below the calibrated threshold");
-    if (selected->lag == minimumLag || selected->lag == maximumLag)
-        return reject ("analyzer.pitch-window",
-                       "pitch correlation peak lies on the search boundary");
-
     const auto interpolateLag = [&] (const size_t lag) {
         const auto left = correlation[lag - 1];
         const auto center = correlation[lag];
@@ -530,12 +516,50 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
                               ? 0.0 : 0.5 * (left - right) / denominator;
         return static_cast<double> (lag) + std::clamp (correction, -0.5, 0.5);
     };
+    const auto interpolatedPeak = [&] (const size_t lag) {
+        const auto left = correlation[lag - 1];
+        const auto center = correlation[lag];
+        const auto right = correlation[lag + 1];
+        const auto denominator = left - 2.0 * center + right;
+        const auto correction = denominator == 0.0
+                              ? 0.0 : std::clamp (
+                                  0.5 * (left - right) / denominator, -0.5, 0.5);
+        return center - 0.25 * (left - right) * correction;
+    };
+
+    const auto strongest = std::max_element (
+        peaks.begin(), peaks.end(), [] (const auto& left, const auto& right) {
+            return left.correlation < right.correlation;
+        });
+    constexpr auto peakTieTolerance = 0.00001;
+    const auto strongestPeak = std::max_element (
+        peaks.begin(), peaks.end(), [&] (const auto& left, const auto& right) {
+            return interpolatedPeak (left.lag) < interpolatedPeak (right.lag);
+        });
+    const auto strongestInterpolatedPeak = interpolatedPeak (strongestPeak->lag);
+    const auto selected = std::find_if (peaks.begin(), peaks.end(), [&] (const auto& peak) {
+        return interpolatedPeak (peak.lag)
+            >= strongestInterpolatedPeak - peakTieTolerance;
+    });
+    if (selected->correlation < 0.80)
+        return reject ("analyzer.pitch-ambiguous",
+                       "pitch correlation confidence is below the calibrated threshold");
+    if (selected->lag == minimumLag || selected->lag == maximumLag)
+        return reject ("analyzer.pitch-window",
+                       "pitch correlation peak lies on the search boundary");
+
     const auto selectedLag = interpolateLag (selected->lag);
+    const auto recurrenceBase = std::find_if (
+        peaks.begin(), peaks.end(), [&] (const auto& peak) {
+            return peak.correlation >= 0.80
+                && std::abs (peak.correlation - strongest->correlation) <= 0.02;
+        });
+    const auto recurrenceBaseLag = interpolateLag (recurrenceBase->lag);
     const auto ambiguous = std::any_of (peaks.begin(), peaks.end(), [&] (const auto& peak) {
-        if (peak.lag == selected->lag
-            || std::abs (peak.correlation - selected->correlation) > 0.02)
+        if (peak.lag == recurrenceBase->lag
+            || std::abs (peak.correlation - recurrenceBase->correlation) > 0.02)
             return false;
-        const auto ratio = interpolateLag (peak.lag) / selectedLag;
+        const auto ratio = interpolateLag (peak.lag) / recurrenceBaseLag;
         const auto multiple = std::max (1.0, std::round (ratio));
         return std::abs (ratio - multiple) > 0.05;
     });
