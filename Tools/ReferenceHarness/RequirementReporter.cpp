@@ -290,6 +290,63 @@ struct AuthoritativeCandidate {
     std::vector<GateResult> gates;
 };
 
+LoadResult<bool> appendAuthoritativeRenderMetricEvidence (
+    const AcceptanceManifest& acceptance,
+    const RenderFixture& fixture,
+    const std::span<const MetricEvidenceRecord> records,
+    const juce::File& artifactFile,
+    std::vector<GateMetricEvidence>& evidence)
+{
+    const auto artifactPath = "renders/" + fixture.id + "/metrics.json";
+    if (! artifactFile.existsAsFile()
+        || artifactFile.loadFileAsString() != metricEvidenceJson (records))
+        return failure<bool> (
+            "acceptance.metric-evidence-invalid",
+            "authoritative render metric artifact must contain the full replayed record set");
+    const auto appendSection = [&] (
+        const std::vector<GateDefinition>& gates) -> std::optional<Diagnostic> {
+        for (const auto& gate : gates) {
+            if (! gate.renderMetric.has_value()
+                || gate.renderMetric->fixtureId != fixture.id)
+                continue;
+            const auto count = std::count_if (
+                records.begin(), records.end(), [&] (const auto& record) {
+                    return record.provenance.requestId
+                        == gate.renderMetric->requestId;
+                });
+            if (count != 1)
+                return Diagnostic {
+                    "acceptance.metric-evidence-invalid",
+                    "authoritative bound request must reproduce exactly one metric record",
+                };
+            const auto record = std::find_if (
+                records.begin(), records.end(), [&] (const auto& item) {
+                    return item.provenance.requestId
+                        == gate.renderMetric->requestId;
+                });
+            evidence.push_back ({
+                gate.id,
+                *record,
+                artifactFile,
+                artifactPath,
+                sha256File (artifactFile),
+            });
+        }
+        return std::nullopt;
+    };
+    for (const auto* section : {
+             &acceptance.hardSoftware,
+             &acceptance.published,
+             &acceptance.derivedSoftware,
+             &acceptance.measuredHardware,
+             &acceptance.performance,
+         })
+        if (const auto diagnostic = appendSection (*section);
+            diagnostic.has_value())
+            return { std::nullopt, { *diagnostic } };
+    return { true, {} };
+}
+
 LoadResult<AuthoritativeCandidate> buildAuthoritativeCandidateEvidence (
     const juce::File& sourceRoot,
     const FixtureIndex& index,
@@ -306,6 +363,9 @@ LoadResult<AuthoritativeCandidate> buildAuthoritativeCandidateEvidence (
         return { std::nullopt, registryEvidence.diagnostics };
     candidate.evidence.emplace_back (
         "candidate/metrics.json", registryEvidence.value->artifactSha256);
+    std::vector<GateMetricEvidence> metricEvidence {
+        *registryEvidence.value,
+    };
     const auto rendersRoot = temporary.directory.getChildFile ("renders");
     if (! rendersRoot.createDirectory())
         return failure<AuthoritativeCandidate> (
@@ -317,10 +377,21 @@ LoadResult<AuthoritativeCandidate> buildAuthoritativeCandidateEvidence (
         const auto rendered = renderFixture (*fixture.value);
         if (! rendered.ok())
             return { std::nullopt, rendered.diagnostics };
+        const auto records = analyzeFixtureMetrics (
+            *fixture.value, *rendered.value);
+        if (! records.ok())
+            return { std::nullopt, records.diagnostics };
         const auto files = writeCandidateArtifacts (
             *fixture.value, *rendered.value, rendersRoot);
         if (! files.ok())
             return { std::nullopt, files.diagnostics };
+        const auto appended = appendAuthoritativeRenderMetricEvidence (
+            acceptance, *fixture.value, *records.value,
+            rendersRoot.getChildFile (fixture.value->id)
+                .getChildFile ("metrics.json"),
+            metricEvidence);
+        if (! appended.ok())
+            return { std::nullopt, appended.diagnostics };
         for (const auto& file : *files.value) {
             const auto relative = file.getRelativePathFrom (temporary.directory).toStdString();
             if (relative.empty() || relative.starts_with (".."))
@@ -331,8 +402,7 @@ LoadResult<AuthoritativeCandidate> buildAuthoritativeCandidateEvidence (
         }
     }
     const auto gates = buildF0GateResults (
-        sourceRoot, index, acceptance,
-        std::span<const GateMetricEvidence> { &*registryEvidence.value, 1 });
+        sourceRoot, index, acceptance, metricEvidence);
     if (! gates.ok())
         return { std::nullopt, gates.diagnostics };
     candidate.gates = std::move (*gates.value);
@@ -950,9 +1020,17 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
     if (! submittedGates.ok())
         return { std::nullopt, submittedGates.diagnostics };
     auto reportFormGates = authoritativeGates;
-    for (auto& gate : reportFormGates)
-        if (gate.status == Status::pass && gate.artifactPath == "metrics.json")
-            gate.artifactPath = "candidate/metrics.json";
+    for (auto& gate : reportFormGates) {
+        const auto reportPath = "candidate/" + gate.artifactPath;
+        if (gate.status == Status::pass
+            && std::any_of (
+                authoritativeCandidate.value->evidence.begin(),
+                authoritativeCandidate.value->evidence.end(),
+                [&] (const auto& item) {
+                    return item.first == reportPath;
+                }))
+            gate.artifactPath = reportPath;
+    }
     if (canonicalJson (gateArrayJson (*submittedGates.value))
         != canonicalJson (gateArrayJson (reportFormGates)))
         return failure<bool> (
@@ -1048,11 +1126,17 @@ LoadResult<bool> verifyReleaseReady (const juce::File& reportFile)
                 const auto candidate = resolveBoundedRegularFile (
                     reportFile.getParentDirectory(), path.substr (10));
                 const auto isCandidateInventory = id == "TST-001";
-                const auto isRegistryGateArtifact = path == "candidate/metrics.json"
-                    && std::find (gateIds.begin(), gateIds.end(), "hard.registry.count")
-                           != gateIds.end();
+                const auto isGateArtifact = std::any_of (
+                    submittedGates.value->begin(), submittedGates.value->end(),
+                    [&] (const auto& gate) {
+                        return gate.status == Status::pass
+                            && gate.artifactPath == path
+                            && std::find (
+                                gateIds.begin(), gateIds.end(), gate.id)
+                                   != gateIds.end();
+                    });
                 if (! candidate.ok()
-                    || (! isCandidateInventory && ! isRegistryGateArtifact)
+                    || (! isCandidateInventory && ! isGateArtifact)
                     || (isCandidateInventory
                         && ! uniqueCandidatePaths.insert (path).second))
                     return failure<bool> (

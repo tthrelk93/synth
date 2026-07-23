@@ -317,7 +317,14 @@
         "OR"
       ],
       "status": "not-run",
-      "gateIds": [],
+      "gateIds": [
+        "pit001.osc2.minus8",
+        "pit001.osc2.center",
+        "pit001.osc2.plus8",
+        "pit001.osc3.minus8",
+        "pit001.osc3.center",
+        "pit001.osc3.plus8"
+      ],
       "artifacts": []
     },
     {
@@ -328,7 +335,11 @@
         "OR"
       ],
       "status": "not-run",
-      "gateIds": [],
+      "gateIds": [
+        "pit002.osc1.composed",
+        "pit002.osc2.composed",
+        "pit002.osc3.composed"
+      ],
       "artifacts": []
     },
     {

@@ -856,7 +856,7 @@ public:
         expect (manifest.ok(), "the checked-in acceptance manifest must validate");
         if (manifest.value.has_value()) {
             expect (manifest.value->status == "draft", "global acceptance must remain draft");
-            expectEquals (static_cast<int> (manifest.value->derivedSoftware.size()), 4);
+            expectEquals (static_cast<int> (manifest.value->derivedSoftware.size()), 13);
         }
 
         beginTest ("acceptance validation rejects unsupported or unproven claims");
@@ -1027,6 +1027,73 @@ public:
                                         R"("status": "not-run")", R"("status": "pass")"),
                                     "acceptance.pass-artifact");
 
+        beginTest ("pitch gate bindings and exact policy table reject drift");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"(      "fixtureId": "pit-001-oscillator-offset-sweep-v1",
+)",
+                ""),
+            "acceptance.metric-binding");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"(      "requestId": "osc2-offset-m08",
+)",
+                ""),
+            "acceptance.metric-binding");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("fixtureId": "pit-001-oscillator-offset-sweep-v1")",
+                R"("fixtureId": "unknown-pitch-fixture")"),
+            "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("requestId": "osc2-offset-m08")",
+                R"("requestId": "unknown-pitch-request")"),
+            "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("analyzer": "audio.pitch.v1")",
+                R"("analyzer": "audio.click.v1")"),
+            "acceptance.metric");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("metric": "midi-semitones")",
+                R"("metric": "frequency-hz")"),
+            "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("unit": "semitones")", R"("unit": "Hz")"),
+            "acceptance.derived-policy");
+        expectAcceptanceDiagnostic (
+            sourceRoot, registry,
+            acceptanceText.replaceFirstOccurrenceOf (
+                R"("value": 61.0)", R"("value": 61.5)"),
+            "acceptance.derived-policy");
+        for (const auto mutation : { "missing", "additional", "reordered" }) {
+            auto payload = juce::JSON::fromString (acceptanceText);
+            auto* policies = payload.getDynamicObject()->getProperty (
+                "derivedSoftware").getArray();
+            if (std::string_view { mutation } == "missing") {
+                policies->remove (4);
+            } else if (std::string_view { mutation } == "additional") {
+                auto additional = policies->getReference (4).clone();
+                additional.getDynamicObject()->setProperty ("id", "pit001.additional");
+                policies->add (std::move (additional));
+            } else {
+                policies->swap (4, 5);
+            }
+            expectAcceptanceDiagnostic (
+                sourceRoot, registry, canonicalJson (payload),
+                "acceptance.derived-policy");
+        }
+
         beginTest ("reviewed policies may execute while global approval requires complete evidence");
         const auto artifactPath = juce::String { "Tests/reference/acceptance-v1.json" };
         const auto artifactHash = juce::String { sha256File (acceptanceFile) };
@@ -1034,9 +1101,11 @@ public:
             R"("status": "pass", "artifactPath": ")" }
                                 + artifactPath + R"(", "artifactSha256": ")"
                                 + artifactHash + R"(")";
-        const auto completeApproved = acceptanceText
-            .replaceFirstOccurrenceOf (R"("status": "draft")", R"("status": "approved")")
-            .replace (R"("status": "not-run")", passArtifact)
+        auto executableDraft = acceptanceText;
+        for (int policy = 0; policy < 5; ++policy)
+            executableDraft = executableDraft.replaceFirstOccurrenceOf (
+                R"("status": "not-run")", passArtifact);
+        const auto completeDraft = executableDraft
             .replaceFirstOccurrenceOf (
                 R"("published": [])",
                 juce::String { R"("published": [{"id":"published.probe","classification":"published",)" }
@@ -1057,21 +1126,21 @@ public:
         if (! approvedRoot.isOwned())
             return;
         const auto approvedFile = approvedRoot.directory.getChildFile ("acceptance.json");
-        approvedFile.replaceWithText (completeApproved);
-        const auto approvedManifest = loadAcceptanceManifest (sourceRoot, approvedFile, registry);
-        expect (approvedManifest.ok(),
-                "all five complete evidence sections may produce a globally approved manifest");
-        if (approvedManifest.value.has_value()) {
-            expect (approvedManifest.value->published.front().published.has_value()
-                        && approvedManifest.value->published.front().published->sourceVersion
+        approvedFile.replaceWithText (completeDraft);
+        const auto typedManifest = loadAcceptanceManifest (sourceRoot, approvedFile, registry);
+        expect (typedManifest.ok(),
+                "all five evidence sections may execute while the pitch seed stays not-run");
+        if (typedManifest.value.has_value()) {
+            expect (typedManifest.value->published.front().published.has_value()
+                        && typedManifest.value->published.front().published->sourceVersion
                                == "revision 2",
                     "published provenance must load into its typed record");
-            expect (approvedManifest.value->measuredHardware.front().measuredHardware.has_value()
-                        && approvedManifest.value->measuredHardware.front()
+            expect (typedManifest.value->measuredHardware.front().measuredHardware.has_value()
+                        && typedManifest.value->measuredHardware.front()
                                .measuredHardware->rawSha256.size() == 1,
                     "hardware provenance must load typed raw capture hashes");
-            expect (approvedManifest.value->performance.front().performance.has_value()
-                        && approvedManifest.value->performance.front().performance->reviewStatus
+            expect (typedManifest.value->performance.front().performance.has_value()
+                        && typedManifest.value->performance.front().performance->reviewStatus
                                == "approved",
                     "performance provenance must load its typed review record");
         }
@@ -1081,7 +1150,7 @@ public:
                                                        const std::string_view code) {
             expectAcceptanceDiagnostic (
                 sourceRoot, registry,
-                completeApproved.replaceFirstOccurrenceOf (needle, replacement), code);
+                completeDraft.replaceFirstOccurrenceOf (needle, replacement), code);
         };
         for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 3> {{
                  { R"("source":"approved primary source",)", R"("source":"",)" },
@@ -1117,11 +1186,12 @@ public:
             expectTypedProvenanceFailure (needle, replacement, "acceptance.performance");
         expectAcceptanceDiagnostic (
             sourceRoot, registry,
-            completeApproved.replaceFirstOccurrenceOf (passArtifact, R"("status": "not-run")"),
+            completeDraft.replaceFirstOccurrenceOf (
+                R"("status": "draft")", R"("status": "approved")"),
             "acceptance.incomplete");
         expectAcceptanceDiagnostic (
             sourceRoot, registry,
-            completeApproved.replaceFirstOccurrenceOf (
+            completeDraft.replaceFirstOccurrenceOf (
                 R"("id": "par006.gain-control.duration",
       "classification": "derived-software",
       "status": "pass")",
@@ -2937,6 +3007,10 @@ public:
         renderGateDefinition.unit = renderEvidence.record.metric.unit;
         renderGateDefinition.value = renderEvidence.record.metric.value;
         renderGateDefinition.allowance = renderEvidence.record.metric.allowance;
+        renderGateDefinition.renderMetric = RenderMetricBinding {
+            indexedRender.value->id,
+            renderEvidence.record.provenance.requestId,
+        };
         const auto evaluateRenderEvidence = [&] (const GateMetricEvidence& item) {
             return evaluateAcceptance (
                 renderManifest, *smoothing.value, noEvidence, registry,
@@ -3028,11 +3102,93 @@ public:
         forgedArtifactFile.artifactSha256 = sha256File (forgedRenderFile);
         expectRenderForgery (std::move (forgedArtifactFile), "artifact-file");
 
+        std::vector<GateMetricEvidence> authoritativeMetricEvidence {
+            *registryEvidence.value,
+        };
+        const auto rendersRoot = candidateRoot.directory.getChildFile ("renders");
+        for (const auto& indexedFixture : index.value->renderFixtures) {
+            if (! indexedFixture.id.starts_with ("pit-"))
+                continue;
+            const auto fixture = loadIndexedRenderFixture (
+                sourceRoot, indexedFixture);
+            const auto renders = fixture.ok()
+                ? renderFixture (*fixture.value)
+                : LoadResult<std::vector<RenderResult>> {};
+            const auto records = renders.ok()
+                ? analyzeFixtureMetrics (*fixture.value, *renders.value)
+                : LoadResult<std::vector<MetricEvidenceRecord>> {};
+            const auto files = records.ok()
+                ? writeCandidateArtifacts (
+                      *fixture.value, *renders.value, rendersRoot)
+                : LoadResult<std::vector<juce::File>> {};
+            expect (fixture.ok() && renders.ok() && records.ok() && files.ok(),
+                    indexedFixture.id + " bound evidence must materialize");
+            if (! files.ok())
+                return;
+            const auto artifactFile = rendersRoot.getChildFile (
+                fixture.value->id).getChildFile ("metrics.json");
+            for (const auto& gate : acceptance.value->derivedSoftware) {
+                if (! gate.renderMetric.has_value()
+                    || gate.renderMetric->fixtureId != fixture.value->id)
+                    continue;
+                const auto record = std::find_if (
+                    records.value->begin(), records.value->end(),
+                    [&] (const auto& item) {
+                        return item.provenance.requestId
+                            == gate.renderMetric->requestId;
+                    });
+                expect (record != records.value->end(),
+                        gate.id + " must resolve one analyzed request");
+                if (record == records.value->end())
+                    return;
+                authoritativeMetricEvidence.push_back ({
+                    gate.id,
+                    *record,
+                    artifactFile,
+                    "renders/" + fixture.value->id + "/metrics.json",
+                    sha256File (artifactFile),
+                });
+            }
+        }
+        expectEquals (authoritativeMetricEvidence.size(), size_t { 10 },
+                      "one registry and nine bound pitch records are authoritative");
+
+        beginTest ("bound pitch evidence cannot substitute an equal-valued request");
+        auto substitutedBinding = authoritativeMetricEvidence[1];
+        const auto equalValuedRecord = std::find_if (
+            authoritativeMetricEvidence.begin(), authoritativeMetricEvidence.end(),
+            [&] (const auto& item) {
+                return item.record.provenance.requestId == "osc3-offset-m08";
+            });
+        expect (equalValuedRecord != authoritativeMetricEvidence.end(),
+                "equal-valued substitution probe requires the oscillator-three record");
+        if (equalValuedRecord != authoritativeMetricEvidence.end()) {
+            substitutedBinding.record = equalValuedRecord->record;
+            substitutedBinding.artifactFile = equalValuedRecord->artifactFile;
+            substitutedBinding.artifactPath = equalValuedRecord->artifactPath;
+            substitutedBinding.artifactSha256 = equalValuedRecord->artifactSha256;
+            const auto substituted = evaluateAcceptance (
+                *acceptance.value, *smoothing.value, noEvidence, registry,
+                std::span<const GateMetricEvidence> { &substitutedBinding, 1 });
+            auto rejectedSubstitution = false;
+            if (substituted.value.has_value()) {
+                const auto gate = std::find_if (
+                    substituted.value->begin(), substituted.value->end(),
+                    [&] (const auto& item) {
+                        return item.id == substitutedBinding.gateId;
+                    });
+                rejectedSubstitution = gate != substituted.value->end()
+                    && gate->status == Status::fail
+                    && gate->reasonCode == "acceptance.metric-evidence-invalid";
+            }
+            expect (substituted.ok() && rejectedSubstitution,
+                    "an equal-valued record from a different request must be rejected");
+        }
+
         const auto evaluated = smoothing.ok()
                                  ? evaluateAcceptance (
                                        *acceptance.value, *smoothing.value, noEvidence, registry,
-                                       std::span<const GateMetricEvidence> {
-                                           &*registryEvidence.value, 1 })
+                                       authoritativeMetricEvidence)
                                  : LoadResult<std::vector<GateResult>> {};
         expect (index.ok() && smoothing.ok() && evaluated.ok(),
                 "authoritative F0 gate expansion must validate");
@@ -3075,7 +3231,10 @@ public:
         expectRequirement (*report.value, "PAR-001", Status::pass);
         expectRequirement (*report.value, "PAR-006", Status::awaitingApprovedReference);
         expectRequirement (*report.value, "TST-006", Status::awaitingApprovedReference);
+        expectRequirement (*report.value, "PIT-001", Status::pass);
+        expectRequirement (*report.value, "PIT-002", Status::pass);
         expectRequirement (*report.value, "PIT-003", Status::awaitingApprovedReference);
+        expectEquals (report.value->gateResults.size(), size_t { 110 });
 
         beginTest ("report building validates and restores matrix order");
         auto reversedRequirements = *requirements.value;
@@ -3264,6 +3423,20 @@ public:
         const auto cliReportB = cliB.getChildFile ("requirements-report.json");
         expect (cliReportA.hasIdenticalContentTo (cliReportB),
                 "complete CLI reports must be byte-identical");
+        const auto candidateFilesA = cliA.findChildFiles (
+            juce::File::findFiles, true, "*");
+        const auto candidateFilesB = cliB.findChildFiles (
+            juce::File::findFiles, true, "*");
+        expectEquals (candidateFilesA.size(), 32,
+                      "candidate A must contain the exact governed inventory");
+        expectEquals (candidateFilesB.size(), 32,
+                      "candidate B must contain the exact governed inventory");
+        for (const auto& fileA : candidateFilesA) {
+            const auto relative = fileA.getRelativePathFrom (cliA);
+            const auto fileB = cliB.getChildFile (relative);
+            expect (fileB.existsAsFile() && fileA.hasIdenticalContentTo (fileB),
+                    relative + " must repeat byte-identically");
+        }
         expect (cliA.getChildFile ("metrics.json").existsAsFile()
                     && cliA.getChildFile ("metrics.json").hasIdenticalContentTo (
                         cliB.getChildFile ("metrics.json")),
@@ -3290,6 +3463,26 @@ public:
                     && cliHardGate->getDynamicObject()->getProperty ("artifactPath").toString()
                            == "candidate/metrics.json",
                 "hard.registry.count must pass only through typed metric evidence");
+        for (const auto gateId : { "pit001.osc2.minus8", "pit001.osc2.center",
+                                   "pit001.osc2.plus8", "pit001.osc3.minus8",
+                                   "pit001.osc3.center", "pit001.osc3.plus8",
+                                   "pit002.osc1.composed", "pit002.osc2.composed",
+                                   "pit002.osc3.composed" }) {
+            const auto gate = std::find_if (
+                cliReportPayload.getDynamicObject()->getProperty ("gates").getArray()->begin(),
+                cliReportPayload.getDynamicObject()->getProperty ("gates").getArray()->end(),
+                [&] (const auto& row) {
+                    return row.getDynamicObject()->getProperty ("id").toString() == gateId;
+                });
+            expect (gate != cliReportPayload.getDynamicObject()
+                                ->getProperty ("gates").getArray()->end()
+                        && gate->getDynamicObject()->getProperty ("status").toString() == "pass"
+                        && gate->getDynamicObject()->getProperty ("artifactPath").toString()
+                               .startsWith ("candidate/renders/")
+                        && gate->getDynamicObject()->getProperty ("artifactPath").toString()
+                               .endsWith ("/metrics.json"),
+                    juce::String { gateId } + " must pass only through bound render evidence");
+        }
 
         beginTest ("release verification rejects coordinated report forgery");
         expectDiagnostic (verifyReleaseReady (cliReportA), "release.not-ready");

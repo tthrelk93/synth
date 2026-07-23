@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+#include <set>
 #include <utility>
 
 namespace ReferenceHarness {
@@ -635,6 +636,198 @@ LoadResult<FixtureIndex> validateIndexAndRenderFixtures (const juce::File& index
     return index;
 }
 
+std::optional<std::string_view> analyzerMetricUnit (
+    const std::string_view analyzer,
+    const std::string_view metric)
+{
+    if (analyzer == "signal.stats.v1") {
+        if (metric == "sample-count" || metric == "finite-count")
+            return "count";
+        if (metric == "minimum" || metric == "maximum"
+            || metric == "peak-absolute" || metric == "mean" || metric == "rms")
+            return "amplitude";
+        if (metric == "maximum-first-difference")
+            return "amplitude/sample";
+    } else if (analyzer == "control.step.v1") {
+        if (metric == "first-change-sample" || metric == "settled-sample")
+            return "samples";
+        if (metric == "monotonic")
+            return "boolean";
+        if (metric == "overshoot" || metric == "floating-allowance")
+            return "normalized";
+        if (metric == "maximum-per-sample-movement")
+            return "normalized/sample";
+    } else if (analyzer == "audio.click.v1") {
+        if (metric == "maximum-first-difference")
+            return "amplitude/sample";
+        if (metric == "pre-rms" || metric == "post-rms")
+            return "amplitude";
+        if (metric == "peak-over-steady-state")
+            return "dB";
+        if (metric == "finite-count")
+            return "count";
+    } else if (analyzer == "audio.pitch.v1") {
+        if (metric == "frequency-hz")
+            return "Hz";
+        if (metric == "midi-semitones")
+            return "semitones";
+        if (metric == "confidence")
+            return "ratio";
+    }
+    return std::nullopt;
+}
+
+LoadResult<bool> validateRenderMetricBindings (
+    const juce::File& sourceRoot,
+    const FixtureIndex& index,
+    const AcceptanceManifest& acceptance)
+{
+    std::set<std::pair<std::string, std::string>> uniqueBindings;
+    const auto validateSection = [&] (
+        const std::vector<GateDefinition>& gates) -> std::optional<Diagnostic> {
+        for (const auto& gate : gates) {
+            if (gate.analyzer.id == "audio.pitch.v1"
+                && ! gate.renderMetric.has_value())
+                return Diagnostic {
+                    "acceptance.metric-binding",
+                    "audio.pitch.v1 gates require an exact render metric binding",
+                };
+            if (! gate.renderMetric.has_value())
+                continue;
+            const auto& binding = *gate.renderMetric;
+            if (! uniqueBindings.emplace (
+                    binding.fixtureId, binding.requestId).second)
+                return Diagnostic {
+                    "acceptance.metric-binding",
+                    "render metric fixture/request bindings must be unique",
+                };
+            const auto fixtureCount = std::count_if (
+                index.renderFixtures.begin(), index.renderFixtures.end(),
+                [&] (const auto& fixture) {
+                    return fixture.id == binding.fixtureId;
+                });
+            if (fixtureCount != 1)
+                return Diagnostic {
+                    "acceptance.metric-binding",
+                    "render metric binding must resolve exactly one indexed fixture",
+                };
+            const auto indexedFixture = std::find_if (
+                index.renderFixtures.begin(), index.renderFixtures.end(),
+                [&] (const auto& fixture) {
+                    return fixture.id == binding.fixtureId;
+                });
+            const auto fixture = loadIndexedRenderFixture (
+                sourceRoot, *indexedFixture);
+            if (! fixture.ok())
+                return fixture.diagnostics.front();
+            const auto requestCount = std::count_if (
+                fixture.value->analysisRequests.begin(),
+                fixture.value->analysisRequests.end(),
+                [&] (const auto& request) {
+                    return request.id == binding.requestId;
+                });
+            if (requestCount != 1)
+                return Diagnostic {
+                    "acceptance.metric-binding",
+                    "render metric binding must resolve exactly one fixture request",
+                };
+            const auto request = std::find_if (
+                fixture.value->analysisRequests.begin(),
+                fixture.value->analysisRequests.end(),
+                [&] (const auto& item) {
+                    return item.id == binding.requestId;
+                });
+            const auto unit = analyzerMetricUnit (
+                request->analyzer.id, request->metric);
+            const auto ownsGate = std::all_of (
+                gate.requirements.begin(), gate.requirements.end(),
+                [&] (const auto& requirement) {
+                    return std::find (
+                        fixture.value->requirements.begin(),
+                        fixture.value->requirements.end(),
+                        requirement) != fixture.value->requirements.end();
+                });
+            if (! ownsGate || request->analyzer.id != gate.analyzer.id
+                || request->analyzer.version != gate.analyzer.version
+                || request->metric != gate.metric || ! unit.has_value()
+                || *unit != gate.unit)
+                return Diagnostic {
+                    "acceptance.metric-binding",
+                    "render metric fixture ownership and analyzer metric identity must be reciprocal",
+                };
+        }
+        return std::nullopt;
+    };
+    for (const auto* section : {
+             &acceptance.hardSoftware,
+             &acceptance.published,
+             &acceptance.derivedSoftware,
+             &acceptance.measuredHardware,
+             &acceptance.performance,
+         })
+        if (const auto diagnostic = validateSection (*section);
+            diagnostic.has_value())
+            return { std::nullopt, { *diagnostic } };
+    return { true, {} };
+}
+
+LoadResult<bool> appendRenderMetricEvidence (
+    const AcceptanceManifest& acceptance,
+    const RenderFixture& fixture,
+    const std::span<const MetricEvidenceRecord> records,
+    const juce::File& artifactFile,
+    std::vector<GateMetricEvidence>& evidence)
+{
+    const auto artifactPath = "renders/" + fixture.id + "/metrics.json";
+    if (! artifactFile.existsAsFile()
+        || artifactFile.loadFileAsString() != metricEvidenceJson (records))
+        return failure<bool> (
+            "acceptance.metric-evidence-invalid",
+            "render metric artifact must contain the full analyzed fixture record set");
+    const auto appendSection = [&] (
+        const std::vector<GateDefinition>& gates) -> std::optional<Diagnostic> {
+        for (const auto& gate : gates) {
+            if (! gate.renderMetric.has_value()
+                || gate.renderMetric->fixtureId != fixture.id)
+                continue;
+            const auto count = std::count_if (
+                records.begin(), records.end(), [&] (const auto& record) {
+                    return record.provenance.requestId
+                        == gate.renderMetric->requestId;
+                });
+            if (count != 1)
+                return Diagnostic {
+                    "acceptance.metric-evidence-invalid",
+                    "bound render metric request must produce exactly one record",
+                };
+            const auto record = std::find_if (
+                records.begin(), records.end(), [&] (const auto& item) {
+                    return item.provenance.requestId
+                        == gate.renderMetric->requestId;
+                });
+            evidence.push_back ({
+                gate.id,
+                *record,
+                artifactFile,
+                artifactPath,
+                sha256File (artifactFile),
+            });
+        }
+        return std::nullopt;
+    };
+    for (const auto* section : {
+             &acceptance.hardSoftware,
+             &acceptance.published,
+             &acceptance.derivedSoftware,
+             &acceptance.measuredHardware,
+             &acceptance.performance,
+         })
+        if (const auto diagnostic = appendSection (*section);
+            diagnostic.has_value())
+            return { std::nullopt, { *diagnostic } };
+    return { true, {} };
+}
+
 struct ValidatedInputs {
     FixtureIndex index;
     AcceptanceManifest acceptance;
@@ -651,7 +844,9 @@ LoadResult<ValidatedInputs> validateInputs (const juce::File& indexPath,
     if (! index.ok())
         return { std::nullopt, index.diagnostics };
     const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
-    for (const auto id : { "signal.stats.v1", "control.step.v1", "audio.click.v1" }) {
+    for (const auto id : {
+             "signal.stats.v1", "control.step.v1", "audio.click.v1", "audio.pitch.v1",
+         }) {
         const auto analyzer = analyzers.find (id);
         if (! analyzer.ok())
             return { std::nullopt, analyzer.diagnostics };
@@ -659,6 +854,10 @@ LoadResult<ValidatedInputs> validateInputs (const juce::File& indexPath,
     const auto acceptance = loadAcceptanceManifest (sourceRoot, acceptancePath, analyzers);
     if (! acceptance.ok())
         return { std::nullopt, acceptance.diagnostics };
+    const auto bindings = validateRenderMetricBindings (
+        sourceRoot, *index.value, *acceptance.value);
+    if (! bindings.ok())
+        return { std::nullopt, bindings.diagnostics };
     const auto smoothing = expandSmoothingFixtures (
         sourceRoot, *index.value, *acceptance.value);
     if (! smoothing.ok())
@@ -958,6 +1157,9 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             return 1;
         }
         candidateFiles.push_back (registryEvidence.value->artifactFile);
+        std::vector<GateMetricEvidence> metricEvidence {
+            *registryEvidence.value,
+        };
         const auto rendersRoot = staging.getChildFile ("renders");
         if (! rendersRoot.createDirectory()) {
             discardStaging();
@@ -977,11 +1179,28 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
                 printDiagnostic (rendered.diagnostics.front());
                 return 1;
             }
+            const auto records = analyzeFixtureMetrics (
+                *fixture.value, *rendered.value);
+            if (! records.ok()) {
+                discardStaging();
+                printDiagnostic (records.diagnostics.front());
+                return 1;
+            }
             const auto written = writeCandidateArtifacts (
                 *fixture.value, *rendered.value, rendersRoot);
             if (! written.ok()) {
                 discardStaging();
                 printDiagnostic (written.diagnostics.front());
+                return 1;
+            }
+            const auto appended = appendRenderMetricEvidence (
+                inputs.value->acceptance, *fixture.value, *records.value,
+                rendersRoot.getChildFile (fixture.value->id)
+                    .getChildFile ("metrics.json"),
+                metricEvidence);
+            if (! appended.ok()) {
+                discardStaging();
+                printDiagnostic (appended.diagnostics.front());
                 return 1;
             }
             candidateFiles.insert (candidateFiles.end(),
@@ -995,7 +1214,7 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
         }
         const auto gates = buildF0GateResults (
             sourceRoot, inputs.value->index, inputs.value->acceptance,
-            std::span<const GateMetricEvidence> { &*registryEvidence.value, 1 });
+            metricEvidence);
         if (! gates.ok()) {
             discardStaging();
             printDiagnostic (gates.diagnostics.front());

@@ -507,6 +507,24 @@ LoadResult<GateDefinition> readGate (const juce::DynamicObject& object,
         return failure<GateDefinition> (
             "acceptance.requirement", "acceptance gate must name at least one unique requirement");
 
+    const auto hasFixtureBinding = property (object, "fixtureId") != nullptr;
+    const auto hasRequestBinding = property (object, "requestId") != nullptr;
+    if (hasFixtureBinding != hasRequestBinding)
+        return failure<GateDefinition> (
+            "acceptance.metric-binding",
+            "render metric binding requires both fixture and request IDs");
+    if (hasFixtureBinding) {
+        RenderMetricBinding binding;
+        if (! readString (object, "fixtureId", binding.fixtureId)
+            || ! readString (object, "requestId", binding.requestId)
+            || ! isPortableIdentifierComponent (binding.fixtureId)
+            || ! isPortableIdentifierComponent (binding.requestId))
+            return failure<GateDefinition> (
+                "acceptance.metric-binding",
+                "render metric binding IDs must be nonempty portable components");
+        gate.renderMetric = std::move (binding);
+    }
+
     if (! readString (object, "analyzer", gate.analyzer.id))
         return failure<GateDefinition> ("acceptance.analyzer", "acceptance analyzer is required");
     const auto registered = analyzers.find (gate.analyzer.id);
@@ -709,39 +727,99 @@ LoadResult<std::vector<GateDefinition>> readSection (
 
 bool exactDerivedPolicy (const GateDefinition& gate)
 {
-    if ((gate.status != Status::notRun && gate.status != Status::pass)
-        || gate.requirements != std::vector<std::string> { "PAR-006", "TST-006" }
-        || gate.analyzer.id != "control.step.v1" || gate.analyzer.version != 1
-        || gate.allowance != 0.0
-        || gate.provenance.at ("reviewStatus") != "approved"
-        || gate.provenance.at ("reviewBasis") != "2026-07-22 user-approved design"
-        || gate.provenance.at ("reviewDate") != "2026-07-22"
-        || gate.provenance.at ("claimScope")
-               != "software safety policy; not a hardware measurement")
+    if (gate.id.starts_with ("par006.")) {
+        if ((gate.status != Status::notRun && gate.status != Status::pass)
+            || gate.requirements != std::vector<std::string> { "PAR-006", "TST-006" }
+            || gate.analyzer.id != "control.step.v1" || gate.analyzer.version != 1
+            || gate.allowance != 0.0
+            || gate.renderMetric.has_value()
+            || gate.provenance.at ("reviewStatus") != "approved"
+            || gate.provenance.at ("reviewBasis") != "2026-07-22 user-approved design"
+            || gate.provenance.at ("reviewDate") != "2026-07-22"
+            || gate.provenance.at ("claimScope")
+                   != "software safety policy; not a hardware measurement")
+            return false;
+        if (gate.id == "par006.gain-control.duration")
+            return gate.value == 0.005 && gate.unit == "seconds"
+                && gate.metric == "settled-sample"
+                && gate.provenance.at ("derivation")
+                       == "5 ms linear-amplitude software safety ramp";
+        if (gate.id == "par006.control.duration")
+            return gate.value == 0.010 && gate.unit == "seconds"
+                && gate.metric == "settled-sample"
+                && gate.provenance.at ("derivation")
+                       == "10 ms owner-declared control-domain software safety ramp";
+        if (gate.id == "par006.settling.allowance")
+            return gate.value == 1.0 && gate.unit == "samples"
+                && gate.metric == "settled-sample"
+                && gate.provenance.at ("derivation")
+                       == "+1 sample after ceil(duration * sampleRate)";
+        if (gate.id == "par006.none.intermediate")
+            return gate.value == 0.0 && gate.unit == "count"
+                && gate.metric == "maximum-per-sample-movement"
+                && gate.provenance.at ("derivation")
+                       == "0 intermediate values for registry class none"
+                && gate.provenance.contains ("zeroBasis")
+                && gate.provenance.at ("zeroBasis") == "approved exact-step policy";
         return false;
-    if (gate.id == "par006.gain-control.duration")
-        return gate.value == 0.005 && gate.unit == "seconds"
-            && gate.metric == "settled-sample"
-            && gate.provenance.at ("derivation")
-                   == "5 ms linear-amplitude software safety ramp";
-    if (gate.id == "par006.control.duration")
-        return gate.value == 0.010 && gate.unit == "seconds"
-            && gate.metric == "settled-sample"
-            && gate.provenance.at ("derivation")
-                   == "10 ms owner-declared control-domain software safety ramp";
-    if (gate.id == "par006.settling.allowance")
-        return gate.value == 1.0 && gate.unit == "samples"
-            && gate.metric == "settled-sample"
-            && gate.provenance.at ("derivation")
-                   == "+1 sample after ceil(duration * sampleRate)";
-    if (gate.id == "par006.none.intermediate")
-        return gate.value == 0.0 && gate.unit == "count"
-            && gate.metric == "maximum-per-sample-movement"
-            && gate.provenance.at ("derivation")
-                   == "0 intermediate values for registry class none"
-            && gate.provenance.contains ("zeroBasis")
-            && gate.provenance.at ("zeroBasis") == "approved exact-step policy";
-    return false;
+    }
+
+    struct PitchPolicy {
+        std::string_view id;
+        std::string_view requirement;
+        double value;
+        std::string_view fixtureId;
+        std::string_view requestId;
+        std::string_view derivation;
+    };
+    constexpr std::array pitchPolicies {
+        PitchPolicy { "pit001.osc2.minus8", "PIT-001", 61.0,
+                      "pit-001-oscillator-offset-sweep-v1", "osc2-offset-m08",
+                      "selector index minus eight in the shared semitone domain" },
+        PitchPolicy { "pit001.osc2.center", "PIT-001", 69.0,
+                      "pit-001-oscillator-offset-sweep-v1", "osc2-offset-z00",
+                      "selector index minus eight in the shared semitone domain" },
+        PitchPolicy { "pit001.osc2.plus8", "PIT-001", 77.0,
+                      "pit-001-oscillator-offset-sweep-v1", "osc2-offset-p08",
+                      "selector index minus eight in the shared semitone domain" },
+        PitchPolicy { "pit001.osc3.minus8", "PIT-001", 61.0,
+                      "pit-001-oscillator-offset-sweep-v1", "osc3-offset-m08",
+                      "selector index minus eight in the shared semitone domain" },
+        PitchPolicy { "pit001.osc3.center", "PIT-001", 69.0,
+                      "pit-001-oscillator-offset-sweep-v1", "osc3-offset-z00",
+                      "selector index minus eight in the shared semitone domain" },
+        PitchPolicy { "pit001.osc3.plus8", "PIT-001", 77.0,
+                      "pit-001-oscillator-offset-sweep-v1", "osc3-offset-p08",
+                      "selector index minus eight in the shared semitone domain" },
+        PitchPolicy { "pit002.osc1.composed", "PIT-002", 72.5,
+                      "pit-002-composed-pitch-v1", "osc1-composed",
+                      "analytic sum of note, musical range, tune, oscillator offset, preserved bend contribution, zero calibration, and zero modulation" },
+        PitchPolicy { "pit002.osc2.composed", "PIT-002", 51.863137138648348,
+                      "pit-002-composed-pitch-v1", "osc2-composed",
+                      "analytic sum of note, musical range, tune, oscillator offset, preserved bend contribution, zero calibration, and zero modulation" },
+        PitchPolicy { "pit002.osc3.composed", "PIT-002", 87.343587129994475,
+                      "pit-002-composed-pitch-v1", "osc3-composed",
+                      "analytic sum of note, musical range, tune, oscillator offset, preserved bend contribution, zero calibration, and zero modulation" },
+    };
+    const auto policy = std::find_if (
+        pitchPolicies.begin(), pitchPolicies.end(),
+        [&] (const auto& expected) { return gate.id == expected.id; });
+    return policy != pitchPolicies.end()
+        && gate.status == Status::notRun
+        && gate.requirements == std::vector<std::string> { std::string { policy->requirement } }
+        && gate.analyzer.id == "audio.pitch.v1" && gate.analyzer.version == 1
+        && gate.metric == "midi-semitones" && gate.unit == "semitones"
+        && gate.value == policy->value && gate.allowance == 0.01
+        && gate.renderMetric.has_value()
+        && gate.renderMetric->fixtureId == policy->fixtureId
+        && gate.renderMetric->requestId == policy->requestId
+        && gate.provenance.at ("derivation") == policy->derivation
+        && gate.provenance.at ("reviewStatus") == "approved"
+        && gate.provenance.at ("reviewBasis")
+               == "2026-07-23 approved PIT-001/PIT-002 design"
+        && gate.provenance.at ("reviewDate") == "2026-07-23"
+        && gate.provenance.at ("claimScope")
+               == "derived equal-tempered software pitch; not a hardware calibration";
 }
 
 } // namespace
@@ -811,11 +889,31 @@ LoadResult<AcceptanceManifest> loadAcceptanceManifest (
                 return failure<AcceptanceManifest> (
                     "acceptance.duplicate-id", "acceptance gate IDs must be globally unique");
 
-    if (manifest.derivedSoftware.size() != 4
-        || ! std::all_of (manifest.derivedSoftware.begin(), manifest.derivedSoftware.end(),
-                          exactDerivedPolicy))
+    constexpr std::array<std::string_view, 13> exactDerivedOrder {
+        "par006.gain-control.duration",
+        "par006.control.duration",
+        "par006.settling.allowance",
+        "par006.none.intermediate",
+        "pit001.osc2.minus8",
+        "pit001.osc2.center",
+        "pit001.osc2.plus8",
+        "pit001.osc3.minus8",
+        "pit001.osc3.center",
+        "pit001.osc3.plus8",
+        "pit002.osc1.composed",
+        "pit002.osc2.composed",
+        "pit002.osc3.composed",
+    };
+    if (manifest.derivedSoftware.size() != exactDerivedOrder.size()
+        || ! std::equal (
+            manifest.derivedSoftware.begin(), manifest.derivedSoftware.end(),
+            exactDerivedOrder.begin(), exactDerivedOrder.end(),
+            [] (const auto& gate, const auto id) {
+                return gate.id == id && exactDerivedPolicy (gate);
+            }))
         return failure<AcceptanceManifest> (
-            "acceptance.derived-policy", "only the four approved PAR-006 software policies are permitted");
+            "acceptance.derived-policy",
+            "only the exact ordered thirteen approved derived software policies are permitted");
 
     if (manifest.status == "approved") {
         const auto sections = std::array {
@@ -997,12 +1095,14 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
         const auto& metric = evidenceItem.record.metric;
         const auto registered = analyzers.find (metric.analyzer.id);
         auto validProvenance = false;
+        auto validBinding = false;
         auto authoritativeMetric = true;
         auto expectedArtifactPayload = metricEvidenceJson (
             std::span<const MetricEvidenceRecord> { &evidenceItem.record, 1 });
         auto validArtifactPlacement = ! evidenceItem.artifactPath.empty();
         const auto& provenance = evidenceItem.record.provenance;
         if (provenance.kind == MetricSubjectKind::liveRegistry) {
+            validBinding = ! gate.renderMetric.has_value();
             const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
             const auto registryFile = resolveBoundedRegularFile (
                 sourceRoot, provenance.registryPath);
@@ -1037,6 +1137,9 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
         } else {
             validProvenance = false;
             authoritativeMetric = false;
+            validBinding = gate.renderMetric.has_value()
+                        && gate.renderMetric->fixtureId == provenance.fixtureId
+                        && gate.renderMetric->requestId == provenance.requestId;
             const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
             const auto index = loadFixtureIndex (
                 sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
@@ -1105,7 +1208,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
             && metric.finite && std::isfinite (metric.value)
             && std::isfinite (metric.allowance) && metric.allowance >= 0.0
             && metric.allowance == gate.allowance && authoritativeMetric;
-        if (! exactArtifact || ! validArtifactPlacement
+        if (! exactArtifact || ! validArtifactPlacement || ! validBinding
             || ! validProvenance || ! validMetric) {
             result->status = Status::fail;
             result->reasonCode = "acceptance.metric-evidence-invalid";

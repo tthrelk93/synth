@@ -258,6 +258,11 @@ struct PerformanceProvenance {
     std::string reviewDate;
 };
 
+struct RenderMetricBinding {
+    std::string fixtureId;
+    std::string requestId;
+};
+
 struct GateDefinition {
     std::string id;
     GateClassification classification = GateClassification::hardSoftware;
@@ -272,6 +277,7 @@ struct GateDefinition {
     std::optional<PublishedProvenance> published;
     std::optional<MeasuredHardwareProvenance> measuredHardware;
     std::optional<PerformanceProvenance> performance;
+    std::optional<RenderMetricBinding> renderMetric;
     std::string artifactPath;
     std::string artifactSha256;
 };
