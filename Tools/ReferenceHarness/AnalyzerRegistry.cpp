@@ -488,11 +488,14 @@ juce::String metricEvidenceJson (const std::span<const MetricEvidenceRecord> rec
             provenance->setProperty ("blockPatterns", blockPatterns (source.blockPatterns));
             provenance->setProperty ("buildType", juce::String { source.reproducibility.buildType });
             provenance->setProperty ("fixtureId", juce::String { source.fixtureId });
+            provenance->setProperty ("fixturePath", juce::String { source.fixturePath });
             provenance->setProperty ("fixtureSha256", juce::String { source.fixtureSha256 });
             provenance->setProperty ("inputHashes", stringMap (source.reproducibility.inputHashes));
             provenance->setProperty ("juceCommit", juce::String { source.reproducibility.juceCommit });
             provenance->setProperty ("outputHashes", stringMap (source.reproducibility.outputHashes));
             provenance->setProperty ("platform", juce::String { source.reproducibility.platform });
+            provenance->setProperty ("requestId", juce::String { source.requestId });
+            provenance->setProperty ("requestVersion", source.requestVersion);
             provenance->setProperty ("sampleRate", source.sampleRate);
             provenance->setProperty ("seed", static_cast<juce::int64> (source.seed));
             provenance->setProperty ("sourceCommit", juce::String { source.reproducibility.sourceCommit });

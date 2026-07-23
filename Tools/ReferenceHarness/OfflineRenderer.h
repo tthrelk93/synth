@@ -8,10 +8,13 @@
 namespace ReferenceHarness {
 
 LoadResult<std::vector<RenderResult>> renderFixture (const RenderFixture& fixture);
+LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetrics (
+    const RenderFixture& fixture,
+    std::span<const RenderResult> results);
 LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     const RenderFixture& fixture,
     std::span<const RenderResult> results,
-    const juce::File& newDirectory);
+    const juce::File& rendersRoot);
 LoadResult<GateMetricEvidence> writeRegistryMetricEvidence (
     const juce::File& sourceRoot,
     const juce::File& metricsFile,

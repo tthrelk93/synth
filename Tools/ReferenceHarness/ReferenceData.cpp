@@ -1,5 +1,6 @@
 #include "ReferenceData.h"
 
+#include "AnalyzerRegistry.h"
 #include "ParameterRegistry.h"
 #include "StateContract.h"
 
@@ -28,6 +29,7 @@ constexpr std::uint64_t maximumRenderSamples = 96'000u * 60u;
 // fixed-capacity stage-buffer contract.
 constexpr int maximumRenderBlockSize = 2048;
 constexpr double maximumInputMagnitude = 1.0;
+constexpr int fixtureAnalysisRequestVersion = 1;
 
 struct ExpectedFrozenArtifact {
     const char* id;
@@ -71,6 +73,36 @@ bool isLowercaseSha256 (const std::string& hash)
                return std::isdigit (character) != 0
                    || (character >= 'a' && character <= 'f');
            });
+}
+
+bool metricBelongsToAnalyzer (const std::string_view analyzer,
+                              const std::string_view metric)
+{
+    if (analyzer == "signal.stats.v1")
+        return metric == "sample-count" || metric == "finite-count"
+            || metric == "minimum" || metric == "maximum"
+            || metric == "peak-absolute" || metric == "mean" || metric == "rms"
+            || metric == "maximum-first-difference";
+    if (analyzer == "control.step.v1")
+        return metric == "first-change-sample" || metric == "settled-sample"
+            || metric == "monotonic" || metric == "overshoot"
+            || metric == "maximum-per-sample-movement"
+            || metric == "floating-allowance";
+    if (analyzer == "audio.click.v1")
+        return metric == "maximum-first-difference" || metric == "pre-rms"
+            || metric == "post-rms" || metric == "peak-over-steady-state"
+            || metric == "finite-count";
+    return false;
+}
+
+double physicalValueFor (const ParameterRegistry::Key key, const double normalized)
+{
+    const auto& descriptor = ParameterRegistry::descriptor (key);
+    const juce::NormalisableRange<float> range {
+        descriptor.rangeStart, descriptor.rangeEnd, descriptor.rangeInterval,
+        descriptor.rangeSkew, descriptor.symmetricSkew,
+    };
+    return static_cast<double> (range.convertFrom0to1 (static_cast<float> (normalized)));
 }
 
 bool hasDisallowedPathSyntax (std::string_view relativePath, std::string& code)
@@ -460,6 +492,16 @@ std::string sha256File (const juce::File& file)
     return juce::SHA256 { file }.toHexString().toStdString();
 }
 
+bool isPortableIdentifierComponent (const std::string_view value) noexcept
+{
+    if (value.empty() || value.size() > 96)
+        return false;
+    return std::all_of (value.begin(), value.end(), [] (const unsigned char character) {
+        return (character >= 'a' && character <= 'z')
+            || (character >= '0' && character <= '9') || character == '-';
+    }) && value.front() != '-' && value.back() != '-';
+}
+
 LoadResult<juce::File> resolveBoundedRegularFile (const juce::File& root,
                                                    const std::string_view relativePath)
 {
@@ -495,6 +537,43 @@ juce::String canonicalJson (const juce::var& value)
     const auto options = juce::JSON::FormatOptions {}
                              .withSpacing (juce::JSON::Spacing::none);
     return juce::JSON::toString (canonicalizeJson (value), options) + "\n";
+}
+
+juce::var analysisRequestsJson (const std::span<const FixtureAnalysisRequest> requests)
+{
+    juce::Array<juce::var> values;
+    for (const auto& request : requests) {
+        auto analyzer = std::make_unique<juce::DynamicObject>();
+        analyzer->setProperty ("id", juce::String { request.analyzer.id });
+        analyzer->setProperty ("version", request.analyzer.version);
+        auto input = std::make_unique<juce::DynamicObject>();
+        if (request.inputKind == AnalysisInputKind::audio) {
+            input->setProperty ("channel", request.channel);
+            input->setProperty ("kind", "audio");
+            input->setProperty ("tap", request.audioTap == AudioTap::main ? "main" : "phones");
+        } else {
+            input->setProperty ("domain", request.controlDomain == ControlDomain::normalized
+                                              ? "normalized" : "physical");
+            input->setProperty ("kind", "control");
+            input->setProperty ("parameterId", juce::String { request.parameterId });
+        }
+        auto event = std::make_unique<juce::DynamicObject>();
+        event->setProperty ("originSample", static_cast<juce::int64> (request.eventSample));
+        event->setProperty ("windowSamples", static_cast<juce::int64> (request.windowSamples));
+        auto object = std::make_unique<juce::DynamicObject>();
+        object->setProperty ("analyzer", juce::var { analyzer.release() });
+        object->setProperty ("event", juce::var { event.release() });
+        object->setProperty ("input", juce::var { input.release() });
+        object->setProperty ("metric", juce::String { request.metric });
+        object->setProperty ("requestId", juce::String { request.id });
+        if (request.start.has_value())
+            object->setProperty ("start", *request.start);
+        if (request.target.has_value())
+            object->setProperty ("target", *request.target);
+        object->setProperty ("version", request.version);
+        values.add (juce::var { object.release() });
+    }
+    return juce::var { values };
 }
 
 LoadResult<FixtureIndex> loadFixtureIndex (const juce::File& sourceRoot,
@@ -585,6 +664,12 @@ LoadResult<FixtureIndex> loadFixtureIndex (const juce::File& sourceRoot,
         }
     }
 
+    for (const auto& indexedFixture : index.renderFixtures) {
+        const auto fixture = loadIndexedRenderFixture (sourceRoot, indexedFixture);
+        if (! fixture.ok())
+            return { std::nullopt, fixture.diagnostics };
+    }
+
     return { std::move (index), {} };
 }
 
@@ -604,10 +689,23 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
     std::string schema;
     RenderFixture fixture;
     fixture.fixtureFile = fixtureFile;
+    std::error_code fixturePathError;
+    const auto canonicalSourceRoot = std::filesystem::canonical (
+        sourceRoot.getFullPathName().toStdString(), fixturePathError);
+    const auto canonicalFixture = std::filesystem::canonical (
+        fixtureFile.getFullPathName().toStdString(), fixturePathError);
+    const auto relativeFixture = canonicalFixture.lexically_relative (canonicalSourceRoot);
+    if (fixturePathError || relativeFixture.empty() || relativeFixture == "."
+        || *relativeFixture.begin() == std::filesystem::path { ".." })
+        return failure<RenderFixture> (
+            "fixture.path", "render fixture must be a regular file beneath its source root");
+    fixture.fixtureRelativePath = relativeFixture.generic_string();
     if (! readRequiredString (*root, "schema", schema) || schema != renderFixtureSchema)
         return failure<RenderFixture> ("fixture.schema", "render fixture schema is unsupported");
-    if (! readRequiredString (*root, "id", fixture.id))
-        return failure<RenderFixture> ("fixture.id", "render fixture identifier is required");
+    if (! readRequiredString (*root, "id", fixture.id)
+        || ! isPortableIdentifierComponent (fixture.id))
+        return failure<RenderFixture> (
+            "fixture.id", "render fixture identifier must be one portable filename component");
 
     const auto* stateValue = requiredProperty (*root, "state");
     const auto* state = stateValue == nullptr ? nullptr : stateValue->getDynamicObject();
@@ -859,23 +957,191 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
         return failure<RenderFixture> ("fixture.input", "render input kind is unsupported");
     }
 
-    if (! readNonemptyStringArray (*root, "analyzers", fixture.analyzers))
-        return failure<RenderFixture> ("fixture.analyzers", "render analyzers must be nonempty");
-    static const std::set<std::string> registeredAnalyzers {
-        "signal.stats.v1", "control.step.v1", "audio.click.v1",
-    };
-    std::set<std::string> uniqueAnalyzers;
-    if (std::any_of (fixture.analyzers.begin(), fixture.analyzers.end(), [&] (const auto& analyzer) {
-            return ! registeredAnalyzers.contains (analyzer)
-                || ! uniqueAnalyzers.insert (analyzer).second;
-        }))
+    const auto* requestsValue = requiredProperty (*root, "analysisRequests");
+    const auto* requests = requestsValue == nullptr ? nullptr : requestsValue->getArray();
+    if (requests == nullptr || requests->isEmpty())
         return failure<RenderFixture> (
-            "fixture.analyzer",
-            "render analyzers must be unique exact registered foundation IDs and versions");
+            "fixture.analysis-requests", "render analysis requests must be a nonempty array");
+    const auto analyzerRegistry = AnalyzerRegistry::withFoundationAnalyzers();
+    std::set<std::string> uniqueRequestIds;
+    for (const auto& requestValue : *requests) {
+        const auto* requestObject = requestValue.getDynamicObject();
+        FixtureAnalysisRequest request;
+        if (requestObject == nullptr
+            || ! readRequiredString (*requestObject, "requestId", request.id)
+            || ! isPortableIdentifierComponent (request.id)
+            || ! uniqueRequestIds.insert (request.id).second)
+            return failure<RenderFixture> (
+                "fixture.analysis-id", "analysis request IDs must be unique portable components");
+        const auto* requestVersion = requiredProperty (*requestObject, "version");
+        if (requestVersion == nullptr || ! requestVersion->isInt()
+            || static_cast<int> (*requestVersion) != fixtureAnalysisRequestVersion)
+            return failure<RenderFixture> (
+                "fixture.analysis-version", "analysis request version is unsupported");
+        request.version = static_cast<int> (*requestVersion);
+
+        const auto* analyzerValue = requiredProperty (*requestObject, "analyzer");
+        const auto* analyzer = analyzerValue == nullptr ? nullptr : analyzerValue->getDynamicObject();
+        const auto* analyzerVersion = analyzer == nullptr ? nullptr
+                                                           : requiredProperty (*analyzer, "version");
+        if (analyzer == nullptr
+            || ! readRequiredString (*analyzer, "id", request.analyzer.id)
+            || analyzerVersion == nullptr || ! analyzerVersion->isInt())
+            return failure<RenderFixture> (
+                "fixture.analysis-analyzer", "analysis analyzer identity is required");
+        request.analyzer.version = static_cast<int> (*analyzerVersion);
+        const auto registered = analyzerRegistry.find (request.analyzer.id);
+        if (! registered.ok() || registered.value->version != request.analyzer.version)
+            return failure<RenderFixture> (
+                "fixture.analysis-analyzer", "analysis analyzer identity/version must be exact");
+        if (! readRequiredString (*requestObject, "metric", request.metric)
+            || ! metricBelongsToAnalyzer (request.analyzer.id, request.metric))
+            return failure<RenderFixture> (
+                "fixture.analysis-metric", "analysis metric must belong to the exact analyzer");
+
+        const auto* inputValue = requiredProperty (*requestObject, "input");
+        const auto* requestInput = inputValue == nullptr ? nullptr : inputValue->getDynamicObject();
+        std::string inputKind;
+        if (requestInput == nullptr || ! readRequiredString (*requestInput, "kind", inputKind))
+            return failure<RenderFixture> (
+                "fixture.analysis-input", "analysis input kind is required");
+        if (inputKind == "audio") {
+            request.inputKind = AnalysisInputKind::audio;
+            std::string tap;
+            const auto* channel = requiredProperty (*requestInput, "channel");
+            if (! readRequiredString (*requestInput, "tap", tap)
+                || (tap != "main" && tap != "phones")
+                || channel == nullptr || ! channel->isInt()
+                || static_cast<int> (*channel) < 0 || static_cast<int> (*channel) > 1
+                || request.analyzer.id == "control.step.v1")
+                return failure<RenderFixture> (
+                    "fixture.analysis-input", "audio analysis requires an exact tap and channel");
+            request.audioTap = tap == "phones" ? AudioTap::phones : AudioTap::main;
+            request.channel = static_cast<int> (*channel);
+        } else if (inputKind == "control") {
+            request.inputKind = AnalysisInputKind::control;
+            std::string domain;
+            if (! readRequiredString (*requestInput, "parameterId", request.parameterId)
+                || ! readRequiredString (*requestInput, "domain", domain)
+                || (domain != "normalized" && domain != "physical")
+                || request.analyzer.id == "audio.click.v1")
+                return failure<RenderFixture> (
+                    "fixture.analysis-input", "control analysis input is unsupported");
+            const auto key = parameterKeyForId (request.parameterId);
+            if (! key.has_value())
+                return failure<RenderFixture> (
+                    "fixture.analysis-input", "control analysis parameter is unknown");
+            request.parameterKey = *key;
+            request.controlDomain = domain == "physical" ? ControlDomain::physical
+                                                           : ControlDomain::normalized;
+        } else {
+            return failure<RenderFixture> (
+                "fixture.analysis-input", "analysis input kind is unsupported");
+        }
+
+        const auto* eventValue = requiredProperty (*requestObject, "event");
+        const auto* analysisEvent = eventValue == nullptr ? nullptr : eventValue->getDynamicObject();
+        if (analysisEvent == nullptr
+            || ! readUnsignedInteger (*analysisEvent, "originSample", request.eventSample)
+            || ! readUnsignedInteger (*analysisEvent, "windowSamples", request.windowSamples)
+            || request.eventSample >= fixture.config.totalSamples || request.windowSamples == 0
+            || request.windowSamples > fixture.config.totalSamples - request.eventSample)
+            return failure<RenderFixture> (
+                "fixture.analysis-event", "analysis event origin/window is outside the render");
+        const auto anchored = std::any_of (
+            fixture.automation.begin(), fixture.automation.end(), [&] (const auto& event) {
+                return event.sample == request.eventSample;
+            }) || std::any_of (fixture.midi.begin(), fixture.midi.end(), [&] (const auto& event) {
+                return event.sample == request.eventSample;
+            });
+        if (! anchored)
+            return failure<RenderFixture> (
+                "fixture.analysis-event", "analysis event origin must name a rendered event sample");
+
+        const auto readOptionalEndpoint = [&] (const char* name,
+                                                std::optional<double>& destination) {
+            if (requiredProperty (*requestObject, name) == nullptr)
+                return true;
+            double value = 0.0;
+            if (! readFiniteNumber (*requestObject, name, value))
+                return false;
+            destination = value;
+            return true;
+        };
+        if (! readOptionalEndpoint ("start", request.start)
+            || ! readOptionalEndpoint ("target", request.target))
+            return failure<RenderFixture> (
+                "fixture.analysis-endpoints", "analysis endpoints must be finite");
+        if (request.inputKind == AnalysisInputKind::audio
+            && (request.start.has_value() || request.target.has_value()))
+            return failure<RenderFixture> (
+                "fixture.analysis-endpoints", "audio analysis requests do not accept endpoints");
+        if (request.inputKind == AnalysisInputKind::control) {
+            if (! request.start.has_value()
+                || (request.analyzer.id == "control.step.v1" && ! request.target.has_value()))
+                return failure<RenderFixture> (
+                    "fixture.analysis-endpoints", "control analysis endpoints are incomplete");
+            const auto endpointInDomain = [&] (const double endpoint) {
+                if (request.controlDomain == ControlDomain::normalized)
+                    return endpoint >= 0.0 && endpoint <= 1.0;
+                const auto& descriptor = ParameterRegistry::descriptor (request.parameterKey);
+                return endpoint >= static_cast<double> (descriptor.rangeStart)
+                    && endpoint <= static_cast<double> (descriptor.rangeEnd);
+            };
+            if (! endpointInDomain (*request.start)
+                || (request.target.has_value() && ! endpointInDomain (*request.target)))
+                return failure<RenderFixture> (
+                    "fixture.analysis-endpoints", "control analysis endpoints are outside the domain");
+            if (request.target.has_value()) {
+                const auto targetEvent = std::find_if (
+                    fixture.automation.begin(), fixture.automation.end(), [&] (const auto& event) {
+                        return event.sample == request.eventSample
+                            && event.key == request.parameterKey;
+                    });
+                const auto expectedTarget = targetEvent == fixture.automation.end()
+                    ? std::numeric_limits<double>::quiet_NaN()
+                    : (request.controlDomain == ControlDomain::normalized
+                           ? static_cast<double> (targetEvent->normalizedValue)
+                           : physicalValueFor (targetEvent->key, targetEvent->normalizedValue));
+                if (! std::isfinite (expectedTarget)
+                    || std::abs (*request.target - expectedTarget)
+                           > 8.0 * std::numeric_limits<double>::epsilon()
+                                 * std::max (1.0, std::abs (expectedTarget)))
+                    return failure<RenderFixture> (
+                        "fixture.analysis-endpoints",
+                        "control target must match automation at the analysis event");
+            }
+        }
+        fixture.analysisRequests.push_back (std::move (request));
+    }
     if (! readNonemptyStringArray (*root, "requirements", fixture.requirements))
         return failure<RenderFixture> ("fixture.requirements", "render requirements must be nonempty");
 
     return { std::move (fixture), {} };
+}
+
+LoadResult<RenderFixture> loadIndexedRenderFixture (
+    const juce::File& sourceRoot,
+    const IndexedArtifact& indexedFixture)
+{
+    const auto fixtureFile = resolveBoundedRegularFile (
+        sourceRoot, indexedFixture.relativePath);
+    if (! fixtureFile.ok())
+        return { std::nullopt, fixtureFile.diagnostics };
+    if (sha256File (*fixtureFile.value) != indexedFixture.sha256)
+        return failure<RenderFixture> (
+            "fixture.index-hash", "indexed render fixture hash does not match its bytes");
+    auto fixture = loadRenderFixture (sourceRoot, *fixtureFile.value);
+    if (! fixture.ok())
+        return fixture;
+    if (fixture.value->id != indexedFixture.id)
+        return failure<RenderFixture> (
+            "fixture.index-id", "render fixture ID must exactly match its index record");
+    if (fixture.value->requirements != indexedFixture.requirements)
+        return failure<RenderFixture> (
+            "fixture.index-requirements",
+            "render fixture requirements must exactly match index ownership");
+    return fixture;
 }
 
 LoadResult<SmoothingFixture> loadSmoothingFixture (const juce::File& fixtureFile)

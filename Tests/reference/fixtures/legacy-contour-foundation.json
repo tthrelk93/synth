@@ -27,6 +27,17 @@
     {"sample": 1024, "sequence": 7, "bytes": [128, 60, 0]}
   ],
   "input": {"kind": "silence"},
-  "analyzers": ["signal.stats.v1"],
+  "analysisRequests": [
+    {"requestId": "main-left-count", "version": 1,
+     "analyzer": {"id": "signal.stats.v1", "version": 1},
+     "metric": "sample-count",
+     "input": {"kind": "audio", "tap": "main", "channel": 0},
+     "event": {"originSample": 0, "windowSamples": 2048}},
+    {"requestId": "main-right-count", "version": 1,
+     "analyzer": {"id": "signal.stats.v1", "version": 1},
+     "metric": "sample-count",
+     "input": {"kind": "audio", "tap": "main", "channel": 1},
+     "event": {"originSample": 0, "windowSamples": 2048}}
+  ],
   "requirements": ["PAR-004", "PAR-006"]
 }

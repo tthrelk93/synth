@@ -61,19 +61,19 @@
     {
       "id": "native-v2-foundation",
       "relativePath": "Tests/reference/fixtures/native-v2-foundation.json",
-      "sha256": "4dba2dc10bbaa74aa3f31500c5c52d267d3d8719252adbf1f5ba815a6489b28e",
+      "sha256": "eafeebfaabb4b01145262e9c7a6476486316bc199eea26a4cdc7bb7c3d0f98d5",
       "requirements": ["PAR-006"]
     },
     {
       "id": "migrated-v2-foundation",
       "relativePath": "Tests/reference/fixtures/migrated-v2-foundation.json",
-      "sha256": "549b7ef47faf267fc43c874a7c34244f5b23241f7bfdfef5ef982675127b1961",
+      "sha256": "8ece5350928ba5ec33419e83b191f95b68c1e8fafc8a9677bd447b61a2c01ef2",
       "requirements": ["PAR-006"]
     },
     {
       "id": "legacy-contour-foundation",
       "relativePath": "Tests/reference/fixtures/legacy-contour-foundation.json",
-      "sha256": "84651db327575bc87e41c8e3313a176396b836e63e898b9ed2df14d60c6991a8",
+      "sha256": "093323067ae7dc9f6f1fc214f86c2e64b75d8b5878850c44b8b4256e2ea7e399",
       "requirements": ["PAR-004", "PAR-006"]
     }
   ],

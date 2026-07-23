@@ -305,17 +305,19 @@ LoadResult<AuthoritativeCandidate> buildAuthoritativeCandidateEvidence (
         return { std::nullopt, registryEvidence.diagnostics };
     candidate.evidence.emplace_back (
         "candidate/metrics.json", registryEvidence.value->artifactSha256);
+    const auto rendersRoot = temporary.directory.getChildFile ("renders");
+    if (! rendersRoot.createDirectory())
+        return failure<AuthoritativeCandidate> (
+            "release.candidate-evidence", "temporary renders root could not be created");
     for (const auto& indexedFixture : index.renderFixtures) {
-        const auto fixture = loadRenderFixture (
-            sourceRoot, sourceRoot.getChildFile (indexedFixture.relativePath));
+        const auto fixture = loadIndexedRenderFixture (sourceRoot, indexedFixture);
         if (! fixture.ok())
             return { std::nullopt, fixture.diagnostics };
         const auto rendered = renderFixture (*fixture.value);
         if (! rendered.ok())
             return { std::nullopt, rendered.diagnostics };
         const auto files = writeCandidateArtifacts (
-            *fixture.value, *rendered.value,
-            temporary.directory.getChildFile ("renders").getChildFile (fixture.value->id));
+            *fixture.value, *rendered.value, rendersRoot);
         if (! files.ok())
             return { std::nullopt, files.diagnostics };
         for (const auto& file : *files.value) {

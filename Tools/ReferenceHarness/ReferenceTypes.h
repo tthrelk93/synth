@@ -86,9 +86,36 @@ struct ReproducibilityInfo {
     std::uint64_t seed = 0;
 };
 
+struct AnalyzerIdentity {
+    std::string id;
+    int version = 0;
+};
+
+enum class AnalysisInputKind { audio, control };
+enum class AudioTap { main, phones };
+enum class ControlDomain { normalized, physical };
+
+struct FixtureAnalysisRequest {
+    std::string id;
+    int version = 0;
+    AnalyzerIdentity analyzer;
+    std::string metric;
+    AnalysisInputKind inputKind = AnalysisInputKind::audio;
+    AudioTap audioTap = AudioTap::main;
+    int channel = -1;
+    ParameterRegistry::Key parameterKey {};
+    std::string parameterId;
+    ControlDomain controlDomain = ControlDomain::normalized;
+    std::uint64_t eventSample = 0;
+    std::uint64_t windowSamples = 0;
+    std::optional<double> start;
+    std::optional<double> target;
+};
+
 struct RenderFixture {
     std::string id;
     juce::File fixtureFile;
+    std::string fixtureRelativePath;
     juce::File stateFile;
     std::string stateSha256;
     StateContract::ContourContract expectedContourContract {};
@@ -96,7 +123,7 @@ struct RenderFixture {
     std::vector<AutomationEvent> automation;
     std::vector<MidiEvent> midi;
     InputDefinition input;
-    std::vector<std::string> analyzers;
+    std::vector<FixtureAnalysisRequest> analysisRequests;
     std::vector<std::string> requirements;
 };
 
@@ -117,11 +144,6 @@ struct RenderResult {
     std::vector<std::string> eventTrace;
     std::vector<int> blockPattern;
     ReproducibilityInfo reproducibility;
-};
-
-struct AnalyzerIdentity {
-    std::string id;
-    int version = 0;
 };
 
 struct AnalysisRequest {
@@ -149,7 +171,10 @@ enum class MetricSubjectKind { render, liveRegistry };
 struct MetricProvenance {
     MetricSubjectKind kind = MetricSubjectKind::render;
     std::string fixtureId;
+    std::string fixturePath;
     std::string fixtureSha256;
+    std::string requestId;
+    int requestVersion = 0;
     double sampleRate = 0.0;
     std::uint64_t totalSamples = 0;
     std::uint64_t seed = 0;

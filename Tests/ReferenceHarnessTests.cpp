@@ -383,6 +383,87 @@ public:
                     },
                     "audio-click settings must be exact and explicit");
 
+        beginTest ("fixture analysis deinterleaves the requested audio channel");
+        RenderFixture stereoFixture;
+        stereoFixture.id = "stereo-click";
+        stereoFixture.fixtureRelativePath = "Tests/reference/fixtures/stereo-click.json";
+        stereoFixture.config.sampleRate = 48000.0;
+        stereoFixture.config.totalSamples = 4;
+        stereoFixture.config.blockPatterns = { { 4 } };
+        FixtureAnalysisRequest rightClick;
+        rightClick.id = "right-click";
+        rightClick.version = 1;
+        rightClick.analyzer = { "audio.click.v1", 1 };
+        rightClick.metric = "maximum-first-difference";
+        rightClick.inputKind = AnalysisInputKind::audio;
+        rightClick.audioTap = AudioTap::main;
+        rightClick.channel = 1;
+        rightClick.eventSample = 1;
+        rightClick.windowSamples = 2;
+        auto leftClick = rightClick;
+        leftClick.id = "left-click";
+        leftClick.channel = 0;
+        stereoFixture.analysisRequests = { rightClick, leftClick };
+        RenderResult stereoRender;
+        stereoRender.sampleRate = 48000.0;
+        stereoRender.mainChannels = 2;
+        stereoRender.phonesChannels = 2;
+        stereoRender.main = { 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+        stereoRender.phones = stereoRender.main;
+        stereoRender.blockPattern = { 4 };
+        const std::array stereoResults { stereoRender };
+        const auto stereoMetrics = analyzeFixtureMetrics (stereoFixture, stereoResults);
+        expect (stereoMetrics.ok() && stereoMetrics.value->size() == 2,
+                "both channel requests must produce one selected metric");
+        if (stereoMetrics.value.has_value() && stereoMetrics.value->size() == 2) {
+            expectWithinAbsoluteError ((*stereoMetrics.value)[0].metric.value, 0.0, 0.0,
+                                       "the quiet right channel must have no click");
+            expectWithinAbsoluteError ((*stereoMetrics.value)[1].metric.value, 1.0, 0.0,
+                                       "the clicked left channel must retain its transition");
+            expect ((*stereoMetrics.value)[0].provenance.requestId == "right-click"
+                        && (*stereoMetrics.value)[1].provenance.requestId == "left-click",
+                    "metric provenance must retain stable request identity");
+        }
+
+        beginTest ("fixture analysis reconstructs dense control samples from exact indices");
+        RenderFixture denseFixture;
+        denseFixture.id = "dense-control";
+        denseFixture.fixtureRelativePath = "Tests/reference/fixtures/dense-control.json";
+        denseFixture.config.sampleRate = 48000.0;
+        denseFixture.config.totalSamples = 8;
+        denseFixture.config.blockPatterns = { { 8 } };
+        FixtureAnalysisRequest denseRequest;
+        denseRequest.id = "filter-dense-count";
+        denseRequest.version = 1;
+        denseRequest.analyzer = { "signal.stats.v1", 1 };
+        denseRequest.metric = "sample-count";
+        denseRequest.inputKind = AnalysisInputKind::control;
+        denseRequest.parameterKey = ParameterRegistry::Key::filterCutoff;
+        denseRequest.parameterId = "filterCutoff";
+        denseRequest.controlDomain = ControlDomain::normalized;
+        denseRequest.eventSample = 2;
+        denseRequest.windowSamples = 6;
+        denseRequest.start = 0.5;
+        denseFixture.analysisRequests = { denseRequest };
+        RenderResult denseRender;
+        denseRender.sampleRate = 48000.0;
+        denseRender.mainChannels = 2;
+        denseRender.phonesChannels = 2;
+        denseRender.main.assign (16, 0.0f);
+        denseRender.phones.assign (16, 0.0f);
+        denseRender.controlTrace = {
+            { 2, ParameterRegistry::Key::filterCutoff, 0.25f, 0.25f },
+            { 6, ParameterRegistry::Key::filterCutoff, 0.75f, 0.75f },
+        };
+        denseRender.blockPattern = { 8 };
+        const std::array denseResults { denseRender };
+        const auto denseMetrics = analyzeFixtureMetrics (denseFixture, denseResults);
+        expect (denseMetrics.ok() && denseMetrics.value->size() == 1,
+                "dense control request must produce one selected metric");
+        if (denseMetrics.value.has_value() && denseMetrics.value->size() == 1)
+            expectWithinAbsoluteError (denseMetrics.value->front().metric.value, 8.0, 0.0,
+                                       "sparse points must reconstruct the full sample domain");
+
         beginTest ("finite extreme analyzer inputs never produce non-finite metrics");
         const auto maximumDouble = std::numeric_limits<double>::max();
         const std::array<double, 4> maximumConstant {
@@ -974,7 +1055,7 @@ public:
         fixtureFile.replaceWithText (
             juce::String { R"({"schema":"model-d.render-fixture.v1","id":"none-step-evidence","state":{"kind":"hostState","path":"state.xml","sha256":")" }
             + sha256File (stateFile)
-            + R"(","version":2,"contourContract":"canonicalContours"},"render":{"sampleRate":48000,"totalSamples":512,"seed":0,"blockPatterns":[[64],[17,31]]},"automation":[{"sample":0,"sequence":0,"parameterId":"a440HzOnOff","normalizedValue":0.0},{"sample":256,"sequence":1,"parameterId":"a440HzOnOff","normalizedValue":1.0}],"midi":[],"input":{"kind":"silence"},"analyzers":["signal.stats.v1"],"requirements":["PAR-006"]})");
+            + R"(","version":2,"contourContract":"canonicalContours"},"render":{"sampleRate":48000,"totalSamples":512,"seed":0,"blockPatterns":[[64],[17,31]]},"automation":[{"sample":0,"sequence":0,"parameterId":"a440HzOnOff","normalizedValue":0.0},{"sample":256,"sequence":1,"parameterId":"a440HzOnOff","normalizedValue":1.0}],"midi":[],"input":{"kind":"silence"},"analysisRequests":[{"requestId":"main-left-count","version":1,"analyzer":{"id":"signal.stats.v1","version":1},"metric":"sample-count","input":{"kind":"audio","tap":"main","channel":0},"event":{"originSample":0,"windowSamples":512}}],"requirements":["PAR-006"]})");
         const auto evidenceFixture = loadRenderFixture (candidateRoot.directory, fixtureFile);
         expect (evidenceFixture.ok(), "smoothing evidence fixture must load through Task 2");
         if (! evidenceFixture.value.has_value())
@@ -988,12 +1069,16 @@ public:
                     && ! realRenders.value->front().reproducibility.outputHashes.contains (
                         "control-trace.json"),
                 "real Task 2 render hashes must retain their producer-defined internal keys");
-        const auto candidateDirectory = candidateRoot.directory.getChildFile ("candidate");
+        const auto candidateRendersRoot = candidateRoot.directory.getChildFile ("candidate");
+        expect (candidateRendersRoot.createDirectory(),
+                "smoothing candidate renders root must be created");
         const auto written = writeCandidateArtifacts (
-            *evidenceFixture.value, *realRenders.value, candidateDirectory);
+            *evidenceFixture.value, *realRenders.value, candidateRendersRoot);
         expect (written.ok(), "smoothing evidence must use Task 2 candidate artifacts");
         if (! written.value.has_value())
             return;
+        const auto candidateDirectory = candidateRendersRoot.getChildFile (
+            evidenceFixture.value->id);
         const auto candidateTrace = candidateDirectory.getChildFile ("control-trace.json");
         const auto candidateHash = sha256File (candidateTrace);
         const auto noneCaseFound = std::find_if (
@@ -1239,6 +1324,25 @@ public:
                     == StateContract::ContourContract::legacyCrossedContours,
                 "legacy fixture must retain legacyCrossedContours");
 
+        beginTest ("indexed render fixture identity and requirement ownership are exact");
+        const auto fixtureIndex = ReferenceHarness::loadFixtureIndex (
+            sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
+        expect (fixtureIndex.ok(), "fixture index must load for identity binding");
+        if (fixtureIndex.value.has_value()) {
+            const auto& indexed = fixtureIndex.value->renderFixtures.front();
+            expect (ReferenceHarness::loadIndexedRenderFixture (sourceRoot, indexed).ok(),
+                    "matching index and fixture identity must load");
+            auto wrongId = indexed;
+            wrongId.id = "different-safe-id";
+            expectDiagnostic (ReferenceHarness::loadIndexedRenderFixture (sourceRoot, wrongId),
+                              "fixture.index-id");
+            auto wrongRequirements = indexed;
+            wrongRequirements.requirements = { "TST-001" };
+            expectDiagnostic (
+                ReferenceHarness::loadIndexedRenderFixture (sourceRoot, wrongRequirements),
+                "fixture.index-requirements");
+        }
+
         beginTest ("events apply at exact samples in stable same-sample sequence order");
         const auto firstRun = ReferenceHarness::renderFixture (fixtures.front());
         expect (firstRun.ok(), "native fixture must render");
@@ -1399,7 +1503,94 @@ public:
         expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
                                     R"("signal.stats.v1")",
                                     R"("signal.stats.v2")"),
-                                "fixture.analyzer");
+                                "fixture.analysis-analyzer");
+
+        beginTest ("render fixture IDs are safe single portable components");
+        const auto fixtureId = R"("id": "native-v2-foundation")";
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    fixtureId, R"("id": "")"),
+                                "fixture.id");
+        for (const auto unsafeId : {
+                 R"("id": ".")", R"("id": "..")", R"("id": "/absolute")",
+                 R"("id": "nested/name")", R"("id": "nested\\name")",
+                 R"("id": "C:drive")", R"("id": "C:\\drive")",
+                 R"("id": "\\\\server\\share")", R"("id": "a/../escape")",
+             })
+            expectFixtureDiagnostic (
+                sourceRoot, validText.replaceFirstOccurrenceOf (fixtureId, unsafeId),
+                "fixture.id");
+
+        beginTest ("render analysis requests are typed, versioned, and fixture-owned");
+        const auto rightAudioRequest = R"JSON({"requestId": "main-right-count", "version": 1,
+     "analyzer": {"id": "signal.stats.v1", "version": 1},
+     "metric": "sample-count",
+     "input": {"kind": "audio", "tap": "main", "channel": 1},
+     "event": {"originSample": 0, "windowSamples": 2048}})JSON";
+        const auto controlRequest = R"JSON({"requestId": "filter-cutoff-first-change", "version": 1,
+     "analyzer": {"id": "control.step.v1", "version": 1},
+     "metric": "first-change-sample",
+     "input": {"kind": "control", "parameterId": "filterCutoff", "domain": "normalized"},
+     "event": {"originSample": 512, "windowSamples": 1536},
+     "start": 0.5, "target": 0.25})JSON";
+        const auto controlText = validText.replaceFirstOccurrenceOf (
+            rightAudioRequest, controlRequest);
+        expectFixtureValid (sourceRoot, validText);
+        expectFixtureValid (sourceRoot, controlText);
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("requestId": "main-left-count")",
+                                    R"("requestId": "../escape")"),
+                                "fixture.analysis-id");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("version": 1,
+     "analyzer")",
+                                    R"("version": 2,
+     "analyzer")"),
+                                "fixture.analysis-version");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("id": "signal.stats.v1", "version": 1)",
+                                    R"("id": "signal.stats.v1", "version": 2)"),
+                                "fixture.analysis-analyzer");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("metric": "sample-count")",
+                                    R"("metric": "unknown")"),
+                                "fixture.analysis-metric");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("tap": "main")", R"("tap": "sidechain")"),
+                                "fixture.analysis-input");
+        expectFixtureDiagnostic (sourceRoot, validText.replaceFirstOccurrenceOf (
+                                    R"("channel": 0)", R"("channel": 2)"),
+                                "fixture.analysis-input");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("domain": "normalized")",
+                                    R"("domain": "events")"),
+                                "fixture.analysis-input");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("input": {"kind": "control", "parameterId": "filterCutoff", "domain": "normalized"})",
+                                    R"("input": {"kind": "control", "parameterId": "unknownParameter", "domain": "normalized"})"),
+                                "fixture.analysis-input");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("originSample": 512, "windowSamples": 1536)",
+                                    R"("originSample": 2048, "windowSamples": 1)"),
+                                "fixture.analysis-event");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("originSample": 512, "windowSamples": 1536)",
+                                    R"("originSample": 512, "windowSamples": 1537)"),
+                                "fixture.analysis-event");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("start": 0.5, "target": 0.25)",
+                                    R"("start": 1e999, "target": 0.25)"),
+                                "fixture.analysis-endpoints");
+        expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (
+                                    R"("start": 0.5, "target": 0.25)",
+                                    R"("start": 0.5, "target": 0.75)"),
+                                "fixture.analysis-endpoints");
+        auto stringOnly = juce::JSON::fromString (validText);
+        auto* stringOnlyRoot = stringOnly.getDynamicObject();
+        stringOnlyRoot->removeProperty ("analysisRequests");
+        stringOnlyRoot->setProperty ("analyzers", juce::Array<juce::var> { "signal.stats.v1" });
+        expectFixtureDiagnostic (
+            sourceRoot, ReferenceHarness::canonicalJson (stringOnly),
+            "fixture.analysis-requests");
 
         const auto legacyText = sourceRoot.getChildFile (fixturePaths.back()).loadFileAsString();
         expectFixtureDiagnostic (sourceRoot, legacyText.replaceFirstOccurrenceOf (
@@ -1451,10 +1642,30 @@ public:
         beginTest ("candidate output refuses an existing directory");
         const TemporaryDirectory existingOutput { "model-d-reference-existing-output" };
         expect (existingOutput.isOwned(), "existing output root must be owned");
-        if (existingOutput.isOwned())
+        if (existingOutput.isOwned()) {
+            expect (existingOutput.directory.getChildFile (fixtures.front().id)
+                        .createDirectory(),
+                    "existing fixture output must be created");
             expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
                                   fixtures.front(), *firstRun.value, existingOutput.directory),
                               "output.exists");
+        }
+
+        beginTest ("candidate output rejects escaped fixture destinations without remnants");
+        const TemporaryDirectory containmentRoot { "model-d-reference-containment" };
+        expect (containmentRoot.isOwned(), "containment root must be owned");
+        if (containmentRoot.isOwned()) {
+            const auto rendersRoot = containmentRoot.directory.getChildFile ("renders");
+            expect (rendersRoot.createDirectory(), "containment renders root must exist");
+            auto unsafeFixture = fixtures.front();
+            unsafeFixture.id = "../escaped-fixture";
+            const auto escaped = containmentRoot.directory.getChildFile ("escaped-fixture");
+            expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
+                                  unsafeFixture, *firstRun.value, rendersRoot),
+                              "output.destination");
+            expect (! escaped.exists(),
+                    "failed destination validation must leave no escaped artifact behind");
+        }
 
         beginTest ("candidate artifacts are canonical and repeatable");
         const TemporaryDirectory candidateTemporaryRoot { "model-d-reference-candidates" };
@@ -1466,14 +1677,20 @@ public:
                                      : candidateTemporaryRoot.directory;
         if (retainedRoot.isNotEmpty())
             expect (candidateRoot.createDirectory(), "retained candidate root must be creatable");
-        const auto candidateA = candidateRoot.getChildFile ("candidate-a");
-        const auto candidateB = candidateRoot.getChildFile ("candidate-b");
+        const auto candidateARoot = candidateRoot.getChildFile ("candidate-a");
+        const auto candidateBRoot = candidateRoot.getChildFile ("candidate-b");
+        expect (candidateARoot.createDirectory() && candidateBRoot.createDirectory(),
+                "repeat candidate roots must be created");
+        const auto candidateA = candidateARoot.getChildFile (fixtures.front().id);
+        const auto candidateB = candidateBRoot.getChildFile (fixtures.front().id);
         const auto expectRejectedCandidate = [&] (const std::vector<ReferenceHarness::RenderResult>& results,
                                                    const juce::String& name,
                                                    const std::string_view code) {
-            const auto directory = candidateRoot.getChildFile (name);
+            const auto root = candidateRoot.getChildFile (name);
+            expect (root.createDirectory(), name + " rejection root must be created");
+            const auto directory = root.getChildFile (fixtures.front().id);
             expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
-                                  fixtures.front(), results, directory),
+                                  fixtures.front(), results, root),
                               code);
             expect (! directory.exists(), "invalid results must be rejected before output creation");
         };
@@ -1551,9 +1768,11 @@ public:
             result.reproducibility.inputHashes = {
                 { "state", fixtures.front().stateSha256 },
             };
-        const auto missingWavDirectory = candidateRoot.getChildFile ("missing-wav-hash");
+        const auto missingWavRoot = candidateRoot.getChildFile ("missing-wav-hash");
+        expect (missingWavRoot.createDirectory(), "missing WAV root must be created");
+        const auto missingWavDirectory = missingWavRoot.getChildFile (wavFixture.id);
         expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
-                              wavFixture, missingWavHash, missingWavDirectory),
+                              wavFixture, missingWavHash, missingWavRoot),
                           "output.input-hash");
         expect (! missingWavDirectory.exists(),
                 "missing WAV input hashes must be rejected before output creation");
@@ -1563,18 +1782,20 @@ public:
                 { "audio", std::string (64, '0') },
                 { "state", fixtures.front().stateSha256 },
             };
-        const auto wrongWavDirectory = candidateRoot.getChildFile ("wrong-wav-hash");
+        const auto wrongWavRoot = candidateRoot.getChildFile ("wrong-wav-hash");
+        expect (wrongWavRoot.createDirectory(), "wrong WAV root must be created");
+        const auto wrongWavDirectory = wrongWavRoot.getChildFile (wavFixture.id);
         expectDiagnostic (ReferenceHarness::writeCandidateArtifacts (
-                              wavFixture, wrongWavHash, wrongWavDirectory),
+                              wavFixture, wrongWavHash, wrongWavRoot),
                           "output.input-hash");
         expect (! wrongWavDirectory.exists(),
                 "invalid WAV input hashes must be rejected before output creation");
         const auto writtenA = ReferenceHarness::writeCandidateArtifacts (
-            fixtures.front(), *firstRun.value, candidateA);
+            fixtures.front(), *firstRun.value, candidateARoot);
         const auto writtenB = nativeSecondRun.has_value()
                                   && nativeSecondRun->value.has_value()
                             ? ReferenceHarness::writeCandidateArtifacts (
-                                  fixtures.front(), *nativeSecondRun->value, candidateB)
+                                  fixtures.front(), *nativeSecondRun->value, candidateBRoot)
                             : ReferenceHarness::LoadResult<std::vector<juce::File>> {};
         expect (writtenA.ok() && writtenB.ok(), "both fresh candidate directories must be written");
         for (const auto name : { "render.json", "control-trace.json", "event-trace.json",
@@ -1852,6 +2073,102 @@ public:
         outOfBoundManifest.hardSoftware.front().value = 47.0;
         expectMetricEvidenceFailure (*registryEvidence.value, "out-of-bound",
                                      "acceptance.metric-out-of-bound", &outOfBoundManifest);
+
+        beginTest ("render metric evidence replays the indexed fixture and full artifact");
+        const auto indexedRender = index.ok()
+            ? loadIndexedRenderFixture (sourceRoot, index.value->renderFixtures.front())
+            : LoadResult<RenderFixture> {};
+        const auto renderResults = indexedRender.ok()
+            ? renderFixture (*indexedRender.value)
+            : LoadResult<std::vector<RenderResult>> {};
+        const auto renderRecords = renderResults.ok()
+            ? analyzeFixtureMetrics (*indexedRender.value, *renderResults.value)
+            : LoadResult<std::vector<MetricEvidenceRecord>> {};
+        expect (renderRecords.ok() && renderRecords.value->size() == 2,
+                "typed stereo requests must produce a multi-record artifact");
+        if (! renderRecords.ok() || renderRecords.value->size() != 2)
+            return;
+        const auto renderMetricsDirectory = candidateRoot.directory
+            .getChildFile ("renders").getChildFile ("native-v2-foundation");
+        expect (renderMetricsDirectory.createDirectory(),
+                "render metric directory must be created");
+        const auto renderMetricsFile = renderMetricsDirectory.getChildFile ("metrics.json");
+        expect (renderMetricsFile.replaceWithText (
+                    metricEvidenceJson (*renderRecords.value), false, false, "\n"),
+                "render metric artifact must be written canonically");
+        GateMetricEvidence renderEvidence;
+        renderEvidence.gateId = "hard.registry.count";
+        renderEvidence.record = renderRecords.value->front();
+        renderEvidence.artifactFile = renderMetricsFile;
+        renderEvidence.artifactPath = "renders/native-v2-foundation/metrics.json";
+        renderEvidence.artifactSha256 = sha256File (renderMetricsFile);
+        auto renderManifest = *acceptance.value;
+        auto& renderGateDefinition = renderManifest.hardSoftware.front();
+        renderGateDefinition.analyzer = renderEvidence.record.metric.analyzer;
+        renderGateDefinition.metric = renderEvidence.record.metric.metric;
+        renderGateDefinition.unit = renderEvidence.record.metric.unit;
+        renderGateDefinition.value = renderEvidence.record.metric.value;
+        renderGateDefinition.allowance = renderEvidence.record.metric.allowance;
+        const auto evaluateRenderEvidence = [&] (const GateMetricEvidence& item) {
+            return evaluateAcceptance (
+                renderManifest, *smoothing.value, noEvidence, registry,
+                std::span<const GateMetricEvidence> { &item, 1 });
+        };
+        const auto renderEvaluation = evaluateRenderEvidence (renderEvidence);
+        auto renderPassed = false;
+        if (renderEvaluation.value.has_value()) {
+            const auto renderGate = std::find_if (
+                renderEvaluation.value->begin(), renderEvaluation.value->end(),
+                [] (const auto& gate) { return gate.id == "hard.registry.count"; });
+            renderPassed = renderGate != renderEvaluation.value->end()
+                        && renderGate->status == Status::pass
+                        && renderGate->reasonCode == "acceptance.metric-pass";
+        }
+        expect (renderEvaluation.ok() && renderPassed,
+                "only authoritative indexed render evidence may pass a metric gate");
+        const auto expectRenderForgery = [&] (GateMetricEvidence mutation,
+                                               const juce::String& name) {
+            const auto result = evaluateRenderEvidence (mutation);
+            expect (result.ok(), name + " render forgery must reduce honestly");
+            if (! result.value.has_value())
+                return;
+            const auto gate = std::find_if (
+                result.value->begin(), result.value->end(),
+                [] (const auto& item) { return item.id == "hard.registry.count"; });
+            expect (gate != result.value->end() && gate->status == Status::fail
+                        && gate->reasonCode == "acceptance.metric-evidence-invalid"
+                        && ! gate->metric.has_value() && gate->artifactPath.empty(),
+                    name + " render forgery must fail without an artifact claim");
+        };
+        auto forgedRenderPath = renderEvidence;
+        forgedRenderPath.record.provenance.fixturePath =
+            "Tests/reference/fixtures/migrated-v2-foundation.json";
+        expectRenderForgery (std::move (forgedRenderPath), "fixture-path");
+        auto forgedRenderRequest = renderEvidence;
+        forgedRenderRequest.record.provenance.requestId = "forged-request";
+        expectRenderForgery (std::move (forgedRenderRequest), "request-id");
+        auto forgedRenderValue = renderEvidence;
+        forgedRenderValue.record.metric.value += 1.0;
+        expectRenderForgery (std::move (forgedRenderValue), "value");
+        auto forgedRenderSettings = renderEvidence;
+        forgedRenderSettings.record.metric.settings["input"] = "control";
+        expectRenderForgery (std::move (forgedRenderSettings), "settings");
+        auto forgedArtifactPath = renderEvidence;
+        forgedArtifactPath.artifactPath = "renders/migrated-v2-foundation/metrics.json";
+        expectRenderForgery (std::move (forgedArtifactPath), "artifact-path");
+        auto forgedArtifactHash = renderEvidence;
+        forgedArtifactHash.artifactSha256 = std::string (64, '0');
+        expectRenderForgery (std::move (forgedArtifactHash), "artifact-hash");
+        const auto forgedRenderFile = candidateRoot.directory.getChildFile (
+            "forged-render-metrics.json");
+        expect (forgedRenderFile.replaceWithText (
+                    renderMetricsFile.loadFileAsString() + " ", false, false, "\n"),
+                "forged render file must be written");
+        auto forgedArtifactFile = renderEvidence;
+        forgedArtifactFile.artifactFile = forgedRenderFile;
+        forgedArtifactFile.artifactSha256 = sha256File (forgedRenderFile);
+        expectRenderForgery (std::move (forgedArtifactFile), "artifact-file");
+
         const auto evaluated = smoothing.ok()
                                  ? evaluateAcceptance (
                                        *acceptance.value, *smoothing.value, noEvidence, registry,

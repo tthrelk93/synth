@@ -620,8 +620,10 @@ if(SYNTH_BUILD_VALIDATORS)
         VERBATIM)
 endif()
 
+if(SYNTH_BUILD_TESTS)
+find_package(Git REQUIRED)
 execute_process(
-    COMMAND git rev-parse HEAD
+    COMMAND "${GIT_EXECUTABLE}" rev-parse HEAD
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
     RESULT_VARIABLE _model_d_source_commit_status
     OUTPUT_VARIABLE _model_d_source_commit
@@ -682,7 +684,6 @@ target_link_libraries(ModelDOfflineRenderer
         ModelDReferenceHarness
         SynthProjectOptions)
 
-if(SYNTH_BUILD_TESTS)
     enable_testing()
     add_executable(ModelDTests Tests/ModelDTests.cpp)
     synth_enable_project_warnings(Tests/ModelDTests.cpp)
@@ -755,6 +756,20 @@ if(SYNTH_BUILD_TESTS)
     set_tests_properties(ModelDProductIdentityContracts PROPERTIES
         LABELS artifact
         TIMEOUT 120)
+
+    add_test(NAME ModelDArchiveConfigurationContracts
+        COMMAND "${CMAKE_COMMAND}"
+                "-DSYNTH_SOURCE_ROOT=${CMAKE_CURRENT_SOURCE_DIR}"
+                "-DSYNTH_CONTRACT_ROOT=${CMAKE_BINARY_DIR}/archive-configuration-contracts/$<CONFIG>"
+                "-DSYNTH_JUCE_SOURCE_DIR=${juce_SOURCE_DIR}"
+                "-DSYNTH_GIT_EXECUTABLE=${GIT_EXECUTABLE}"
+                "-DSYNTH_CMAKE_GENERATOR=${CMAKE_GENERATOR}"
+                "-DSYNTH_CMAKE_GENERATOR_PLATFORM=${CMAKE_GENERATOR_PLATFORM}"
+                "-DSYNTH_CMAKE_GENERATOR_TOOLSET=${CMAKE_GENERATOR_TOOLSET}"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/Tests/ArchiveConfigurationContracts.cmake")
+    set_tests_properties(ModelDArchiveConfigurationContracts PROPERTIES
+        LABELS artifact
+        TIMEOUT 300)
 
     if(SYNTH_BUILD_VALIDATORS)
         add_test(NAME ModelDStandaloneLifecycle

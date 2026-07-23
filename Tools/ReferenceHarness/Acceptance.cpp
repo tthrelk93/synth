@@ -1,5 +1,6 @@
 #include "Acceptance.h"
 
+#include "OfflineRenderer.h"
 #include "ReferenceData.h"
 
 #include <juce_cryptography/juce_cryptography.h>
@@ -246,7 +247,9 @@ LoadResult<BoundCandidate> loadBoundCandidate (const SmoothingEvidence& evidence
         || phonesChannels != evidence.render.phonesChannels
         || ! readUnsignedInteger (*root, "totalSamples", totalSamples)
         || totalSamples != evidence.fixture.config.totalSamples
-        || ! exactStringArray (property (*root, "analyzers"), evidence.fixture.analyzers)
+        || property (*root, "analysisRequests") == nullptr
+        || canonicalJson (*property (*root, "analysisRequests"))
+               != canonicalJson (analysisRequestsJson (evidence.fixture.analysisRequests))
         || ! exactStringArray (property (*root, "requirements"), evidence.fixture.requirements)
         || ! exactBlockPatterns (property (*root, "blockPatterns"),
                                  evidence.fixture.config.blockPatterns)
@@ -953,6 +956,9 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
         const auto registered = analyzers.find (metric.analyzer.id);
         auto validProvenance = false;
         auto authoritativeMetric = true;
+        auto expectedArtifactPayload = metricEvidenceJson (
+            std::span<const MetricEvidenceRecord> { &evidenceItem.record, 1 });
+        auto validArtifactPlacement = ! evidenceItem.artifactPath.empty();
         const auto& provenance = evidenceItem.record.provenance;
         if (provenance.kind == MetricSubjectKind::liveRegistry) {
             const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
@@ -979,20 +985,68 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
                        == metricResultsJson (
                            std::span<const MetricResult> { &metric, 1 });
         } else {
-            validProvenance = ! provenance.fixtureId.empty()
-                           && lowercaseSha256 (provenance.fixtureSha256)
-                           && provenance.sampleRate > 0.0 && provenance.totalSamples > 0
-                           && ! provenance.blockPatterns.empty()
-                           && provenance.reproducibility.fixtureSha256
-                                  == provenance.fixtureSha256
-                           && provenance.reproducibility.sourceCommit == SYNTH_SOURCE_COMMIT;
+            validProvenance = false;
+            authoritativeMetric = false;
+            const auto sourceRoot = juce::File { SYNTH_SOURCE_ROOT };
+            const auto index = loadFixtureIndex (
+                sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
+            if (index.ok()) {
+                const auto indexedFixture = std::find_if (
+                    index.value->renderFixtures.begin(), index.value->renderFixtures.end(),
+                    [&] (const auto& item) {
+                        return item.id == provenance.fixtureId
+                            && item.relativePath == provenance.fixturePath
+                            && item.sha256 == provenance.fixtureSha256;
+                    });
+                if (indexedFixture != index.value->renderFixtures.end()) {
+                    const auto fixture = loadIndexedRenderFixture (sourceRoot, *indexedFixture);
+                    if (fixture.ok()) {
+                        const auto request = std::find_if (
+                            fixture.value->analysisRequests.begin(),
+                            fixture.value->analysisRequests.end(), [&] (const auto& item) {
+                                return item.id == provenance.requestId
+                                    && item.version == provenance.requestVersion;
+                            });
+                        if (request != fixture.value->analysisRequests.end()) {
+                            const auto renders = renderFixture (*fixture.value);
+                            const auto records = renders.ok()
+                                ? analyzeFixtureMetrics (*fixture.value, *renders.value)
+                                : LoadResult<std::vector<MetricEvidenceRecord>> {};
+                            if (records.ok()) {
+                                const auto authoritativeRecord = std::find_if (
+                                    records.value->begin(), records.value->end(),
+                                    [&] (const auto& item) {
+                                        return item.provenance.requestId == request->id
+                                            && item.provenance.requestVersion == request->version;
+                                    });
+                                if (authoritativeRecord != records.value->end()) {
+                                    authoritativeMetric = metricEvidenceJson (
+                                        std::span<const MetricEvidenceRecord> {
+                                            &*authoritativeRecord, 1 })
+                                        == metricEvidenceJson (
+                                            std::span<const MetricEvidenceRecord> {
+                                                &evidenceItem.record, 1 });
+                                    validProvenance = authoritativeMetric;
+                                    expectedArtifactPayload = metricEvidenceJson (*records.value);
+                                    const auto expectedPath = "renders/" + fixture.value->id
+                                                            + "/metrics.json";
+                                    validArtifactPlacement = evidenceItem.artifactPath == expectedPath
+                                        && evidenceItem.artifactFile.getFileName() == "metrics.json"
+                                        && evidenceItem.artifactFile.getParentDirectory().getFileName()
+                                               == juce::String { fixture.value->id }
+                                        && evidenceItem.artifactFile.getParentDirectory()
+                                               .getParentDirectory().getFileName() == "renders";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
         const auto exactArtifact = evidenceItem.artifactFile.existsAsFile()
             && lowercaseSha256 (evidenceItem.artifactSha256)
             && sha256File (evidenceItem.artifactFile) == evidenceItem.artifactSha256
-            && evidenceItem.artifactFile.loadFileAsString()
-                   == metricEvidenceJson (
-                       std::span<const MetricEvidenceRecord> { &evidenceItem.record, 1 });
+            && evidenceItem.artifactFile.loadFileAsString() == expectedArtifactPayload;
         const auto validMetric = registered.ok()
             && metric.analyzer.id == gate.analyzer.id
             && metric.analyzer.version == gate.analyzer.version
@@ -1001,7 +1055,7 @@ LoadResult<std::vector<GateResult>> evaluateAcceptance (
             && metric.finite && std::isfinite (metric.value)
             && std::isfinite (metric.allowance) && metric.allowance >= 0.0
             && metric.allowance == gate.allowance && authoritativeMetric;
-        if (! exactArtifact || evidenceItem.artifactPath.empty()
+        if (! exactArtifact || ! validArtifactPlacement
             || ! validProvenance || ! validMetric) {
             result->status = Status::fail;
             result->reasonCode = "acceptance.metric-evidence-invalid";

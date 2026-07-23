@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <filesystem>
 #include <iostream>
 #include <memory>
 #include <utility>
@@ -483,7 +484,7 @@ bool writeFloatWav (const juce::File& file,
     return writer->writeFromAudioSampleBuffer (audio, 0, frames);
 }
 
-LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetrics (
+LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetricsImpl (
     const RenderFixture& fixture,
     const std::span<const RenderResult> results)
 {
@@ -492,29 +493,77 @@ LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetrics (
             "metrics.render-empty", "render metrics require at least one immutable result");
     const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
     std::vector<MetricEvidenceRecord> records;
-    for (const auto& analyzerId : fixture.analyzers) {
+    for (const auto& fixtureRequest : fixture.analysisRequests) {
         std::optional<juce::String> expected;
         std::vector<MetricResult> canonicalMetrics;
         for (const auto& result : results) {
+            const auto registered = analyzers.find (fixtureRequest.analyzer.id);
+            if (! registered.ok() || registered.value->version != fixtureRequest.analyzer.version)
+                return failure<std::vector<MetricEvidenceRecord>> (
+                    "metrics.request-analyzer", "fixture analysis request identity is not registered");
+            if (fixtureRequest.eventSample >= fixture.config.totalSamples
+                || fixtureRequest.windowSamples == 0
+                || fixtureRequest.windowSamples
+                       > fixture.config.totalSamples - fixtureRequest.eventSample)
+                return failure<std::vector<MetricEvidenceRecord>> (
+                    "metrics.request-event", "fixture analysis event window is invalid");
+            std::vector<float> audio;
             std::vector<double> control;
-            control.reserve (result.controlTrace.size());
-            for (const auto& point : result.controlTrace)
-                control.push_back (point.normalizedValue);
             AnalysisRequest request;
-            if (analyzerId == "signal.stats.v1") {
-                request.audio = result.main;
-            } else if (analyzerId == "audio.click.v1") {
-                request.audio = result.main;
-                request.eventSample = 0;
-                request.durationSamples = fixture.config.totalSamples - 1;
+            request.metric = fixtureRequest.metric;
+            request.eventSample = fixtureRequest.eventSample;
+            request.durationSamples = fixtureRequest.windowSamples - 1;
+            request.start = fixtureRequest.start.value_or (0.0);
+            request.target = fixtureRequest.target.value_or (0.0);
+            if (fixtureRequest.inputKind == AnalysisInputKind::audio) {
+                const auto& interleaved = fixtureRequest.audioTap == AudioTap::main
+                                            ? result.main : result.phones;
+                const auto channels = fixtureRequest.audioTap == AudioTap::main
+                                    ? result.mainChannels : result.phonesChannels;
+                if (channels <= 0 || fixtureRequest.channel < 0
+                    || fixtureRequest.channel >= channels
+                    || interleaved.size() % static_cast<size_t> (channels) != 0
+                    || interleaved.size() / static_cast<size_t> (channels)
+                           != fixture.config.totalSamples)
+                    return failure<std::vector<MetricEvidenceRecord>> (
+                        "metrics.request-audio", "fixture analysis audio tap/channel is invalid");
+                audio.reserve (fixture.config.totalSamples);
+                for (size_t frame = 0; frame < fixture.config.totalSamples; ++frame)
+                    audio.push_back (interleaved[frame * static_cast<size_t> (channels)
+                                                 + static_cast<size_t> (fixtureRequest.channel)]);
+                request.audio = audio;
             } else {
+                if (! fixtureRequest.start.has_value())
+                    return failure<std::vector<MetricEvidenceRecord>> (
+                        "metrics.request-control", "dense control analysis requires a start value");
+                control.assign (fixture.config.totalSamples, *fixtureRequest.start);
+                auto cursor = std::uint64_t { 0 };
+                auto current = *fixtureRequest.start;
+                auto sawEvent = false;
+                for (const auto& point : result.controlTrace) {
+                    if (point.key != fixtureRequest.parameterKey)
+                        continue;
+                    if (point.sample < cursor || point.sample >= fixture.config.totalSamples)
+                        return failure<std::vector<MetricEvidenceRecord>> (
+                            "metrics.request-control", "control trace sample indices are invalid");
+                    std::fill (control.begin() + static_cast<std::ptrdiff_t> (cursor),
+                               control.begin() + static_cast<std::ptrdiff_t> (point.sample),
+                               current);
+                    current = fixtureRequest.controlDomain == ControlDomain::normalized
+                            ? static_cast<double> (point.normalizedValue)
+                            : static_cast<double> (point.physicalValue);
+                    cursor = point.sample;
+                    sawEvent = sawEvent || point.sample == fixtureRequest.eventSample;
+                }
+                std::fill (control.begin() + static_cast<std::ptrdiff_t> (cursor),
+                           control.end(), current);
+                if (! sawEvent)
+                    return failure<std::vector<MetricEvidenceRecord>> (
+                        "metrics.request-control",
+                        "control request event is absent from the immutable trace");
                 request.control = control;
-                request.eventSample = 0;
-                request.start = control.empty() ? 0.0 : control.front();
-                request.target = control.empty() ? 0.0 : control.back();
-                request.durationSamples = control.size() > 1 ? control.size() - 1 : 0;
             }
-            const auto analyzed = analyzers.analyze (analyzerId, request);
+            const auto analyzed = analyzers.analyze (fixtureRequest.analyzer.id, request);
             if (! analyzed.ok() || ! analyzed.value.has_value())
                 return { std::nullopt, analyzed.diagnostics };
             const auto serialized = metricResultsJson (*analyzed.value);
@@ -530,7 +579,10 @@ LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetrics (
         MetricProvenance provenance;
         provenance.kind = MetricSubjectKind::render;
         provenance.fixtureId = fixture.id;
+        provenance.fixturePath = fixture.fixtureRelativePath;
         provenance.fixtureSha256 = sha256File (fixture.fixtureFile);
+        provenance.requestId = fixtureRequest.id;
+        provenance.requestVersion = fixtureRequest.version;
         provenance.sampleRate = fixture.config.sampleRate;
         provenance.totalSamples = fixture.config.totalSamples;
         provenance.seed = fixture.config.seed;
@@ -549,8 +601,7 @@ LoadResult<FixtureIndex> validateIndexAndRenderFixtures (const juce::File& index
     if (! index.ok())
         return index;
     for (const auto& artifact : index.value->renderFixtures) {
-        const auto fixture = loadRenderFixture (
-            sourceRoot, sourceRoot.getChildFile (artifact.relativePath));
+        const auto fixture = loadIndexedRenderFixture (sourceRoot, artifact);
         if (! fixture.ok())
             return { std::nullopt, fixture.diagnostics };
     }
@@ -622,6 +673,13 @@ void printDiagnostic (const Diagnostic& diagnostic)
 
 } // namespace
 
+LoadResult<std::vector<MetricEvidenceRecord>> analyzeFixtureMetrics (
+    const RenderFixture& fixture,
+    const std::span<const RenderResult> results)
+{
+    return analyzeFixtureMetricsImpl (fixture, results);
+}
+
 LoadResult<std::vector<RenderResult>> renderFixture (const RenderFixture& fixture)
 {
     const auto input = prepareInput (fixture);
@@ -642,8 +700,26 @@ LoadResult<std::vector<RenderResult>> renderFixture (const RenderFixture& fixtur
 LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     const RenderFixture& fixture,
     const std::span<const RenderResult> results,
-    const juce::File& newDirectory)
+    const juce::File& rendersRoot)
 {
+    if (! isPortableIdentifierComponent (fixture.id) || ! rendersRoot.isDirectory())
+        return failure<std::vector<juce::File>> (
+            "output.destination", "candidate fixture output requires a safe ID and renders root");
+    std::error_code pathError;
+    const auto canonicalRoot = std::filesystem::canonical (
+        rendersRoot.getFullPathName().toStdString(), pathError);
+    if (pathError)
+        return failure<std::vector<juce::File>> (
+            "output.destination", "candidate renders root cannot be canonicalized");
+    const auto candidatePath = canonicalRoot / fixture.id;
+    const auto canonicalCandidate = std::filesystem::weakly_canonical (candidatePath, pathError);
+    const auto relativeCandidate = canonicalCandidate.lexically_relative (canonicalRoot);
+    if (pathError || relativeCandidate.empty() || relativeCandidate == "."
+        || std::distance (relativeCandidate.begin(), relativeCandidate.end()) != 1
+        || relativeCandidate.generic_string() != fixture.id)
+        return failure<std::vector<juce::File>> (
+            "output.destination", "candidate fixture output must be a direct child of renders root");
+    const auto newDirectory = juce::File { canonicalCandidate.string() };
     if (newDirectory.exists())
         return failure<std::vector<juce::File>> ("output.exists",
                                                  "candidate output directory already exists");
@@ -703,7 +779,7 @@ LoadResult<std::vector<juce::File>> writeCandidateArtifacts (
     reproducibility->setProperty ("sourceCommit", juce::String { canonical.reproducibility.sourceCommit });
 
     auto root = std::make_unique<juce::DynamicObject>();
-    root->setProperty ("analyzers", stringArray (fixture.analyzers));
+    root->setProperty ("analysisRequests", analysisRequestsJson (fixture.analysisRequests));
     root->setProperty ("blockPatterns", patterns);
     root->setProperty ("fixtureId", juce::String { fixture.id });
     root->setProperty ("mainChannels", canonical.mainChannels);
@@ -838,8 +914,7 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
             return 1;
         }
         for (const auto& artifact : inputs.value->index.renderFixtures) {
-            const auto fixture = loadRenderFixture (
-                sourceRoot, sourceRoot.getChildFile (artifact.relativePath));
+            const auto fixture = loadIndexedRenderFixture (sourceRoot, artifact);
             if (! fixture.ok()) {
                 discardStaging();
                 printDiagnostic (fixture.diagnostics.front());
@@ -852,7 +927,7 @@ int runOfflineRendererCommand (const std::span<const std::string> arguments)
                 return 1;
             }
             const auto written = writeCandidateArtifacts (
-                *fixture.value, *rendered.value, rendersRoot.getChildFile (fixture.value->id));
+                *fixture.value, *rendered.value, rendersRoot);
             if (! written.ok()) {
                 discardStaging();
                 printDiagnostic (written.diagnostics.front());
