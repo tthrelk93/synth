@@ -235,18 +235,18 @@ SHA-256.
 - Produces: a clean exact implementation commit whose next ordinary build
   refreshes the generated identity without reconfiguration.
 
-- [ ] **Step 1: Verify scope and commit implementation**
+- [x] **Step 1: Verify scope and commit implementation**
 
   Run `git diff --check`, confirm `git diff -- Source` is empty, review every
   changed file, then commit implementation and completed Task 1–4 checkboxes.
 
-- [ ] **Step 2: Rebuild without CMake reconfigure**
+- [x] **Step 2: Rebuild without CMake reconfigure**
 
   Run the existing build command. Inspect the generated header and binary
   candidate provenance to prove it moved from dirty pre-commit identity to the
   clean exact implementation commit automatically.
 
-- [ ] **Step 3: Run focused and serial full GREEN**
+- [x] **Step 3: Run focused and serial full GREEN**
 
   Run all four reference contracts, then serial full CTest and all seven
   labels. Require 21/21 full tests and nonzero exact label counts.
@@ -277,7 +277,7 @@ SHA-256.
 - Produces: truthful 18-per-render/20-total documentation, checked prior
   closure steps, append-only evidence, and an exact post-checklist-head ZIP.
 
-- [ ] **Step 1: Synchronize durable documentation without status changes**
+- [x] **Step 1: Synchronize durable documentation without status changes**
 
   Replace the stale TST-001 15-artifact statement and make every summary say
   18 render artifacts plus root metric and report, 20 candidate files total.

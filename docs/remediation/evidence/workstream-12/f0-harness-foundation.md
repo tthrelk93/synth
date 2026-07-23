@@ -363,6 +363,48 @@ checks, guards, report hashes, and successor-package verification are retained
 in the ignored whole-branch remediation report after final execution. No
 production `Source/` file changed.
 
+## Ultimate-review authority remediation
+
+Ultimate review resumed at clean base
+`37226cf2c5f047058ac242ccdf09cc0839f085c4` and produced implementation commit
+`2dfc510d7f4232e7130308b7fa79f426939958d0`. RED contracts showed that step
+analysis included pre-event movement in its maximum-delta metric, dense control
+reconstruction replayed pre-event samples into the analysis window, source
+authority was captured only at configure time and only as a commit string, and
+the frozen registry semantic probe admitted coordinated non-ID descriptor
+drift after its SHA was updated.
+
+GREEN makes the declared event the lower bound for step movement and dense
+reconstruction while preserving the effective same-key start at the event.
+An always-run test-harness build step now derives commit, tree, a SHA-256 of the
+tree plus tracked diff bytes, and dirty state with the configured Git binary.
+The same four-field identity is independently inspected at runtime, validated
+as lowercase hexadecimal data, propagated through render and registry metrics,
+candidate manifests, and the requirement report, then compared before any
+authoritative `run` output or `verify-release` replay. Clean-current,
+current-dirty, built-dirty/restored, stale-HEAD, and malformed-content cases
+have distinct stable diagnostics. No-argument smoke and schema-only `validate`
+remain usable without claiming authoritative evidence.
+
+Registry authority now compares the complete ordered 48-descriptor projection:
+index, ID, semantic key, version, display and short labels, unit and kind,
+range start/end/interval/skew/default and symmetric flag, ordered choices,
+mapping, automation, smoothing, and persistence. SHA-coordinated mutations of
+every field reject with `semantic.registry`.
+
+The implementation-head no-reconfigure build refreshed identity from a dirty
+pre-commit header to exact commit `2dfc510d7f4232e7130308b7fa79f426939958d0`,
+tree `1730f6ab88b0648dda8f57b4f521402f67a3bc02`, content
+`6f726cb61e78b5412fd7627fb6c784d8d406c422b771cbeb909fad90c9297a5c`,
+and `dirty=false`. The four focused reference contracts pass 4/4; serial full
+CTest passes 21/21 with all seven labels represented. No-argument smoke,
+`validate`, and two `run` commands pass; both candidates contain the same 20
+files byte-for-byte. The report remains 127 rows and 101 gates at 14 pass, 94
+not-run, 19 awaiting approved reference, 0 fail, and `releaseReady=false`;
+authoritative release verification still exits 3 at BLD-006. No production
+`Source/` file, frozen descriptor, approval, requirement status, hardware
+claim, host claim, or release claim changed.
+
 ## Honest F0 projection and next action
 
 The canonical F0 report contains 127 requirements and 101 gate payloads:

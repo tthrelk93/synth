@@ -28,7 +28,7 @@ record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness
 
 | ID | Status | F0 result / remaining acceptance |
 |---|---|---|
-| TST-001 | in-progress | Three deterministic state/MIDI/automation fixtures render 18 hashed candidate artifacts across three block patterns. Preset/audio-input and later owner-fixture coverage remains open. |
+| TST-001 | in-progress | Three deterministic state/MIDI/automation fixtures produce 18 hashed per-render artifacts plus one root metric artifact and one report, for 20 candidate files total. Preset/audio-input and later owner-fixture coverage remains open. |
 | TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, and `audio.click.v1` pass synthetic and finite-extreme contracts. The complete owner-analyzer catalog remains open. |
 | TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
 | TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
