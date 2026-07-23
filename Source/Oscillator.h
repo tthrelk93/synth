@@ -93,6 +93,7 @@ public:
     bool isMidiControlled = true;
   
     float processNextSample(float modulationEffect, bool osc3CtrlMode);
+    float processNextSampleAtFrequency (float finalFrequency);
     float getFrequency();
 
 
@@ -115,6 +116,7 @@ private:
     void updateIncrement(); // Update this method to account for range
     float calculateFrequencyForRange(); // New method to calculate frequency based on range
     float calculateDetunedFrequency(float modulatedFrequency);
+    float renderNextSample (float finalFrequency);
 };
 
 #endif /* Oscillator_h */

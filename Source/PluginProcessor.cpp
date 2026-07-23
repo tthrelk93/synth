@@ -10,6 +10,7 @@
 #include "PluginEditor.h"
 #include "ParameterRegistry.h"
 #include "ParameterSnapshotCapture.h"
+#include "PitchDomain.h"
 #include "StateContract.h"
 #include <algorithm>
 #include <cmath>
@@ -87,6 +88,43 @@ circularBuffer(1024)
 
 MoogMiniAudioProcessor::~MoogMiniAudioProcessor()
 {
+}
+
+float MoogMiniAudioProcessor::composeMusicalFrequency (
+    const float noteFrequency,
+    const int rangeIndex,
+    const int masterTuneIndex,
+    const int oscillatorOffsetIndex,
+    const double pitchWheelRatio,
+    const double modulationRatio,
+    const size_t oscillatorIndex) noexcept
+{
+    const auto note = PitchDomain::fromHertz (noteFrequency);
+    const auto selectedRange = PitchDomain::range (rangeIndex);
+    const auto tune = PitchDomain::masterTune (masterTuneIndex);
+    const auto offset = PitchDomain::oscillatorOffset (oscillatorOffsetIndex);
+    const auto bend = PitchDomain::ratioToSemitones (pitchWheelRatio);
+    const auto modulation = PitchDomain::ratioToSemitones (modulationRatio);
+    const auto valid = note.valid && selectedRange.valid && tune.valid && offset.valid
+                    && bend.valid && modulation.valid
+                    && selectedRange.value.mode == PitchDomain::RangeMode::musical
+                    && oscillatorIndex < lastValidMusicalFrequency.size();
+    const auto result = valid ? PitchDomain::compose ({
+        note.value, selectedRange.value.semitones, tune.value, offset.value,
+        bend.value, PitchDomain::Semitones { 0.0 }, modulation.value
+    }) : PitchDomain::Result {};
+    if (! result.valid) {
+        invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+        return oscillatorIndex < lastValidMusicalFrequency.size()
+                 ? lastValidMusicalFrequency[oscillatorIndex] : 440.0f;
+    }
+    const auto value = static_cast<float> (result.hertz.value);
+    if (! std::isfinite (value) || value <= 0.0f) {
+        invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+        return lastValidMusicalFrequency[oscillatorIndex];
+    }
+    lastValidMusicalFrequency[oscillatorIndex] = value;
+    return value;
 }
 
 //==============================================================================
@@ -478,13 +516,13 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
     // Map the normalized value to the range of -5 to +5
     float mappedPitchWheelValue = (pitchWheelValue * 10.0f) - 5.0f; // Maps [0, 1] to [-5, 5]
 
-    float pitchWheelAdjustment = 1.0f; // Default to no adjustment
+    float legacyPitchWheelRatio = 1.0f; // Default to no adjustment
     if (mappedPitchWheelValue > 0) {
         // Pitch wheel is up - increase frequency by up to a fifth
-        pitchWheelAdjustment = 1.0f + (mappedPitchWheelValue / 5.0f * 0.5f); // Max 1.5
+        legacyPitchWheelRatio = 1.0f + (mappedPitchWheelValue / 5.0f * 0.5f); // Max 1.5
     } else if (mappedPitchWheelValue < 0) {
         // Pitch wheel is down - decrease frequency by up to a fifth
-        pitchWheelAdjustment = 1.0f + (mappedPitchWheelValue / 5.0f * (1.0f / 3.0f)); // Min 2/3
+        legacyPitchWheelRatio = 1.0f + (mappedPitchWheelValue / 5.0f * (1.0f / 3.0f)); // Min 2/3
     }
 
 
@@ -567,7 +605,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             }
         }
         // Apply pitch wheel without accumulating drift.
-        float effectiveFrequency = currentGlideFrequency * pitchWheelAdjustment;
+        float effectiveFrequency = currentGlideFrequency * legacyPitchWheelRatio;
 
         // Set frequencies for oscillators
         osc1.setFrequency(effectiveFrequency);
@@ -577,7 +615,18 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
 
         float osc3SampleRaw = 0.0f;
         if (osc3OnOff || filterModSwitchValue || oscModSwitchValue) {
-            osc3SampleRaw = osc3.processNextSample(0.0f, osc3CtrlMode);
+            if (rangeSelectionOsc3 >= 1 && rangeSelectionOsc3 <= 5) {
+                const auto osc3SourceFrequency =
+                    osc3CtrlMode ? currentGlideFrequency : referenceFrequency;
+                const auto osc3PitchWheelRatio =
+                    osc3CtrlMode ? static_cast<double> (legacyPitchWheelRatio) : 1.0;
+                osc3SampleRaw = osc3.processNextSampleAtFrequency (
+                    composeMusicalFrequency (
+                        osc3SourceFrequency, rangeSelectionOsc3, tuneSelectionOsc1,
+                        freqSelectionOsc3, osc3PitchWheelRatio, 1.0, 2));
+            } else {
+                osc3SampleRaw = osc3.processNextSample(0.0f, osc3CtrlMode);
+            }
         }
 
         if (filterModSwitchValue || oscModSwitchValue) {
@@ -594,9 +643,19 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         }
 
         const float oscModAmount = oscModSwitchValue ? pitchModulationEffect : 0.0f;
+        const auto legacyModulationRatio =
+            oscModSwitchValue
+                ? static_cast<double> (1.0f + pitchModulationEffect) : 1.0;
 
         if (osc1OnOff && osc1.isActive()) {
-            osc1Sample = osc1.processNextSample(oscModAmount, false);
+            if (rangeSelectionOsc1 >= 1 && rangeSelectionOsc1 <= 5) {
+                osc1Sample = osc1.processNextSampleAtFrequency (
+                    composeMusicalFrequency (
+                        currentGlideFrequency, rangeSelectionOsc1, tuneSelectionOsc1, 8,
+                        legacyPitchWheelRatio, legacyModulationRatio, 0));
+            } else {
+                osc1Sample = osc1.processNextSample(oscModAmount, false);
+            }
             osc1RawPeak = juce::jmax(osc1RawPeak, std::abs(osc1Sample));
             osc1Contribution = osc1Sample * volSelectionOsc1;
             sampleLeft += osc1Contribution;
@@ -604,7 +663,15 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             osc1Peak = juce::jmax(osc1Peak, std::abs(osc1Sample) * (volSelectionOsc1 * volumeScale));
         }
         if (osc2OnOff && osc2.isActive()) {
-            osc2Sample = osc2.processNextSample(oscModAmount, false);
+            if (rangeSelectionOsc2 >= 1 && rangeSelectionOsc2 <= 5) {
+                osc2Sample = osc2.processNextSampleAtFrequency (
+                    composeMusicalFrequency (
+                        currentGlideFrequency, rangeSelectionOsc2, tuneSelectionOsc1,
+                        freqSelectionOsc2, legacyPitchWheelRatio,
+                        legacyModulationRatio, 1));
+            } else {
+                osc2Sample = osc2.processNextSample(oscModAmount, false);
+            }
             osc2RawPeak = juce::jmax(osc2RawPeak, std::abs(osc2Sample));
             osc2Contribution = osc2Sample * volSelectionOsc2;
             sampleLeft += osc2Contribution;

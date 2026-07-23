@@ -319,8 +319,17 @@ private:
     float targetFrequency = 0.0f;
        float currentGlideFrequency = 440.0f;
     bool isGlideActive = false;
+    std::array<float, 3> lastValidMusicalFrequency { 440.0f, 440.0f, 440.0f };
 
     float sanitizeParameterValue (ParameterRegistry::Key key, float value) const noexcept;
+    float composeMusicalFrequency (
+        float noteFrequency,
+        int rangeIndex,
+        int masterTuneIndex,
+        int oscillatorOffsetIndex,
+        double pitchWheelRatio,
+        double modulationRatio,
+        size_t oscillatorIndex) noexcept;
     ParameterSnapshot buildTypedSnapshot (
         const std::array<float, ParameterRegistry::parameterCount>& values,
         StateContract::ContourContract contract,

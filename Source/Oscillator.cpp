@@ -131,14 +131,25 @@ float Oscillator::generateWaveform() {
     return sample;
 }
 
-float Oscillator::processNextSample(float modulationEffect, bool osc3CtrlMode) {
-    juce::ignoreUnused(osc3CtrlMode);
+float Oscillator::processNextSample (const float modulationEffect,
+                                     const bool osc3CtrlMode)
+{
+    juce::ignoreUnused (osc3CtrlMode);
+    const auto base = calculateFrequencyForRange();
+    const auto modulated = base * (1.0f + modulationEffect);
+    return renderNextSample (calculateDetunedFrequency (modulated));
+}
 
-    // Apply modulation to frequency
-    float baseFrequency = calculateFrequencyForRange();
-    float modulatedFrequency = baseFrequency * (1.0f + modulationEffect); // Adjust frequency based on modulation effect
-    float finalFrequency = calculateDetunedFrequency(modulatedFrequency); // Calculate final frequency considering detune
-    phaseIncrement = finalFrequency / sampleRate; // Recalculate phase increment
+float Oscillator::processNextSampleAtFrequency (const float finalFrequency)
+{
+    return renderNextSample (
+        std::isfinite (finalFrequency) && finalFrequency > 0.0f
+            ? finalFrequency : 440.0f);
+}
+
+float Oscillator::renderNextSample (const float finalFrequency)
+{
+    phaseIncrement = finalFrequency / sampleRate;
     float curvature = 0.8f; // A value between 0 and 1, where 1 is a straight line.
     // Phase points
     // Reset the phase to zero at the end of each cycle

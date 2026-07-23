@@ -4143,6 +4143,64 @@ void testRealtimeSmoke (TestContext& test)
     }
 }
 
+double renderProcessorPitch (const int oscillator,
+                             const int offsetIndex,
+                             const int midiNote,
+                             TestContext& test)
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int totalSamples = 16384;
+    constexpr int discardedSamples = 4096;
+
+    MoogMiniAudioProcessor processor;
+    setParameter (processor, "osc1OnOff", oscillator == 1 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc2OnOff", oscillator == 2 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc3OnOff", oscillator == 3 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc1Waveform", 0.0f, test);
+    setParameter (processor, "osc2Waveform", 0.0f, test);
+    setParameter (processor, "osc3Waveform", 0.0f, test);
+    setParameter (processor, "osc1Range", 3.0f / 5.0f, test);
+    setParameter (processor, "osc2Range", 3.0f / 5.0f, test);
+    setParameter (processor, "osc3Range", 3.0f / 5.0f, test);
+    setParameter (processor, "tune", 5.0f / 10.0f, test);
+    setParameter (processor, "osc2Freq",
+                  static_cast<float> (oscillator == 2 ? offsetIndex : 8) / 16.0f,
+                  test);
+    setParameter (processor, "osc3Freq",
+                  static_cast<float> (oscillator == 3 ? offsetIndex : 8) / 16.0f,
+                  test);
+    setParameter (processor, "pitchWheelValue", 0.5f, test);
+    setParameter (processor, "osc1Vol", oscillator == 1 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc2Vol", oscillator == 2 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc3Vol", oscillator == 3 ? 1.0f : 0.0f, test);
+    setParameter (processor, "outputVolKnob", 1.0f, test);
+    setParameter (processor, "loudnessSustainLevelKnob", 1.0f, test);
+    setParameter (processor, "filterCutoff", 1.0f, test);
+    setParameter (processor, "glideSwitch", 0.0f, test);
+    setParameter (processor, "oscModSwitch", 0.0f, test);
+    setParameter (processor, "noiseOnOffSwitch", 0.0f, test);
+    setParameter (processor, "extInputVolSwitch", 0.0f, test);
+    setParameter (processor, "osc3CtrlMode", 1.0f, test);
+
+    processor.setRateAndBufferSizeDetails (sampleRate, totalSamples);
+    processor.prepareToPlay (sampleRate, totalSamples);
+    juce::AudioBuffer<float> buffer (processor.getTotalNumOutputChannels(), totalSamples);
+    buffer.clear();
+    juce::MidiBuffer midi;
+    midi.addEvent (juce::MidiMessage::noteOn (1, midiNote, 1.0f), 0);
+    processor.processBlock (buffer, midi);
+
+    int crossings = 0;
+    const auto* samples = buffer.getReadPointer (0);
+    for (int sample = discardedSamples + 1; sample < totalSamples; ++sample)
+        if (samples[sample - 1] <= 0.0f && samples[sample] > 0.0f)
+            ++crossings;
+
+    processor.releaseResources();
+    return static_cast<double> (crossings) * sampleRate
+         / static_cast<double> (totalSamples - discardedSamples);
+}
+
 void testPitchDomainContract (TestContext& test)
 {
     constexpr std::array expectedOffsets {
@@ -4201,6 +4259,23 @@ void testPitchDomainContract (TestContext& test)
                      && ! PitchDomain::fromHertz (
                             std::numeric_limits<double>::infinity()).valid,
                  "invalid pitch inputs must reject without a fabricated value");
+
+    const auto osc1Center = renderProcessorPitch (1, 8, 69, test);
+    const auto osc2Minus8 = renderProcessorPitch (2, 0, 69, test);
+    const auto osc2Center = renderProcessorPitch (2, 8, 69, test);
+    const auto osc2Plus8 = renderProcessorPitch (2, 16, 69, test);
+    const auto osc3Minus8 = renderProcessorPitch (3, 0, 69, test);
+    const auto osc3Center = renderProcessorPitch (3, 8, 69, test);
+    const auto osc3Plus8 = renderProcessorPitch (3, 16, 69, test);
+    const auto semitoneRatio = std::exp2 (8.0 / 12.0);
+    test.expect (std::abs (osc2Minus8 / osc1Center - 1.0 / semitoneRatio) < 0.02
+                     && std::abs (osc2Center / osc1Center - 1.0) < 0.02
+                     && std::abs (osc2Plus8 / osc1Center - semitoneRatio) < 0.02,
+                 "Oscillator 2 output selector must be centered at zero");
+    test.expect (std::abs (osc3Minus8 / osc1Center - 1.0 / semitoneRatio) < 0.02
+                     && std::abs (osc3Center / osc1Center - 1.0) < 0.02
+                     && std::abs (osc3Plus8 / osc1Center - semitoneRatio) < 0.02,
+                 "Oscillator 3 output selector must be centered at zero");
 }
 
 int runMode (std::string_view mode)
