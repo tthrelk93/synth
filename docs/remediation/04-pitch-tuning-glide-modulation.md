@@ -24,18 +24,19 @@ Panel tuning, oscillator ranges, fine frequency controls, pitch wheel, oscillato
 The [PIT-001/PIT-002 evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md)
 records the exact commit chronology, RED/GREEN history, analyzer calibration,
 fixture and candidate hashes, nine bound gates, authoritative report, negative
-diagnostics, and exact claim boundary.
+diagnostics, strongest-peak correction, scheduling clarification, and exact
+claim boundary.
 
 | ID | Status | Durable result / remaining boundary |
 |---|---|---|
 | PIT-001 | pass | Typed selector mapping is exactly `-8...+8`; six bound processor-output gates and all 34 governed selector records pass. |
-| PIT-002 | pass | The musical path composes typed semitone contributions and converts once; three bound composed-pitch gates pass. Existing bend, modulation, glide, and LO compatibility behavior is deliberately retained. |
+| PIT-002 | pass | The musical path composes typed semitone contributions through one authority and converts once; three bound composed-pitch gates pass. Existing bend, modulation, glide, and LO compatibility behavior is deliberately retained. Static-term scheduling/caching is not claimed here. |
 | PIT-003 | not-started | The new analyzer is reusable evidence infrastructure, but complete six-range/control/sample-rate/calibration-profile software and hardware bands have not begun under PIT-003. |
 | PIT-004 | not-started | Published centered symmetric ±7-semitone pitch bend is not implemented. |
 | PIT-005 | not-started | Nonzero audio-rate modulation semantics and approved sideband/safety evidence are not implemented. |
 | PIT-006 | not-started | Published time-per-octave glide endpoints and measured taper are not implemented. |
 | PIT-007 | not-started | The complete glide transition table is not implemented. |
-| PIT-008 | not-started | Static-ratio caching, bounded audio-rate conversion, counters, and CPU/equivalence evidence remain open. |
+| PIT-008 | not-started | The Task 2 compatibility path currently recomputes composition per sample. Static-term change detection/caching, bounded audio-rate conversion, exponent counters, and CPU/equivalence evidence remain open under PIT-008. |
 
 The live fixture-index schema uses `relativePath`. Task 4 Step 5's mistaken
 `path` wording is corrected in the implementation plan under the user's
@@ -47,6 +48,10 @@ explicit compatibility approval; no schema migration is performed.
   2/3 selector through `index - 8`, and composes pitch through `PitchDomain`.
   The old direct-index behavior remains only on the deliberately preserved LO
   compatibility path pending PIT-003 calibration.
+- `audio.pitch.v1` now chooses the globally strongest parabolically
+  interpolated local peak, using earliest lag only inside a `0.00001`
+  numerical tie. A weak 200 Hz fundamental with a ten-times-stronger 400 Hz
+  harmonic reports the fundamental within `0.000010641` semitone.
 - `MoogMiniAudioProcessor::processBlock` maps pitch wheel to a linear multiplier from 2/3 to 1.5 rather than equal-tempered ±7 semitones.
 - Oscillator modulation multiplies frequency by `1 + modulationEffect`, limited to −0.9…0.9; the domain is neither semitones nor volts/octave.
 - `calculateGlideRate` says seconds per semitone, but the render loop uses it as a generic first-order denominator `(target-current)/(rate*sampleRate)`, so travel time is not the published time per octave and never completes by defined duration.
@@ -102,7 +107,13 @@ public:
 };
 ```
 
-Static ratios are recomputed only when a contributing control changes. Audio-rate modulation may use a precomputed/interpolated `exp2` strategy chosen by Workstream 06, but error must pass the derived-software pitch gate and measured modulation spectra.
+The completed PIT-001/PIT-002 slice centralizes the authority represented by
+this interface but does not yet implement this scheduling target: its
+compatibility path recomputes composition per sample. PIT-008 owns static-ratio
+change detection/caching and the required counters, CPU, and output-equivalence
+evidence. Audio-rate modulation may use a precomputed/interpolated `exp2`
+strategy chosen with Workstream 06, but error must pass the derived-software
+pitch gate and measured modulation spectra.
 
 ## Glide contract
 
@@ -144,7 +155,8 @@ NaN/Inf parameters, MIDI outside 0–127, extreme calibration, negative modulati
 
 ## Automated tests and measurable gates
 
-- Selector table is exactly `[−8, …, 0, …, +8]`; center ratio is exactly unity under the shared floating-point policy.
+- Selector table is exactly `[−8, …, 0, …, +8]`; center ratio is exactly unity and all 16 adjacent ratios are equal-tempered under the shared floating-point policy.
+- Master tune covers the exact 11-entry `-2.5...+2.5` half-semitone table; a nonzero processor composition applies note/range/tune/offset/bend once, and invalid processor input uses the diagnosed fallback.
 - Each adjacent keyboard note and fine selector step has the analytic equal-tempered ratio; range offsets produce exact octave ratios before calibration.
 - Pitch wheel center is 0 semitones; endpoints are −7/+7 semitones and symmetric in cents.
 - Across supported sample rates/notes, finite input never produces non-positive, NaN, or infinite frequency/phase increment.

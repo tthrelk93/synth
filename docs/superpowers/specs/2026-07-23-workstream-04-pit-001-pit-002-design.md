@@ -10,6 +10,11 @@
 renderer/analyzer/report evidence. PIT-003 through PIT-008 remain open under
 their existing owners and dependencies.
 
+**2026-07-23 approved correction:** `audio.pitch.v1` selects the globally
+strongest valid local autocorrelation peak, with earliest lag used only for a
+`0.00001` numerical tie. Static-term scheduling and caching are explicitly
+deferred to PIT-008.
+
 ## Outcome
 
 The processor will use one typed semitone-domain pitch model for every musical
@@ -143,11 +148,13 @@ legacy glide frequency
  -> final oscillator hertz
 ```
 
-The static range, master-tune, selector, pitch-wheel, and calibration terms are
-computed at the existing block snapshot boundary. The modulation term is
-computed per sample only when the existing oscillator-modulation route is
-enabled. Oscillator 1 uses a zero oscillator-offset term. Oscillator 2 and 3
-use the exact selector mapping.
+This slice centralizes ownership of the static range, master-tune, selector,
+pitch-wheel, calibration, and modulation terms in one typed composition. The
+implemented Task 2 compatibility path currently recomputes that composition
+per sample. It does not claim a static-term scheduling or caching result.
+PIT-008 owns change detection, cached/incremental conversion, exponent
+counters, CPU acceptance, and output-equivalence proof. Oscillator 1 uses a
+zero oscillator-offset term. Oscillator 2 and 3 use the exact selector mapping.
 
 The existing pitch-wheel ratio curve is not redefined. Its current `2/3...1.5`
 ratio is translated with `ratioToSemitones`; PIT-004 later replaces only that
@@ -193,10 +200,12 @@ For a finite mono single-pitch periodic analysis window, the analyzer:
    four credible periods;
 3. computes normalized autocorrelation over the deterministic 20 Hz...5 kHz
    lag search;
-4. selects the strongest valid local peak;
+4. uses deterministic parabolic peak interpolation to select the globally
+   strongest valid local peak, with the earliest lag winning only when peak
+   strengths are within the explicit `0.00001` numerical-tie tolerance;
 5. applies deterministic parabolic lag interpolation;
 6. rejects boundary or ambiguous peaks and confidence below the calibrated
-   threshold; and
+   threshold while retaining integer-periodic-recurrence handling; and
 7. reports `frequency-hz`, `midi-semitones`, and `confidence`.
 
 `midi-semitones` is `69 + 12 * log2(frequency / 440)`. The derived-software
@@ -205,6 +214,12 @@ at 44.1, 48, and 96 kHz must demonstrate a stricter maximum error before any
 processor evidence may pass. Analyzer settings, sample rate, input hash,
 allowance, and confidence policy are serialized in the canonical metric
 artifact.
+
+A 48 kHz regression repeats a 240-sample period containing a 200 Hz
+fundamental at amplitude `0.075` and a ten-times-stronger 400 Hz second
+harmonic at amplitude `0.75`. The half-period correlation is about `0.9802`
+and the full-period correlation is `1.0`; the analyzer must report the 200 Hz
+fundamental within the existing `0.005`-semitone synthetic limit.
 
 ## Governed Render Fixtures
 
@@ -282,10 +297,10 @@ The production contract proves:
 - arbitrary nonzero contributions add exactly in semitone space;
 - compatibility ratios round-trip through semitones within the declared
   floating policy;
-- the processor musical path does not apply range/tune/offset/modulation twice;
+- a nonzero processor render does not apply note/range/tune/offset/bend twice;
 - Oscillator 2 and 3 use the same selector mapping;
-- invalid indices, ratios, non-finite terms, and unsafe results take the
-  diagnostic fallback; and
+- invalid indices, ratios, non-finite terms, unsafe results, and invalid
+  processor input take the diagnostic fallback; and
 - the code path is allocation-, lock-, string-, and exception-free.
 
 ### `ModelDReferencePitchContract`
@@ -293,6 +308,8 @@ The production contract proves:
 The reference contract proves:
 
 - synthetic analyzer accuracy at every supported sample rate and pitch range;
+- the harmonic-rich weak-fundamental regression selects the strongest
+  full-period peak rather than the earlier dominant-harmonic half-period;
 - deterministic failure for silence, ambiguity, short windows, non-finite
   input, unknown metrics, and invalid sample rates;
 - both new fixtures validate and remain block-partition invariant;

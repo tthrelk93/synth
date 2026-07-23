@@ -36,6 +36,19 @@ The musical-path work deliberately preserves the existing LO, bend,
 modulation, and glide behavior until their owner requirements are implemented.
 No hardware value or migration rule was inferred.
 
+This slice centralizes musical-pitch authority but does not claim
+snapshot-boundary static-term scheduling or caching. The Task 2 compatibility
+path recomputes composition per sample. PIT-008 remains open and owns change
+detection, exponent caching, counters, CPU acceptance, and exact
+output-equivalence evidence.
+
+Two nonblocking Task 5 review observations remain visible for final triage:
+candidate-generation and release-replay evidence-appending logic is
+duplicated, and the automated CLI contract asserts exit `3` while exact
+stdout/stderr bytes are proven by the preserved manual exact-head probe. The
+final-review correction changes neither authority path and does not weaken the
+manual exact-output proof.
+
 ## Exact commit chronology
 
 | Purpose | Commit |
@@ -50,11 +63,12 @@ No hardware value or migration rule was inferred.
 | Versioned pitch analyzer | `83926fe18fa11849c923ce33d310820d97aee83d` — `feat: add versioned pitch analyzer` |
 | Governed PIT fixtures | `65de36d72540dab70e14715c6b94d0b16da361ac` — `test: add governed pitch fixtures` |
 | Bound acceptance/report authority | `6cf4699ec1b49f4961810605abae07791d606a90` — `feat: bind pitch evidence to acceptance` |
+| Strongest-peak and pitch-contract correction | `b04fe5a26ccef619b66df4f143c402c5d91603ee` — `fix: select strongest pitch peak` |
 
 The documentation-closeout commit contains this evidence. Its exact SHA, tree,
 generated content identity, final verification results, and successor-package
 facts are recorded without self-reference in the package Git state and the
-ignored Task 6 execution report.
+ignored Task 6/final-review execution reports.
 
 ## RED chronology
 
@@ -77,6 +91,12 @@ Every implementation task first demonstrated the missing behavior:
 7. Acceptance RED: the checked-in manifest was rejected because only the
    prior four PAR-006 derived policies were permitted; incomplete binding
    cases returned the pre-binding diagnostic.
+8. Whole-branch analyzer RED: at base
+   `22d5e287ab8548c81f72342105bfc0ffb80e01b8`, a repeated 48 kHz signal
+   containing a 200 Hz fundamental at amplitude `0.075` and a 400 Hz second
+   harmonic at amplitude `0.75` failed the strict fundamental assertion with
+   error `12.003704997` semitones. The current earliest-within-`0.02`
+   selection had chosen the dominant-harmonic half-period.
 
 These were feature-specific failures. The adjacent renderer contract remained
 green during fixture RED, and no unrelated failure was reclassified as
@@ -91,10 +111,13 @@ success.
 | Pitch analyzer | `ctest ... -R '^(ModelDReferencePitchContract|ModelDReferenceAnalyzerContract|ModelDReferenceRendererContract)$' -j1` | 3/3 pass |
 | Governed fixtures | `ctest ... -R '^(ModelDReferenceManifestContract|ModelDReferenceRendererContract|ModelDReferenceAnalyzerContract|ModelDReferencePitchContract)$' -j1` | 4/4 pass before and after commit; source-overwrite guard passes |
 | Acceptance authority | `ModelDReferenceTests` categories `manifest`, `renderer`, `analyzers`, `pitch`, and `requirements` | 5/5 category invocations pass |
+| Strongest-peak correction | `ctest ... -R '^ModelDReferencePitchContract$' -j1` | Pass; harmonic-rich fundamental error `0.000010641` semitone |
+| Hardened production contract | `ctest ... -R '^(ModelDPitchDomainContract|ModelDUnitContract|ModelDDspContract|ModelDMidiSampleZero|ModelDRealtimeSmoke)$' -j1` | 5/5 pass; complete tune/adjacent-ratio/nonzero-composition/invalid-fallback proof |
+| Correction reference slice | `ctest ... -R '^(ModelDReferenceManifestContract|ModelDReferenceRendererContract|ModelDReferenceAnalyzerContract|ModelDReferencePitchContract|ModelDReferenceRequirementContract)$' -j1` | 5/5 pass |
 
-All final full-suite and label results at the exact documentation head are
-retained in the ignored Task 6 execution report and successor verification
-summary.
+All final full-suite and label results at each exact documentation head are
+retained in the ignored Task 6 or final-review execution report and successor
+verification summary.
 
 ## Typed pitch and analyzer contract
 
@@ -103,6 +126,14 @@ The production authority is `PitchDomain::Checked<T>` with typed
 values. MIDI note 69 is 440 Hz; musical range contributions are
 `-24, -12, 0, +12, +24`; master tune uses half-semitone steps; and Oscillator
 2/3 offsets are `index - 8`.
+
+`ModelDPitchDomainContract` now enumerates the full 11-entry master-tune table,
+proves all 16 adjacent selector ratios, observes a nonzero note/range/tune/
+offset/bend composition through processor audio to prevent double application,
+and injects a non-finite master-tune value through the existing production
+parameter path. The invalid render remains finite at the declared neutral
+fallback and increments the public invalid-parameter diagnostic exactly once.
+No test-only processor hook exists.
 
 `audio.pitch.v1` is analyzer version `1`. It emits `frequency-hz` (`Hz`),
 `midi-semitones` (`semitones`, allowance `0.01`), and `confidence` (`ratio`)
@@ -114,12 +145,22 @@ ambiguity-separation=0.02
 confidence-threshold=0.80
 lag-range=20Hz..5000Hz
 minimum-periods=4
+peak-tie-tolerance=0.00001
 periodic-multiple-tolerance=0.05
 ```
 
+The analyzer compares parabolically interpolated local-peak strengths, selects
+the global maximum, and uses ascending lag only inside the explicit
+`0.00001` numerical-tie tolerance. The `0.02` separation remains solely an
+ambiguity boundary. Integer-periodic-recurrence handling remains anchored to
+the earliest confidence-qualified member of the comparable peak family, while
+the reported pitch comes from the globally strongest peak.
+
 The synthetic grid covers MIDI 36, 60, 69, 77, and 96 at 44.1, 48, and
 96 kHz. Its maximum absolute error is `0.000419994` semitone at 44.1 kHz /
-MIDI 96, below the `0.005` synthetic-calibration limit.
+MIDI 96, below the `0.005` synthetic-calibration limit. The harmonic-rich
+weak-fundamental regression reports error `0.000010641` semitone under the
+same limit.
 
 Stable analyzer rejection diagnostics are:
 
@@ -228,11 +269,11 @@ release.report-mismatch: candidate evidence placement is not authoritative
 release.report-mismatch: submitted report does not match authoritative reduction
 ```
 
-Task 6 repeats the tampered pitch metric, missing render metric, forged request
-binding, dirty-current-tree, stale-binary, and false-report probes at the exact
-documentation head. Their commands and observed outputs are retained in the
-ignored execution report so the tracked evidence does not create an
-exact-head self-reference.
+Task 6 and the final-review closeout repeat the tampered pitch metric, missing
+render metric, forged request binding, dirty-current-tree, stale-binary, and
+false-report probes at their exact documentation heads. Their commands and
+observed outputs are retained in ignored execution reports so the tracked
+evidence does not create an exact-head self-reference.
 
 ## Scope and next action
 

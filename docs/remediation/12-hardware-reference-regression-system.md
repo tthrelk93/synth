@@ -29,7 +29,7 @@ record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness
 | ID | Status | F0 result / remaining acceptance |
 |---|---|---|
 | TST-001 | in-progress | Five deterministic state/MIDI/automation fixtures produce 30 hashed per-render artifacts plus one root metric artifact and one report, for 32 candidate files total. The two Workstream 04 fixtures add 37 governed pitch requests; preset/audio-input and later owner-fixture coverage remains open. |
-| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, and `audio.pitch.v1` pass synthetic, finite-extreme, and owner-fixture contracts. The pitch analyzer's synthetic maximum error is `0.000419994` semitone; the complete owner-analyzer catalog remains open. |
+| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, and `audio.pitch.v1` pass synthetic, finite-extreme, and owner-fixture contracts. The pitch analyzer's grid maximum error is `0.000419994` semitone, and its weak-fundamental/ten-times-stronger-harmonic error is `0.000010641`; the complete owner-analyzer catalog remains open. |
 | TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
 | TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
 | TST-005 | in-progress | Missing hardware provenance remains visible as `awaiting-approved-reference`; no hardware capture campaign or reference-instrument record has run. |
@@ -186,6 +186,10 @@ The Workstream 04 extension is recorded in the
 [PIT-001/PIT-002 pitch foundation evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md).
 It adds two governed fixtures, `audio.pitch.v1`, nine reciprocal derived gates,
 32-file deterministic candidates, and authoritative candidate/release replay.
+The final-review correction makes `audio.pitch.v1` choose the globally
+strongest parabolically interpolated local peak, with earliest lag restricted
+to a `0.00001` numerical tie, while retaining the existing ambiguity and
+integer-recurrence contract.
 It does not approve the global manifest, close any TST requirement, or supply
 hardware, host, listening, or release evidence.
 
