@@ -128,15 +128,15 @@
 
   Run focused verification before each commit; preserve prior handoff history and record no acceptance/status promotion.
 
-- [ ] **Step 2: Run exact-head verification**
+- [x] **Step 2: Run exact-head verification**
 
   Configure a fresh path-with-spaces Release tree with validators/tests/warnings/distribution guards on; build all targets; pass 21/21 serial CTest and unit/state/DSP/MIDI/realtime/host/artifact labels; run smoke, validate, two 20-file candidates, expected release exit 3, tamper probes, 19 hash checks, 127-row map, links, history, `Source/` diff, and clean status.
 
-- [ ] **Step 3: Rebuild and verify package**
+- [x] **Step 3: Rebuild and verify package**
 
   Build the fixed ZIP from the exact closeout commit, exclude `.git`, `.DS_Store`, builds, credentials, and prior archives, verify one safe root, no duplicates/symlinks, full manifest coverage, committed/candidate equality, packaged release behavior, and extracted repository-context tests-off configuration with exact local JUCE.
 
-- [ ] **Step 4: Append ignored execution report**
+- [x] **Step 4: Append ignored execution report**
 
   Record RED/GREEN chronology, commit hashes, exact commands/results, candidate/report hashes, ZIP size/hash/counts, and remaining open non-F0 obligations.
 

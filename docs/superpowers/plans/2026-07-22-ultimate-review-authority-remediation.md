@@ -251,7 +251,7 @@ SHA-256.
   Run all four reference contracts, then serial full CTest and all seven
   labels. Require 21/21 full tests and nonzero exact label counts.
 
-- [ ] **Step 4: Run authoritative CLI and mutation GREEN**
+- [x] **Step 4: Run authoritative CLI and mutation GREEN**
 
   Run no-argument smoke, `validate`, two fresh candidate generations, all
   20-file comparisons, expected release exit 3, missing/tampered metric probes,
@@ -284,13 +284,13 @@ SHA-256.
   Append ultimate-remediation history and exact evidence, preserving prior
   history and all statuses. Commit these documentation changes.
 
-- [ ] **Step 2: Run fresh exact-head verification and first package boundary**
+- [x] **Step 2: Run fresh exact-head verification and first package boundary**
 
   Configure a fresh path-with-spaces Release tree, build all targets, run the
   strict 21-test and label matrix plus all CLI/mutation/guard checks, and build
   and fully verify a one-root safe ZIP from that exact commit.
 
-- [ ] **Step 3: Complete prior closure checkboxes and append report**
+- [x] **Step 3: Complete prior closure checkboxes and append report**
 
   Check the prior closure plan's exact-head verification, package, and report
   steps only now that their evidence exists. Append ignored execution evidence
