@@ -68,6 +68,9 @@ constexpr std::array frozenFixturePaths {
     "Tests/reference/fixtures/par-006/contour-stage-step-v1.json",
     "Tests/reference/fixtures/pit-001-oscillator-offset-sweep-v1.json",
     "Tests/reference/fixtures/pit-002-composed-pitch-v1.json",
+    "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-44100-v1.json",
+    "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-48000-v1.json",
+    "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-96000-v1.json",
 };
 
 class ReferenceHarnessTest final : public juce::UnitTest {
@@ -88,8 +91,8 @@ public:
             expect (index.value->frozenArtifacts.size() == 9,
                     "fixture index must contain all nine frozen artifacts");
         if (index.value.has_value()) {
-            expectEquals (static_cast<int> (index.value->renderFixtures.size()), 5);
-            expectEquals (static_cast<int> (frozenFixturePaths.size()), 21);
+            expectEquals (static_cast<int> (index.value->renderFixtures.size()), 8);
+            expectEquals (static_cast<int> (frozenFixturePaths.size()), 24);
 
             const auto findFixture = [&] (const std::string_view id) {
                 return std::find_if (
@@ -1843,12 +1846,310 @@ public:
             sourceRoot, sourceRoot.getChildFile ("Tests/reference/fixture-index-v1.json"));
         expect (fixtureIndex.ok(), "fixture index must load for governed pitch evidence");
         if (fixtureIndex.value.has_value()) {
+            struct PitchMatrixCase {
+                std::string_view requestId;
+                int oscillator;
+                int midi;
+                int rangeIndex;
+                int tuneIndex;
+                int offsetIndex;
+                double wheel;
+                double expectedMidi;
+            };
+            constexpr std::array pitchMatrixCases {
+                PitchMatrixCase { "boundary-f0-range32", 1, 17, 1, 5, 8, 0.5, -7.0 },
+                PitchMatrixCase { "boundary-c4-range2", 1, 60, 5, 5, 8, 0.5, 84.0 },
+                PitchMatrixCase { "range32-neutral", 1, 45, 1, 5, 8, 0.5, 21.0 },
+                PitchMatrixCase { "range16-neutral", 1, 45, 2, 5, 8, 0.5, 33.0 },
+                PitchMatrixCase { "range8-neutral", 1, 45, 3, 5, 8, 0.5, 45.0 },
+                PitchMatrixCase { "range4-neutral", 1, 45, 4, 5, 8, 0.5, 57.0 },
+                PitchMatrixCase { "range2-neutral", 1, 45, 5, 5, 8, 0.5, 69.0 },
+                PitchMatrixCase { "note-adjacent-lower", 1, 45, 3, 5, 8, 0.5, 45.0 },
+                PitchMatrixCase { "note-adjacent-upper", 1, 46, 3, 5, 8, 0.5, 46.0 },
+                PitchMatrixCase { "tune-minus2p5", 1, 45, 3, 0, 8, 0.5, 42.5 },
+                PitchMatrixCase { "tune-plus2p5", 1, 45, 3, 10, 8, 0.5, 47.5 },
+                PitchMatrixCase { "osc2-minus8", 2, 45, 3, 5, 0, 0.5, 37.0 },
+                PitchMatrixCase { "osc2-plus8", 2, 45, 3, 5, 16, 0.5, 53.0 },
+                PitchMatrixCase { "osc3-minus8", 3, 45, 3, 5, 0, 0.5, 37.0 },
+                PitchMatrixCase { "osc3-plus8", 3, 45, 3, 5, 16, 0.5, 53.0 },
+                PitchMatrixCase { "bend-minus7", 1, 45, 3, 5, 8, 0.0, 38.0 },
+                PitchMatrixCase { "bend-minus3p5", 1, 45, 3, 5, 8, 0.25, 41.5 },
+                PitchMatrixCase { "bend-center", 1, 45, 3, 5, 8, 0.5, 45.0 },
+                PitchMatrixCase { "bend-plus3p5", 1, 45, 3, 5, 8, 0.75, 48.5 },
+                PitchMatrixCase { "bend-plus7", 1, 45, 3, 5, 8, 1.0, 52.0 },
+            };
+            struct PitchMatrixFixtureSpec {
+                std::string_view id;
+                int sampleRate;
+                std::uint64_t totalSamples;
+                std::array<std::uint64_t, 20> origins;
+                std::array<std::uint64_t, 20> windows;
+            };
+            constexpr std::array pitchMatrixFixtures {
+                PitchMatrixFixtureSpec {
+                    "pit-003-pit-004-pitch-matrix-44100-v1", 44100, 281600,
+                    { 4096, 106496, 115712, 129024, 138240, 147456, 156672,
+                      165888, 175104, 184320, 193536, 202752, 211968, 221184,
+                      230400, 239616, 248832, 258048, 267264, 276480 },
+                    { 97280, 4096, 8192, 4096, 4096, 4096, 4096, 4096, 4096,
+                      4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096,
+                      4096, 4096 },
+                },
+                PitchMatrixFixtureSpec {
+                    "pit-003-pit-004-pitch-matrix-48000-v1", 48000, 292864,
+                    { 4096, 115712, 124928, 139264, 149504, 158720, 167936,
+                      177152, 186368, 195584, 204800, 214016, 223232, 232448,
+                      241664, 250880, 260096, 269312, 278528, 287744 },
+                    { 106496, 4096, 9216, 5120, 4096, 4096, 4096, 4096, 4096,
+                      4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096, 4096,
+                      4096, 4096 },
+                },
+                PitchMatrixFixtureSpec {
+                    "pit-003-pit-004-pitch-matrix-96000-v1", 96000, 428032,
+                    { 4096, 221184, 230400, 253952, 268288, 278528, 287744,
+                      296960, 307200, 317440, 327680, 336896, 349184, 358400,
+                      370688, 379904, 392192, 403456, 413696, 422912 },
+                    { 211968, 4096, 18432, 9216, 5120, 4096, 4096, 5120, 5120,
+                      5120, 4096, 7168, 4096, 7168, 4096, 7168, 6144, 5120,
+                      4096, 4096 },
+                },
+            };
+
+            expectEquals (static_cast<int> (fixtureIndex.value->renderFixtures.size()), 8);
             const auto findIndexed = [&] (const std::string_view id) {
                 return std::find_if (
                     fixtureIndex.value->renderFixtures.begin(),
                     fixtureIndex.value->renderFixtures.end(),
                     [&] (const auto& artifact) { return artifact.id == id; });
             };
+            const auto expectAutomation = [&] (const RenderFixture& fixture,
+                                                const std::uint64_t sample,
+                                                const ParameterRegistry::Key key,
+                                                const double normalizedValue,
+                                                const std::string& context) {
+                const auto found = std::find_if (
+                    fixture.automation.begin(), fixture.automation.end(),
+                    [&] (const auto& event) {
+                        return event.sample == sample && event.key == key;
+                    });
+                expect (found != fixture.automation.end(),
+                        context + " must contain required automation");
+                if (found != fixture.automation.end())
+                    expectWithinAbsoluteError (
+                        static_cast<double> (found->normalizedValue), normalizedValue,
+                        0.000001, context + " automation value must be exact");
+            };
+            for (const auto& spec : pitchMatrixFixtures) {
+                const auto indexed = findIndexed (spec.id);
+                expect (indexed != fixtureIndex.value->renderFixtures.end(),
+                        std::string { spec.id } + " must be indexed");
+                if (indexed == fixtureIndex.value->renderFixtures.end())
+                    continue;
+                expect (indexed->requirements
+                            == std::vector<std::string> { "PIT-003", "PIT-004" },
+                        std::string { spec.id } + " index requirements must be exact");
+                const auto loaded = loadIndexedRenderFixture (sourceRoot, *indexed);
+                expect (loaded.ok(), std::string { spec.id } + " must validate");
+                if (! loaded.value.has_value())
+                    continue;
+                const auto& fixture = *loaded.value;
+                const auto stateXml = juce::XmlDocument::parse (fixture.stateFile);
+                expect (fixture.requirements
+                            == std::vector<std::string> { "PIT-003", "PIT-004" }
+                            && fixture.stateFile
+                                   == sourceRoot.getChildFile (
+                                       "Tests/fixtures/state/native-default-state-v2.xml")
+                            && fixture.stateSha256
+                                   == "ff369e874e4c786830ea51731b8849e54c44f81151313cb1ceefdcab9b8f2507"
+                            && stateXml != nullptr
+                            && stateXml->getIntAttribute ("stateVersion") == 2
+                            && fixture.expectedContourContract
+                                   == StateContract::ContourContract::canonicalContours,
+                        std::string { spec.id } + " must bind the exact native v2 state");
+                expect (fixture.purpose
+                            == "Prove the five musical-range software pitch matrix and centered "
+                               "+/-7-semitone Pitch Wheel at the declared sample rate without "
+                               "claiming LO or hardware calibration."
+                            && fixture.reviewStatus
+                                   == FixtureReviewStatus::foundationReviewed,
+                        std::string { spec.id } + " governance metadata must be exact");
+                expect (fixture.config.sampleRate == spec.sampleRate
+                            && fixture.config.totalSamples == spec.totalSamples
+                            && fixture.config.seed == 0
+                            && fixture.config.blockPatterns
+                                   == std::vector<std::vector<int>> {
+                                       { 128 }, { 17, 31, 64, 127 }, { 512 } },
+                        std::string { spec.id } + " render declaration must be exact");
+                expectEquals (
+                    static_cast<int> (fixture.analysisRequests.size()),
+                    static_cast<int> (pitchMatrixCases.size()));
+                expectEquals (static_cast<int> (fixture.midi.size()), 40);
+
+                for (size_t caseIndex = 0;
+                     caseIndex < pitchMatrixCases.size()
+                     && caseIndex < fixture.analysisRequests.size();
+                     ++caseIndex) {
+                    const auto& expected = pitchMatrixCases[caseIndex];
+                    const auto& request = fixture.analysisRequests[caseIndex];
+                    const auto segmentStart = spec.origins[caseIndex] - 4096;
+                    const auto context = std::string { spec.id } + " "
+                                       + std::string { expected.requestId };
+                    expect (request.id == expected.requestId
+                                && request.version == 1
+                                && request.analyzer.id == "audio.pitch.v2"
+                                && request.analyzer.version == 2
+                                && request.metric == "midi-semitones"
+                                && request.inputKind == AnalysisInputKind::audio
+                                && request.audioTap == AudioTap::main
+                                && request.channel == 0,
+                            context + " request identity must be exact");
+                    expect (request.eventSample == spec.origins[caseIndex]
+                                && request.windowSamples == spec.windows[caseIndex],
+                            context + " origin/window literals must be exact");
+                    const auto expectedFrequency =
+                        440.0 * std::exp2 ((expected.expectedMidi - 69.0) / 12.0);
+                    expect (static_cast<double> (request.windowSamples)
+                                    * expectedFrequency
+                                    / static_cast<double> (spec.sampleRate)
+                                >= 4.0,
+                            context + " analysis window must contain at least four periods");
+
+                    const auto segmentAutomationCount = std::count_if (
+                        fixture.automation.begin(), fixture.automation.end(),
+                        [&] (const auto& event) { return event.sample == segmentStart; });
+                    expectEquals (
+                        static_cast<int> (segmentAutomationCount),
+                        expected.oscillator == 1 ? 24 : 25,
+                        context + " segment automation count must be exact");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::osc1OnOff,
+                        expected.oscillator == 1 ? 1.0 : 0.0, context + " osc1 isolation");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::osc2OnOff,
+                        expected.oscillator == 2 ? 1.0 : 0.0, context + " osc2 isolation");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::osc3OnOff,
+                        expected.oscillator == 3 ? 1.0 : 0.0, context + " osc3 isolation");
+                    for (const auto waveform : {
+                             ParameterRegistry::Key::osc1Waveform,
+                             ParameterRegistry::Key::osc2Waveform,
+                             ParameterRegistry::Key::osc3Waveform })
+                        expectAutomation (
+                            fixture, segmentStart, waveform, 0.0, context + " triangle waveform");
+                    const auto selectedVolume =
+                        expected.oscillator == 1 ? ParameterRegistry::Key::osc1Vol
+                        : expected.oscillator == 2 ? ParameterRegistry::Key::osc2Vol
+                                                   : ParameterRegistry::Key::osc3Vol;
+                    const auto selectedRange =
+                        expected.oscillator == 1 ? ParameterRegistry::Key::osc1Range
+                        : expected.oscillator == 2 ? ParameterRegistry::Key::osc2Range
+                                                   : ParameterRegistry::Key::osc3Range;
+                    expectAutomation (
+                        fixture, segmentStart, selectedVolume, 0.5,
+                        context + " selected oscillator volume");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::outputVolKnob, 0.5,
+                        context + " output volume");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::filterCutoff, 1.0,
+                        context + " filter cutoff");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::filterEmphasis, 0.0,
+                        context + " filter emphasis");
+                    expectAutomation (
+                        fixture, segmentStart,
+                        ParameterRegistry::Key::loudnessAttackTimeKnob, 0.0,
+                        context + " loudness attack");
+                    expectAutomation (
+                        fixture, segmentStart,
+                        ParameterRegistry::Key::loudnessDecayTimeKnob, 0.0,
+                        context + " loudness decay");
+                    expectAutomation (
+                        fixture, segmentStart,
+                        ParameterRegistry::Key::loudnessSustainLevelKnob, 1.0,
+                        context + " loudness sustain");
+                    expectAutomation (
+                        fixture, segmentStart, selectedRange,
+                        static_cast<double> (expected.rangeIndex) / 5.0,
+                        context + " musical range");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::tune,
+                        static_cast<double> (expected.tuneIndex) / 10.0,
+                        context + " master tune");
+                    if (expected.oscillator == 2)
+                        expectAutomation (
+                            fixture, segmentStart, ParameterRegistry::Key::osc2Freq,
+                            static_cast<double> (expected.offsetIndex) / 16.0,
+                            context + " oscillator 2 offset");
+                    if (expected.oscillator == 3)
+                        expectAutomation (
+                            fixture, segmentStart, ParameterRegistry::Key::osc3Freq,
+                            static_cast<double> (expected.offsetIndex) / 16.0,
+                            context + " oscillator 3 offset");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::pitchWheelValue,
+                        expected.wheel, context + " pitch wheel");
+                    for (const auto disabled : {
+                             ParameterRegistry::Key::oscModSwitch,
+                             ParameterRegistry::Key::filterModSwitch,
+                             ParameterRegistry::Key::modWheelValue,
+                             ParameterRegistry::Key::glideSwitch,
+                             ParameterRegistry::Key::noiseOnOffSwitch,
+                             ParameterRegistry::Key::extInputVolSwitch,
+                             ParameterRegistry::Key::a440HzOnOff })
+                        expectAutomation (
+                            fixture, segmentStart, disabled, 0.0,
+                            context + " disabled modulation/source");
+                    expectAutomation (
+                        fixture, segmentStart, ParameterRegistry::Key::osc3CtrlMode, 1.0,
+                        context + " oscillator 3 keyboard control");
+                    expectAutomation (
+                        fixture, spec.origins[caseIndex], ParameterRegistry::Key::tune,
+                        static_cast<double> (expected.tuneIndex) / 10.0,
+                        context + " analysis anchor");
+
+                    if (caseIndex == 0) {
+                        expect (fixture.midi[0].sample == segmentStart
+                                    && fixture.midi[0].bytes
+                                           == std::vector<std::uint8_t> {
+                                               144, static_cast<std::uint8_t> (expected.midi), 100 },
+                                context + " first note-on must follow automation");
+                    } else {
+                        const auto offIndex = caseIndex * 2 - 1;
+                        const auto onIndex = caseIndex * 2;
+                        expect (fixture.midi[offIndex].sample == segmentStart
+                                    && fixture.midi[offIndex].bytes
+                                           == std::vector<std::uint8_t> {
+                                               128,
+                                               static_cast<std::uint8_t> (
+                                                   pitchMatrixCases[caseIndex - 1].midi),
+                                               0 }
+                                    && fixture.midi[onIndex].sample == segmentStart
+                                    && fixture.midi[onIndex].bytes
+                                           == std::vector<std::uint8_t> {
+                                               144, static_cast<std::uint8_t> (expected.midi), 100 }
+                                    && fixture.midi[offIndex].sequence
+                                           < fixture.midi[onIndex].sequence,
+                                context + " previous note-off must precede current note-on");
+                    }
+                }
+                if (fixture.midi.size() == 40)
+                    expect (fixture.midi.back().sample == fixture.config.totalSamples - 1
+                                && fixture.midi.back().bytes
+                                       == std::vector<std::uint8_t> { 128, 45, 0 },
+                            std::string { spec.id } + " final note-off must end the render");
+
+                std::vector<std::pair<std::uint64_t, std::uint32_t>> eventOrder;
+                for (const auto& event : fixture.automation)
+                    eventOrder.emplace_back (event.sample, event.sequence);
+                for (const auto& event : fixture.midi)
+                    eventOrder.emplace_back (event.sample, event.sequence);
+                std::sort (eventOrder.begin(), eventOrder.end());
+                for (size_t position = 0; position < eventOrder.size(); ++position)
+                    expect (eventOrder[position].second == position,
+                            std::string { spec.id }
+                                + " event sequences must be globally unique and monotonic");
+            }
             const auto verifyFixture = [&] (
                 const std::string_view fixtureId,
                 const std::span<const std::pair<std::string_view, double>> expected) {
@@ -1874,12 +2175,40 @@ public:
                     if (! rendered.value.has_value())
                         continue;
                     expectEquals (static_cast<int> (rendered.value->size()), 3);
+                    const auto& canonicalRender = rendered.value->front();
+                    if (repeat == 0
+                        && fixtureId.starts_with (
+                            "pit-003-pit-004-pitch-matrix-"))
+                        logMessage (
+                            std::string { "partition-invariance fixture=" }
+                            + std::string { fixtureId }
+                            + " main="
+                            + canonicalRender.reproducibility.outputHashes.at ("main")
+                            + " phones="
+                            + canonicalRender.reproducibility.outputHashes.at ("phones")
+                            + " control="
+                            + canonicalRender.reproducibility.outputHashes.at ("control")
+                            + " event="
+                            + canonicalRender.reproducibility.outputHashes.at ("event"));
                     for (const auto& result : *rendered.value) {
+                        for (const auto hashName : { "main", "phones", "control", "event" })
+                            expect (result.reproducibility.outputHashes.at (hashName)
+                                        == canonicalRender.reproducibility.outputHashes.at (
+                                            hashName),
+                                    std::string { fixtureId } + " " + hashName
+                                        + " bytes must be block-partition invariant");
                         const std::span<const RenderResult> singlePattern {
                             &result, 1
                         };
                         const auto metrics = analyzeFixtureMetrics (
                             *loaded.value, singlePattern);
+                        if (! metrics.ok() && ! metrics.diagnostics.empty()) {
+                            logMessage (
+                                std::string { fixtureId } + " main-hash="
+                                + result.reproducibility.outputHashes.at ("main")
+                                + " diagnostic=" + metrics.diagnostics.front().code
+                                + " message=" + metrics.diagnostics.front().message);
+                        }
                         expect (metrics.ok(),
                                 std::string { fixtureId }
                                     + " metrics must analyze for every block pattern and repeat");
@@ -1901,6 +2230,13 @@ public:
                         else {
                             canonicalMetricBytes = bytes;
                             canonicalRecords = *metrics.value;
+                            if (fixtureId.starts_with (
+                                    "pit-003-pit-004-pitch-matrix-"))
+                                logMessage (
+                                    std::string { "metric-invariance fixture=" }
+                                    + std::string { fixtureId } + " bytes="
+                                    + std::to_string (
+                                        bytes.getNumBytesAsUTF8()));
                         }
                     }
                 }
@@ -1968,6 +2304,107 @@ public:
                 },
             };
             verifyFixture ("pit-002-composed-pitch-v1", composedExpected);
+
+            std::vector<std::pair<std::string_view, double>> pitchMatrixExpected;
+            pitchMatrixExpected.reserve (pitchMatrixCases.size());
+            for (const auto& matrixCase : pitchMatrixCases)
+                pitchMatrixExpected.emplace_back (
+                    matrixCase.requestId, matrixCase.expectedMidi);
+            for (const auto& spec : pitchMatrixFixtures)
+                verifyFixture (spec.id, pitchMatrixExpected);
+
+            beginTest ("pitch matrix rate declarations and indexed hashes cannot be mutated");
+            const auto matchesGovernedSampleRates = [&] (
+                const juce::File& root,
+                const FixtureIndex& index) {
+                for (const auto& spec : pitchMatrixFixtures) {
+                    const auto indexed = std::find_if (
+                        index.renderFixtures.begin(), index.renderFixtures.end(),
+                        [&] (const auto& artifact) { return artifact.id == spec.id; });
+                    if (indexed == index.renderFixtures.end())
+                        return false;
+                    const auto loaded = loadIndexedRenderFixture (root, *indexed);
+                    if (! loaded.value.has_value()
+                        || loaded.value->config.sampleRate != spec.sampleRate)
+                        return false;
+                }
+                return true;
+            };
+            expect (matchesGovernedSampleRates (sourceRoot, *fixtureIndex.value),
+                    "live pitch matrix sample-rate declarations must match the governed contract");
+
+            const TemporaryDirectory rateProbeRoot { "model-d-pitch-rate-negative" };
+            expect (rateProbeRoot.isOwned(),
+                    "pitch sample-rate probe root must be created atomically");
+            if (rateProbeRoot.isOwned()) {
+                for (const auto fixturePath : frozenFixturePaths) {
+                    const auto destination =
+                        rateProbeRoot.directory.getChildFile (fixturePath);
+                    destination.getParentDirectory().createDirectory();
+                    expect (sourceRoot.getChildFile (fixturePath).copyFileTo (destination),
+                            "pitch sample-rate probe must copy every indexed fixture");
+                }
+                const auto rateFixturePath =
+                    "Tests/reference/fixtures/"
+                    "pit-003-pit-004-pitch-matrix-44100-v1.json";
+                const auto rateFixture =
+                    rateProbeRoot.directory.getChildFile (rateFixturePath);
+                expect (rateFixture.replaceWithText (
+                            rateFixture.loadFileAsString().replaceFirstOccurrenceOf (
+                                R"("sampleRate": 44100)",
+                                R"("sampleRate": 48000)")),
+                        "pitch sample-rate probe must mutate one fixture");
+                const auto live44100 = findIndexed (
+                    "pit-003-pit-004-pitch-matrix-44100-v1");
+                const auto probeIndexFile = rateProbeRoot.directory.getChildFile (
+                    "Tests/reference/fixture-index-v1.json");
+                probeIndexFile.getParentDirectory().createDirectory();
+                if (live44100 != fixtureIndex.value->renderFixtures.end())
+                    expect (probeIndexFile.replaceWithText (
+                                sourceRoot.getChildFile (
+                                    "Tests/reference/fixture-index-v1.json")
+                                    .loadFileAsString()
+                                    .replaceFirstOccurrenceOf (
+                                        live44100->sha256,
+                                        sha256File (rateFixture))),
+                            "pitch sample-rate probe must rehash the mutated fixture");
+                const auto rateProbe = loadFixtureIndex (
+                    rateProbeRoot.directory, probeIndexFile);
+                expect (rateProbe.ok(),
+                        "rehashing must leave the generic fixture index structurally valid");
+                if (rateProbe.value.has_value())
+                    expect (! matchesGovernedSampleRates (
+                                rateProbeRoot.directory, *rateProbe.value),
+                            "rehashing must not make a changed pitch sample rate authoritative");
+            }
+
+            const TemporaryDirectory hashProbeRoot { "model-d-pitch-hash-negative" };
+            expect (hashProbeRoot.isOwned(),
+                    "pitch indexed-hash probe root must be created atomically");
+            if (hashProbeRoot.isOwned()) {
+                const auto indexed44100 = findIndexed (
+                    "pit-003-pit-004-pitch-matrix-44100-v1");
+                if (indexed44100 != fixtureIndex.value->renderFixtures.end()) {
+                    auto wrongHash = indexed44100->sha256;
+                    wrongHash.front() = wrongHash.front() == '0' ? '1' : '0';
+                    const auto hashIndex = hashProbeRoot.directory.getChildFile (
+                        "fixture-index-v1.json");
+                    expect (hashIndex.replaceWithText (
+                                sourceRoot.getChildFile (
+                                    "Tests/reference/fixture-index-v1.json")
+                                    .loadFileAsString()
+                                    .replaceFirstOccurrenceOf (
+                                        indexed44100->sha256, wrongHash)),
+                            "pitch indexed-hash probe must write its mutated index");
+                    const auto rejected = loadFixtureIndex (sourceRoot, hashIndex);
+                    const auto diagnostic = rejected.diagnostics.empty()
+                                              ? std::string { "<none>" }
+                                              : rejected.diagnostics.front().code;
+                    expect (! rejected.ok() && diagnostic == "index.sha256",
+                            "indexed-hash-only mutation must reject with index.sha256, got "
+                                + diagnostic);
+                }
+            }
         }
 
         beginTest ("pitch rejection diagnostics are stable and periodic multiples are accepted");

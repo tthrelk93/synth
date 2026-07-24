@@ -87,6 +87,24 @@
       "relativePath": "Tests/reference/fixtures/pit-002-composed-pitch-v1.json",
       "sha256": "63a2a95b9caee4799d814abe647e4c2433b82eb59fddebf502f38f68864e12ee",
       "requirements": ["PIT-002"]
+    },
+    {
+      "id": "pit-003-pit-004-pitch-matrix-44100-v1",
+      "relativePath": "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-44100-v1.json",
+      "sha256": "d0f6b748d860d23beaf50e0bda6f88b1fa63173b4e0826165dd6658d9a9451a6",
+      "requirements": ["PIT-003", "PIT-004"]
+    },
+    {
+      "id": "pit-003-pit-004-pitch-matrix-48000-v1",
+      "relativePath": "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-48000-v1.json",
+      "sha256": "a17f93c947e863a090b1e8e5dbba1d7f8a24650254dc6017045fed3abfcfa094",
+      "requirements": ["PIT-003", "PIT-004"]
+    },
+    {
+      "id": "pit-003-pit-004-pitch-matrix-96000-v1",
+      "relativePath": "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-96000-v1.json",
+      "sha256": "6781afbe71d30c7df63136552d0e4c57f606e85c8f0f6339a1ca56b21f20fc3f",
+      "requirements": ["PIT-003", "PIT-004"]
     }
   ],
   "smoothingFixtures": [

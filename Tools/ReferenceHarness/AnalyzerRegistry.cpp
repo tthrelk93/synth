@@ -470,7 +470,19 @@ LoadResult<Metrics> analyzeAudioPitch (
                        "pitch analysis requires only finite audio samples");
     const auto originalAudio = audio;
 
+    constexpr size_t originalCorrelationPairBudget = 64'000'000;
+    const auto boundedOriginalMaximumLag = static_cast<size_t> (
+        std::min (std::floor (
+                      request.sampleRate / configuration.minimumFrequency),
+                  static_cast<double> (originalAudio.size() / 4)));
+    const auto originalCorrelationPairWork =
+        boundedOriginalMaximumLag != 0
+            && originalAudio.size()
+                   > std::numeric_limits<size_t>::max() / boundedOriginalMaximumLag
+        ? std::numeric_limits<size_t>::max()
+        : originalAudio.size() * boundedOriginalMaximumLag;
     const auto decimation = configuration.decimate
+            && originalCorrelationPairWork > originalCorrelationPairBudget
         ? std::max<size_t> (
               1, static_cast<size_t> (std::floor (request.sampleRate / 12000.0)))
         : size_t { 1 };
@@ -593,6 +605,16 @@ LoadResult<Metrics> analyzeAudioPitch (
             return interpolatedPeak (left.lag) < interpolatedPeak (right.lag);
         });
     const auto strongestInterpolatedPeak = interpolatedPeak (strongestPeak->lag);
+    const auto configuredBoundary = std::find_if (
+        peaks.begin(), peaks.end(), [&] (const auto& peak) {
+            return (peak.lag == minimumLag || peak.lag == maximumLag)
+                && peak.correlation >= 0.80
+                && interpolatedPeak (peak.lag)
+                       >= strongestInterpolatedPeak - peakTieTolerance;
+        });
+    if (configuration.decimate && configuredBoundary != peaks.end())
+        return reject ("analyzer.pitch-window",
+                       "pitch correlation peak lies on the search boundary");
     const auto selected = std::find_if (peaks.begin(), peaks.end(), [&] (const auto& peak) {
         return interpolatedPeak (peak.lag)
             >= strongestInterpolatedPeak - peakTieTolerance;
