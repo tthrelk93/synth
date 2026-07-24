@@ -463,7 +463,7 @@ bool knownMetric (const std::string_view analyzer, const std::string_view metric
         return metric == "maximum-first-difference" || metric == "pre-rms"
             || metric == "post-rms" || metric == "peak-over-steady-state"
             || metric == "finite-count";
-    if (analyzer == "audio.pitch.v1")
+    if (analyzer == "audio.pitch.v1" || analyzer == "audio.pitch.v2")
         return metric == "frequency-hz" || metric == "midi-semitones"
             || metric == "confidence";
     return false;
@@ -601,7 +601,9 @@ bool readPublishedProvenance (const juce::DynamicObject& object, GateDefinition&
     PublishedProvenance provenance;
     if (! readString (object, "source", provenance.source)
         || ! readString (object, "sourceVersion", provenance.sourceVersion)
-        || ! readString (object, "page", provenance.page))
+        || ! readString (object, "page", provenance.page)
+        || ! readString (object, "sourceSha256", provenance.sourceSha256)
+        || ! lowercaseSha256 (provenance.sourceSha256))
         return false;
     gate.published = std::move (provenance);
     return true;
@@ -689,7 +691,8 @@ LoadResult<std::vector<GateDefinition>> readSection (
             case GateClassification::published:
                 if (! readPublishedProvenance (*object, *gate.value))
                     return failure<std::vector<GateDefinition>> (
-                        "acceptance.source", "published gates require source, source version, and page provenance");
+                        "acceptance.source",
+                        "published gates require source, source version, page, and SHA-256 provenance");
                 break;
             case GateClassification::derivedSoftware: {
                 if (! readProvenance (*object, *gate.value,
@@ -723,6 +726,46 @@ LoadResult<std::vector<GateDefinition>> readSection (
         gates.push_back (std::move (*gate.value));
     }
     return { std::move (gates), {} };
+}
+
+struct PitchMatrixCase {
+    std::string_view suffix;
+    std::string_view requestId;
+    double value;
+    bool published;
+};
+
+constexpr std::array pitchMatrixCases {
+    PitchMatrixCase { "boundary.f0-range32", "boundary-f0-range32", -7.0, false },
+    PitchMatrixCase { "boundary.c4-range2", "boundary-c4-range2", 84.0, false },
+    PitchMatrixCase { "range32", "range32-neutral", 21.0, false },
+    PitchMatrixCase { "range16", "range16-neutral", 33.0, false },
+    PitchMatrixCase { "range8", "range8-neutral", 45.0, false },
+    PitchMatrixCase { "range4", "range4-neutral", 57.0, false },
+    PitchMatrixCase { "range2", "range2-neutral", 69.0, false },
+    PitchMatrixCase { "tune.minus2p5", "tune-minus2p5", 42.5, false },
+    PitchMatrixCase { "tune.plus2p5", "tune-plus2p5", 47.5, false },
+    PitchMatrixCase { "osc2.minus8", "osc2-minus8", 37.0, false },
+    PitchMatrixCase { "osc2.plus8", "osc2-plus8", 53.0, false },
+    PitchMatrixCase { "osc3.minus8", "osc3-minus8", 37.0, false },
+    PitchMatrixCase { "osc3.plus8", "osc3-plus8", 53.0, false },
+    PitchMatrixCase { "bend.minus7", "bend-minus7", 38.0, true },
+    PitchMatrixCase { "bend.minus3p5", "bend-minus3p5", 41.5, false },
+    PitchMatrixCase { "bend.center", "bend-center", 45.0, false },
+    PitchMatrixCase { "bend.plus3p5", "bend-plus3p5", 48.5, false },
+    PitchMatrixCase { "bend.plus7", "bend-plus7", 52.0, true },
+};
+constexpr std::array matrixRates { 44100, 48000, 96000 };
+
+std::string matrixGateId (const int rate, const PitchMatrixCase& matrixCase)
+{
+    const auto prefix = matrixCase.suffix.starts_with ("bend.") ? "pit004.sr" : "pit003.sr";
+    return prefix + std::to_string (rate) + "." + std::string { matrixCase.suffix };
+}
+
+std::string matrixFixtureId (const int rate)
+{
+    return "pit-003-pit-004-pitch-matrix-" + std::to_string (rate) + "-v1";
 }
 
 bool exactDerivedPolicy (const GateDefinition& gate)
@@ -793,33 +836,89 @@ bool exactDerivedPolicy (const GateDefinition& gate)
                       "selector index minus eight in the shared semitone domain" },
         PitchPolicy { "pit002.osc1.composed", "PIT-002", 72.5,
                       "pit-002-composed-pitch-v1", "osc1-composed",
-                      "analytic sum of note, musical range, tune, oscillator offset, preserved bend contribution, zero calibration, and zero modulation" },
-        PitchPolicy { "pit002.osc2.composed", "PIT-002", 51.863137138648348,
+                      "analytic sum of note, musical range, tune, oscillator offset, published centered pitch-wheel contribution, zero baseline calibration, and zero modulation" },
+        PitchPolicy { "pit002.osc2.composed", "PIT-002", 51.5,
                       "pit-002-composed-pitch-v1", "osc2-composed",
-                      "analytic sum of note, musical range, tune, oscillator offset, preserved bend contribution, zero calibration, and zero modulation" },
-        PitchPolicy { "pit002.osc3.composed", "PIT-002", 87.343587129994475,
+                      "analytic sum of note, musical range, tune, oscillator offset, published centered pitch-wheel contribution, zero baseline calibration, and zero modulation" },
+        PitchPolicy { "pit002.osc3.composed", "PIT-002", 87.0,
                       "pit-002-composed-pitch-v1", "osc3-composed",
-                      "analytic sum of note, musical range, tune, oscillator offset, preserved bend contribution, zero calibration, and zero modulation" },
+                      "analytic sum of note, musical range, tune, oscillator offset, published centered pitch-wheel contribution, zero baseline calibration, and zero modulation" },
     };
     const auto policy = std::find_if (
         pitchPolicies.begin(), pitchPolicies.end(),
         [&] (const auto& expected) { return gate.id == expected.id; });
-    return policy != pitchPolicies.end()
-        && gate.status == Status::notRun
-        && gate.requirements == std::vector<std::string> { std::string { policy->requirement } }
-        && gate.analyzer.id == "audio.pitch.v1" && gate.analyzer.version == 1
-        && gate.metric == "midi-semitones" && gate.unit == "semitones"
-        && gate.value == policy->value && gate.allowance == 0.01
-        && gate.renderMetric.has_value()
-        && gate.renderMetric->fixtureId == policy->fixtureId
-        && gate.renderMetric->requestId == policy->requestId
-        && gate.provenance.at ("derivation") == policy->derivation
-        && gate.provenance.at ("reviewStatus") == "approved"
-        && gate.provenance.at ("reviewBasis")
-               == "2026-07-23 approved PIT-001/PIT-002 design"
-        && gate.provenance.at ("reviewDate") == "2026-07-23"
-        && gate.provenance.at ("claimScope")
-               == "derived equal-tempered software pitch; not a hardware calibration";
+    if (policy != pitchPolicies.end())
+        return gate.status == Status::notRun
+            && gate.requirements
+                   == std::vector<std::string> { std::string { policy->requirement } }
+            && gate.analyzer.id == "audio.pitch.v1" && gate.analyzer.version == 1
+            && gate.metric == "midi-semitones" && gate.unit == "semitones"
+            && gate.value == policy->value && gate.allowance == 0.01
+            && gate.renderMetric.has_value()
+            && gate.renderMetric->fixtureId == policy->fixtureId
+            && gate.renderMetric->requestId == policy->requestId
+            && gate.provenance.at ("derivation") == policy->derivation
+            && gate.provenance.at ("reviewStatus") == "approved"
+            && gate.provenance.at ("reviewBasis")
+                   == "2026-07-23 approved PIT-001/PIT-002 design"
+            && gate.provenance.at ("reviewDate") == "2026-07-23"
+            && gate.provenance.at ("claimScope")
+                   == "derived equal-tempered software pitch; not a hardware calibration";
+
+    for (const auto rate : matrixRates) {
+        for (const auto& matrixCase : pitchMatrixCases) {
+            if (matrixCase.published || gate.id != matrixGateId (rate, matrixCase))
+                continue;
+            const auto pit004 = matrixCase.suffix.starts_with ("bend.");
+            return gate.status == Status::notRun
+                && gate.requirements
+                       == std::vector<std::string> { pit004 ? "PIT-004" : "PIT-003" }
+                && gate.analyzer.id == "audio.pitch.v2" && gate.analyzer.version == 2
+                && gate.metric == "midi-semitones" && gate.unit == "semitones"
+                && gate.value == matrixCase.value && gate.allowance == 0.01
+                && gate.renderMetric.has_value()
+                && gate.renderMetric->fixtureId == matrixFixtureId (rate)
+                && gate.renderMetric->requestId == matrixCase.requestId
+                && gate.provenance.at ("derivation")
+                       == (pit004
+                               ? "14 * (normalized Pitch Wheel - 0.5) in the shared semitone domain"
+                               : "factorized exact equal-tempered software pitch matrix")
+                && gate.provenance.at ("reviewStatus") == "approved"
+                && gate.provenance.at ("reviewBasis")
+                       == "2026-07-23 approved PIT-003/PIT-004 design"
+                && gate.provenance.at ("reviewDate") == "2026-07-24"
+                && gate.provenance.at ("claimScope")
+                       == (pit004
+                               ? "derived equal-tempered software pitch bend"
+                               : "five musical ranges and baseline software calibration; not LO or hardware calibration");
+        }
+    }
+    return false;
+}
+
+bool exactPublishedPolicy (const GateDefinition& gate)
+{
+    for (const auto rate : matrixRates) {
+        for (const auto& matrixCase : pitchMatrixCases) {
+            if (! matrixCase.published || gate.id != matrixGateId (rate, matrixCase))
+                continue;
+            return gate.status == Status::notRun
+                && gate.requirements == std::vector<std::string> { "PIT-004" }
+                && gate.analyzer.id == "audio.pitch.v2" && gate.analyzer.version == 2
+                && gate.metric == "midi-semitones" && gate.unit == "semitones"
+                && gate.value == matrixCase.value && gate.allowance == 0.01
+                && gate.renderMetric.has_value()
+                && gate.renderMetric->fixtureId == matrixFixtureId (rate)
+                && gate.renderMetric->requestId == matrixCase.requestId
+                && gate.published.has_value()
+                && gate.published->source == "Minimoog_Model_D_Manual.pdf"
+                && gate.published->sourceVersion == "PDF created 2022-11-14"
+                && gate.published->page == "80"
+                && gate.published->sourceSha256
+                       == "c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f";
+        }
+    }
+    return false;
 }
 
 } // namespace
@@ -889,7 +988,20 @@ LoadResult<AcceptanceManifest> loadAcceptanceManifest (
                 return failure<AcceptanceManifest> (
                     "acceptance.duplicate-id", "acceptance gate IDs must be globally unique");
 
-    constexpr std::array<std::string_view, 13> exactDerivedOrder {
+    for (const auto& gate : manifest.published) {
+        const auto source = resolveBoundedRegularFile (
+            sourceRoot, gate.published->source);
+        if (! source.ok())
+            return failure<AcceptanceManifest> (
+                "acceptance.source-file",
+                "published source must resolve to one bounded regular file");
+        if (sha256File (*source.value) != gate.published->sourceSha256)
+            return failure<AcceptanceManifest> (
+                "acceptance.source-hash",
+                "published source bytes must match the declared SHA-256");
+    }
+
+    std::vector<std::string> exactDerivedOrder {
         "par006.gain-control.duration",
         "par006.control.duration",
         "par006.settling.allowance",
@@ -904,6 +1016,11 @@ LoadResult<AcceptanceManifest> loadAcceptanceManifest (
         "pit002.osc2.composed",
         "pit002.osc3.composed",
     };
+    exactDerivedOrder.reserve (61);
+    for (const auto rate : matrixRates)
+        for (const auto& matrixCase : pitchMatrixCases)
+            if (! matrixCase.published)
+                exactDerivedOrder.push_back (matrixGateId (rate, matrixCase));
     if (manifest.derivedSoftware.size() != exactDerivedOrder.size()
         || ! std::equal (
             manifest.derivedSoftware.begin(), manifest.derivedSoftware.end(),
@@ -913,7 +1030,24 @@ LoadResult<AcceptanceManifest> loadAcceptanceManifest (
             }))
         return failure<AcceptanceManifest> (
             "acceptance.derived-policy",
-            "only the exact ordered thirteen approved derived software policies are permitted");
+            "only the exact ordered sixty-one approved derived software policies are permitted");
+
+    std::vector<std::string> exactPublishedOrder;
+    exactPublishedOrder.reserve (6);
+    for (const auto rate : matrixRates)
+        for (const auto& matrixCase : pitchMatrixCases)
+            if (matrixCase.published)
+                exactPublishedOrder.push_back (matrixGateId (rate, matrixCase));
+    if (manifest.published.size() != exactPublishedOrder.size()
+        || ! std::equal (
+            manifest.published.begin(), manifest.published.end(),
+            exactPublishedOrder.begin(), exactPublishedOrder.end(),
+            [] (const auto& gate, const auto& id) {
+                return gate.id == id && exactPublishedPolicy (gate);
+            }))
+        return failure<AcceptanceManifest> (
+            "acceptance.published-policy",
+            "only the exact ordered six approved published endpoint policies are permitted");
 
     if (manifest.status == "approved") {
         const auto sections = std::array {

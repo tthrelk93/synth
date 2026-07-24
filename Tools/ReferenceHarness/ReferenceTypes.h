@@ -231,6 +231,7 @@ struct PublishedProvenance {
     std::string source;
     std::string sourceVersion;
     std::string page;
+    std::string sourceSha256;
 };
 
 struct MeasuredHardwareProvenance {

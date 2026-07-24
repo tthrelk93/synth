@@ -73,6 +73,14 @@ constexpr std::array frozenFixturePaths {
     "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-96000-v1.json",
 };
 
+template <typename Provenance>
+std::string typedPublishedSourceSha256 (const Provenance& provenance)
+{
+    if constexpr (requires { provenance.sourceSha256; })
+        return provenance.sourceSha256;
+    return {};
+}
+
 class ReferenceHarnessTest final : public juce::UnitTest {
 public:
     ReferenceHarnessTest()
@@ -374,6 +382,227 @@ public:
                              "\"marker\":\"canonicalContours\"",
                              "\"marker\":\"legacyCrossedContours\"",
                              "semantic.contour");
+
+        beginTest ("published pitch authority is byte-bound and exactly ordered");
+        const auto analyzers = ReferenceHarness::AnalyzerRegistry::withFoundationAnalyzers();
+        const auto acceptanceFile = sourceRoot.getChildFile (
+            "Tests/reference/acceptance-v1.json");
+        const auto acceptanceText = acceptanceFile.loadFileAsString();
+        const auto acceptance = ReferenceHarness::loadAcceptanceManifest (
+            sourceRoot, acceptanceFile, analyzers);
+        expect (acceptance.ok(), "checked-in acceptance authority must load");
+        if (acceptance.value.has_value()) {
+            expect (acceptance.value->status == "draft",
+                    "global acceptance authority must remain draft");
+            expectEquals (static_cast<int> (acceptance.value->derivedSoftware.size()), 61);
+            expectEquals (static_cast<int> (acceptance.value->published.size()), 6);
+            const std::array<std::string_view, 6> expectedPublished {
+                "pit004.sr44100.bend.minus7",
+                "pit004.sr44100.bend.plus7",
+                "pit004.sr48000.bend.minus7",
+                "pit004.sr48000.bend.plus7",
+                "pit004.sr96000.bend.minus7",
+                "pit004.sr96000.bend.plus7",
+            };
+            expect (acceptance.value->published.size() == expectedPublished.size()
+                        && std::equal (
+                            acceptance.value->published.begin(),
+                            acceptance.value->published.end(),
+                            expectedPublished.begin(), expectedPublished.end(),
+                            [] (const auto& gate, const auto id) { return gate.id == id; }),
+                    "published endpoint IDs must be exact and rate-major");
+            for (const auto& gate : acceptance.value->published)
+                expect (gate.published.has_value()
+                            && gate.published->source == "Minimoog_Model_D_Manual.pdf"
+                            && gate.published->sourceVersion == "PDF created 2022-11-14"
+                            && gate.published->page == "80"
+                            && typedPublishedSourceSha256 (*gate.published)
+                                   == "c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f",
+                        gate.id + " must retain typed byte-bound manual provenance");
+        }
+
+        const auto expectAcceptanceDiagnostic =
+            [&] (const juce::File& boundedSourceRoot,
+                 const juce::String& text,
+                 const std::string_view code) {
+                const TemporaryDirectory temporary { "model-d-acceptance-authority-negative" };
+                expect (temporary.isOwned(), "acceptance mutation root must be owned");
+                if (! temporary.isOwned())
+                    return;
+                const auto file = temporary.directory.getChildFile ("acceptance.json");
+                expect (file.replaceWithText (text),
+                        "acceptance mutation manifest must write");
+                expectDiagnostic (
+                    ReferenceHarness::loadAcceptanceManifest (
+                        boundedSourceRoot, file, analyzers),
+                    code);
+            };
+        const auto mutatePublished =
+            [&]<typename Mutation> (Mutation mutation, const int index = 0) {
+                auto payload = juce::JSON::fromString (acceptanceText);
+                auto* gates = payload.getDynamicObject()->getProperty ("published").getArray();
+                expect (gates != nullptr && gates->size() == 6,
+                        "published probes require six checked-in endpoints");
+                if (gates == nullptr || gates->size() != 6)
+                    return juce::String {};
+                mutation (*gates->getReference (index).getDynamicObject());
+                return ReferenceHarness::canonicalJson (payload);
+            };
+        const auto expectPublishedMutation =
+            [&]<typename Mutation> (Mutation mutation, const std::string_view code) {
+                const auto text = mutatePublished (mutation);
+                if (text.isNotEmpty())
+                    expectAcceptanceDiagnostic (sourceRoot, text, code);
+            };
+        expectPublishedMutation (
+            [] (auto& gate) { gate.removeProperty ("sourceSha256"); },
+            "acceptance.source");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("sourceSha256", "ABC"); },
+            "acceptance.source");
+        expectPublishedMutation (
+            [] (auto& gate) {
+                gate.setProperty (
+                    "sourceSha256",
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+            },
+            "acceptance.source-hash");
+        expectPublishedMutation (
+            [] (auto& gate) {
+                gate.setProperty ("sourceVersion", "PDF created 2022-11-15");
+            },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("page", "79"); },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("classification", "derived-software"); },
+            "acceptance.classification");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("value", 38.25); },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("analyzerVersion", 1); },
+            "acceptance.analyzer-version");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("fixtureId", "unknown-pitch-fixture"); },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("requestId", "unknown-pitch-request"); },
+            "acceptance.published-policy");
+
+        const auto expectBoundedPublishedDiagnostic =
+            [&]<typename ManifestMutation, typename SourceMutation> (
+                ManifestMutation manifestMutation,
+                SourceMutation sourceMutation,
+                const std::string_view code) {
+                const auto text = mutatePublished (manifestMutation);
+                if (text.isEmpty())
+                    return;
+                const TemporaryDirectory boundedRoot { "model-d-published-source-bounded" };
+                expect (boundedRoot.isOwned(), "bounded published root must be owned");
+                if (! boundedRoot.isOwned())
+                    return;
+                const auto manual = boundedRoot.directory.getChildFile (
+                    "Minimoog_Model_D_Manual.pdf");
+                expect (sourceRoot.getChildFile ("Minimoog_Model_D_Manual.pdf")
+                            .copyFileTo (manual),
+                        "bounded published root must copy the manual");
+                sourceMutation (boundedRoot.directory, manual);
+                expectAcceptanceDiagnostic (boundedRoot.directory, text, code);
+            };
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "missing-manual.pdf"); },
+            [] (const auto&, const auto&) {},
+            "acceptance.source-file");
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "../manual.pdf"); },
+            [] (const auto&, const auto&) {},
+            "acceptance.source-file");
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "."); },
+            [] (const auto&, const auto&) {},
+            "acceptance.source-file");
+        expectBoundedPublishedDiagnostic (
+            [] (auto&) {},
+            [] (const auto&, const auto& manual) {
+                manual.appendText ("\nmanual byte mutation\n");
+            },
+            "acceptance.source-hash");
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "manual-copy.pdf"); },
+            [&] (const auto& root, const auto& manual) {
+                expect (manual.copyFileTo (root.getChildFile ("manual-copy.pdf")),
+                        "alternate bounded manual copy must write");
+            },
+            "acceptance.published-policy");
+
+        for (const auto mutation : { "missing", "additional", "reordered" }) {
+            auto payload = juce::JSON::fromString (acceptanceText);
+            auto* gates = payload.getDynamicObject()->getProperty ("published").getArray();
+            expect (gates != nullptr && gates->size() == 6,
+                    "published order probes require six checked-in endpoints");
+            if (gates == nullptr || gates->size() != 6)
+                continue;
+            if (std::string_view { mutation } == "missing") {
+                gates->remove (0);
+            } else if (std::string_view { mutation } == "additional") {
+                auto additional = gates->getReference (0).clone();
+                additional.getDynamicObject()->setProperty ("id", "pit004.additional");
+                gates->add (std::move (additional));
+            } else {
+                gates->swap (0, 1);
+            }
+            expectAcceptanceDiagnostic (
+                sourceRoot, ReferenceHarness::canonicalJson (payload),
+                "acceptance.published-policy");
+        }
+
+        const auto expectDerivedMutation =
+            [&]<typename Mutation> (Mutation mutation, const std::string_view code) {
+                auto payload = juce::JSON::fromString (acceptanceText);
+                auto* gates = payload.getDynamicObject()
+                                  ->getProperty ("derivedSoftware").getArray();
+                expect (gates != nullptr, "derived mutation array must exist");
+                if (gates == nullptr)
+                    return;
+                const auto found = std::find_if (
+                    gates->begin(), gates->end(), [] (const auto& gate) {
+                        return gate.getDynamicObject()->getProperty ("id").toString()
+                            == "pit003.sr44100.range32";
+                    });
+                expect (found != gates->end(),
+                        "derived probes require pit003.sr44100.range32");
+                if (found == gates->end())
+                    return;
+                mutation (*found->getDynamicObject());
+                expectAcceptanceDiagnostic (
+                    sourceRoot, ReferenceHarness::canonicalJson (payload), code);
+            };
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("value", 21.25); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("fixtureId", "unknown-pitch-fixture"); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("requestId", "unknown-pitch-request"); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("allowance", 0.02); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("derivation", "approximate pitch matrix"); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("reviewBasis", "unapproved design"); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("reviewDate", "2026-07-23"); },
+            "acceptance.derived-policy");
+        expectDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("claimScope", "hardware calibration"); },
+            "acceptance.derived-policy");
     }
 
 private:
@@ -859,7 +1088,42 @@ public:
         expect (manifest.ok(), "the checked-in acceptance manifest must validate");
         if (manifest.value.has_value()) {
             expect (manifest.value->status == "draft", "global acceptance must remain draft");
-            expectEquals (static_cast<int> (manifest.value->derivedSoftware.size()), 13);
+            expectEquals (static_cast<int> (manifest.value->derivedSoftware.size()), 61);
+            expectEquals (static_cast<int> (manifest.value->published.size()), 6);
+            const std::array<std::string_view, 6> exactPublishedOrder {
+                "pit004.sr44100.bend.minus7",
+                "pit004.sr44100.bend.plus7",
+                "pit004.sr48000.bend.minus7",
+                "pit004.sr48000.bend.plus7",
+                "pit004.sr96000.bend.minus7",
+                "pit004.sr96000.bend.plus7",
+            };
+            expect (manifest.value->published.size() == exactPublishedOrder.size()
+                        && std::equal (
+                            manifest.value->published.begin(), manifest.value->published.end(),
+                            exactPublishedOrder.begin(), exactPublishedOrder.end(),
+                            [] (const auto& gate, const auto id) { return gate.id == id; }),
+                    "published endpoints must retain exact rate-major order");
+            for (const auto& gate : manifest.value->published) {
+                expect (gate.published.has_value()
+                            && gate.published->source == "Minimoog_Model_D_Manual.pdf"
+                            && gate.published->sourceVersion == "PDF created 2022-11-14"
+                            && gate.published->page == "80"
+                            && typedPublishedSourceSha256 (*gate.published)
+                                   == "c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f",
+                        gate.id + " must retain typed byte-bound manual provenance");
+            }
+            const auto requirementCount = [&] (const std::string_view requirement) {
+                return std::count_if (
+                    manifest.value->derivedSoftware.begin(),
+                    manifest.value->derivedSoftware.end(),
+                    [&] (const auto& gate) {
+                        return gate.requirements
+                            == std::vector<std::string> { std::string { requirement } };
+                    });
+            };
+            expectEquals (static_cast<int> (requirementCount ("PIT-003")), 39);
+            expectEquals (static_cast<int> (requirementCount ("PIT-004")), 9);
         }
 
         beginTest ("acceptance validation rejects unsupported or unproven claims");
@@ -911,8 +1175,8 @@ public:
                                     "acceptance.derivation");
         expectAcceptanceDiagnostic (sourceRoot, registry,
                                     acceptanceText.replaceFirstOccurrenceOf (
-                                        R"("published": [])",
-                                        R"("published": [{"id":"bad.source","classification":"published","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1}])"),
+                                        R"("sourceSha256":"c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f")",
+                                        R"("sourceSha256":"")"),
                                     "acceptance.source");
         expectAcceptanceDiagnostic (sourceRoot, registry,
                                     acceptanceText.replaceFirstOccurrenceOf (
@@ -932,7 +1196,7 @@ public:
             .replaceFirstOccurrenceOf (R"("status": "draft")", R"("status": "approved")")
             .replaceFirstOccurrenceOf (
                 R"("published": [])",
-                R"("published": [{"id":"published.probe","classification":"published","status":"not-run","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","sourceVersion":"revision 2","page":"1"}])")
+                R"("published": [{"id":"published.probe","classification":"published","status":"not-run","requirements":["PIT-004"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"Minimoog_Model_D_Manual.pdf","sourceVersion":"PDF created 2022-11-14","page":"80","sourceSha256":"c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f"}])")
             .replaceFirstOccurrenceOf (
                 R"("measuredHardware": [])",
                 R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware","status":"awaiting-approved-reference","requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"referenceStatus":"approved","referenceSet":"approved set","bandArtifact":"band.json","rawSha256":["aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"],"instrument":"calibrated interface","environment":"controlled studio","captureChain":"synth to interface","repetitionCount":3,"repetitionStatistic":"arithmetic mean","uncertaintyMethod":"sample standard deviation","uncertaintyValue":0.25,"approver":"Hardware Reviewer","approvalDate":"2026-07-22"}])")
@@ -1097,6 +1361,192 @@ public:
                 "acceptance.derived-policy");
         }
 
+        beginTest ("published source bytes and exact endpoint policies reject independent drift");
+        const auto mutatePublishedGate =
+            [&]<typename Mutation> (Mutation mutation, const int gateIndex = 0) {
+                auto payload = juce::JSON::fromString (acceptanceText);
+                auto* gates = payload.getDynamicObject()->getProperty ("published").getArray();
+                expect (gates != nullptr && gates->size() == 6,
+                        "published mutation probes require the exact six endpoint gates");
+                if (gates == nullptr || gates->size() != 6)
+                    return juce::String {};
+                mutation (*gates->getReference (gateIndex).getDynamicObject());
+                return canonicalJson (payload);
+            };
+        const auto expectPublishedMutation =
+            [&]<typename Mutation> (Mutation mutation, const std::string_view code) {
+                const auto mutated = mutatePublishedGate (mutation);
+                if (mutated.isNotEmpty())
+                    expectAcceptanceDiagnostic (sourceRoot, registry, mutated, code);
+            };
+        expectPublishedMutation (
+            [] (auto& gate) { gate.removeProperty ("source"); },
+            "acceptance.source");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("sourceSha256", "ABC"); },
+            "acceptance.source");
+        expectPublishedMutation (
+            [] (auto& gate) {
+                gate.setProperty (
+                    "sourceSha256",
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+            },
+            "acceptance.source-hash");
+        expectPublishedMutation (
+            [] (auto& gate) {
+                gate.setProperty ("sourceVersion", "PDF created 2022-11-15");
+            },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("page", "79"); },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("classification", "derived-software"); },
+            "acceptance.classification");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("value", 38.25); },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("analyzerVersion", 1); },
+            "acceptance.analyzer-version");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("fixtureId", "unknown-pitch-fixture"); },
+            "acceptance.published-policy");
+        expectPublishedMutation (
+            [] (auto& gate) { gate.setProperty ("requestId", "unknown-pitch-request"); },
+            "acceptance.published-policy");
+
+        const auto expectBoundedPublishedDiagnostic =
+            [&]<typename ManifestMutation, typename SourceMutation> (
+                ManifestMutation manifestMutation,
+                SourceMutation sourceMutation,
+                const std::string_view code) {
+                const auto mutated = mutatePublishedGate (manifestMutation);
+                if (mutated.isEmpty())
+                    return;
+                const TemporaryDirectory boundedRoot { "model-d-published-source-negative" };
+                expect (boundedRoot.isOwned(), "published source probe root must be owned");
+                if (! boundedRoot.isOwned())
+                    return;
+                const auto manual = boundedRoot.directory.getChildFile (
+                    "Minimoog_Model_D_Manual.pdf");
+                expect (sourceRoot.getChildFile ("Minimoog_Model_D_Manual.pdf")
+                            .copyFileTo (manual),
+                        "published source probe must copy the bounded manual");
+                sourceMutation (boundedRoot.directory, manual);
+                const auto manifestFile = boundedRoot.directory.getChildFile (
+                    "acceptance.json");
+                expect (manifestFile.replaceWithText (mutated),
+                        "published source probe manifest must write");
+                expectDiagnostic (
+                    loadAcceptanceManifest (
+                        boundedRoot.directory, manifestFile, registry),
+                    code);
+            };
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "missing-manual.pdf"); },
+            [] (const auto&, const auto&) {},
+            "acceptance.source-file");
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "../manual.pdf"); },
+            [] (const auto&, const auto&) {},
+            "acceptance.source-file");
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "."); },
+            [] (const auto&, const auto&) {},
+            "acceptance.source-file");
+        expectBoundedPublishedDiagnostic (
+            [] (auto&) {},
+            [] (const auto&, const auto& manual) {
+                manual.appendText ("\nmanual byte mutation\n");
+            },
+            "acceptance.source-hash");
+        expectBoundedPublishedDiagnostic (
+            [] (auto& gate) { gate.setProperty ("source", "manual-copy.pdf"); },
+            [&] (const auto& root, const auto& manual) {
+                expect (manual.copyFileTo (root.getChildFile ("manual-copy.pdf")),
+                        "alternate bounded manual copy must write");
+            },
+            "acceptance.published-policy");
+
+        for (const auto mutation : { "missing", "additional", "reordered" }) {
+            auto payload = juce::JSON::fromString (acceptanceText);
+            auto* policies = payload.getDynamicObject()->getProperty ("published").getArray();
+            expect (policies != nullptr && policies->size() == 6,
+                    "published order probes require six endpoint gates");
+            if (policies == nullptr || policies->size() != 6)
+                continue;
+            if (std::string_view { mutation } == "missing") {
+                policies->remove (0);
+            } else if (std::string_view { mutation } == "additional") {
+                auto additional = policies->getReference (0).clone();
+                additional.getDynamicObject()->setProperty ("id", "pit004.additional");
+                policies->add (std::move (additional));
+            } else {
+                policies->swap (0, 1);
+            }
+            expectAcceptanceDiagnostic (
+                sourceRoot, registry, canonicalJson (payload),
+                "acceptance.published-policy");
+        }
+
+        beginTest ("new derived pitch policies reject every exact-field mutation");
+        const auto expectPitchDerivedMutation =
+            [&]<typename Mutation> (Mutation mutation, const std::string_view code) {
+                auto payload = juce::JSON::fromString (acceptanceText);
+                auto* policies = payload.getDynamicObject()
+                                     ->getProperty ("derivedSoftware").getArray();
+                expect (policies != nullptr,
+                        "derived mutation probes require the first PIT-003 matrix policy");
+                if (policies == nullptr)
+                    return;
+                const auto found = std::find_if (
+                    policies->begin(), policies->end(), [] (const auto& policy) {
+                        return policy.getDynamicObject()->getProperty ("id").toString()
+                            == "pit003.sr44100.range32";
+                    });
+                expect (found != policies->end(),
+                        "derived mutation probes require the first PIT-003 matrix policy");
+                if (found == policies->end())
+                    return;
+                mutation (*found->getDynamicObject());
+                expectAcceptanceDiagnostic (
+                    sourceRoot, registry, canonicalJson (payload), code);
+            };
+        expectPitchDerivedMutation (
+            [] (auto& gate) {
+                gate.setProperty (
+                    "requirements", juce::Array<juce::var> { "PIT-004" });
+            },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("fixtureId", "unknown-pitch-fixture"); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("requestId", "unknown-pitch-request"); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("value", 21.25); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("allowance", 0.02); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("status", "fail"); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("derivation", "approximate pitch matrix"); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("reviewBasis", "unapproved design"); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("reviewDate", "2026-07-23"); },
+            "acceptance.derived-policy");
+        expectPitchDerivedMutation (
+            [] (auto& gate) { gate.setProperty ("claimScope", "hardware calibration"); },
+            "acceptance.derived-policy");
+
         beginTest ("reviewed policies may execute while global approval requires complete evidence");
         const auto artifactPath = juce::String { "Tests/reference/acceptance-v1.json" };
         const auto artifactHash = juce::String { sha256File (acceptanceFile) };
@@ -1104,16 +1554,31 @@ public:
             R"("status": "pass", "artifactPath": ")" }
                                 + artifactPath + R"(", "artifactSha256": ")"
                                 + artifactHash + R"(")";
-        auto executableDraft = acceptanceText;
-        for (int policy = 0; policy < 5; ++policy)
-            executableDraft = executableDraft.replaceFirstOccurrenceOf (
-                R"("status": "not-run")", passArtifact);
+        const auto markPassing = [&] (const juce::String& text,
+                                      const juce::String& id,
+                                      const juce::String& classification) {
+            const auto prefix = juce::String { R"("id": ")" } + id
+                              + R"(",
+      "classification": ")" + classification + R"(",
+      )";
+            return text.replaceFirstOccurrenceOf (
+                prefix + R"("status": "not-run")",
+                prefix + passArtifact);
+        };
+        auto executableDraft = markPassing (
+            acceptanceText, "hard.registry.count", "hard-software");
+        for (const auto id : { "par006.gain-control.duration",
+                               "par006.control.duration",
+                               "par006.settling.allowance",
+                               "par006.none.intermediate" })
+            executableDraft = markPassing (
+                executableDraft, id, "derived-software");
         const auto completeDraft = executableDraft
             .replaceFirstOccurrenceOf (
                 R"("published": [])",
                 juce::String { R"("published": [{"id":"published.probe","classification":"published",)" }
                     + passArtifact
-                    + R"(,"requirements":["TST-006"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"approved primary source","sourceVersion":"revision 2","page":"1"}])")
+                    + R"(,"requirements":["PIT-004"],"analyzer":"signal.stats.v1","analyzerVersion":1,"metric":"sample-count","unit":"count","value":1,"source":"Minimoog_Model_D_Manual.pdf","sourceVersion":"PDF created 2022-11-14","page":"80","sourceSha256":"c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f"}])")
             .replaceFirstOccurrenceOf (
                 R"("measuredHardware": [])",
                 juce::String { R"("measuredHardware": [{"id":"hardware.probe","classification":"measured-hardware",)" }
@@ -1136,8 +1601,11 @@ public:
         if (typedManifest.value.has_value()) {
             expect (typedManifest.value->published.front().published.has_value()
                         && typedManifest.value->published.front().published->sourceVersion
-                               == "revision 2",
-                    "published provenance must load into its typed record");
+                               == "PDF created 2022-11-14"
+                        && typedPublishedSourceSha256 (
+                               *typedManifest.value->published.front().published)
+                               == "c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f",
+                    "published provenance must load its typed version and source hash");
             expect (typedManifest.value->measuredHardware.front().measuredHardware.has_value()
                         && typedManifest.value->measuredHardware.front()
                                .measuredHardware->rawSha256.size() == 1,
@@ -1155,10 +1623,11 @@ public:
                 sourceRoot, registry,
                 completeDraft.replaceFirstOccurrenceOf (needle, replacement), code);
         };
-        for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 3> {{
-                 { R"("source":"approved primary source",)", R"("source":"",)" },
-                 { R"("sourceVersion":"revision 2",)", R"("sourceVersion":"",)" },
-                 { R"("page":"1")", R"("page":"")" },
+        for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 4> {{
+                 { R"("source":"Minimoog_Model_D_Manual.pdf",)", R"("source":"",)" },
+                 { R"("sourceVersion":"PDF created 2022-11-14",)", R"("sourceVersion":"",)" },
+                 { R"("page":"80",)", R"("page":"",)" },
+                 { R"("sourceSha256":"c7e6f1abd54999cad7aa232d782df397f974ff210db1e6a429a863af6e850b1f")", R"("sourceSha256":"")" },
              }})
             expectTypedProvenanceFailure (needle, replacement, "acceptance.source");
         for (const auto& [needle, replacement] : std::array<std::pair<const char*, const char*>, 14> {{
@@ -1182,7 +1651,8 @@ public:
                  { R"("targetSystem":"approved system",)", R"("targetSystem":"",)" },
                  { R"("budgetBasis":"approved budget",)", R"("budgetBasis":"",)" },
                  { R"("rationale":"approved rationale",)", R"("rationale":"",)" },
-                 { R"("reviewStatus":"approved",)", R"("reviewStatus":"pending",)" },
+                 { R"("rationale":"approved rationale","reviewStatus":"approved","reviewer":"Performance Reviewer",)",
+                   R"("rationale":"approved rationale","reviewStatus":"pending","reviewer":"Performance Reviewer",)" },
                  { R"("reviewer":"Performance Reviewer",)", R"("reviewer":"",)" },
                  { R"("reviewDate":"2026-07-22")", R"("reviewDate":"not-a-date")" },
              }})
@@ -3424,7 +3894,12 @@ public:
             sourceRoot.getChildFile ("Tests/reference/requirement-map.json"),
             sourceRoot.getChildFile ("docs/remediation/01-traceability-matrix.md"),
             *acceptance.value);
-        expect (requirements.ok(), "the checked-in requirement map must validate");
+        const auto requirementDiagnostic = requirements.diagnostics.empty()
+            ? std::string { "<none>" }
+            : requirements.diagnostics.front().code;
+        expect (requirements.ok(),
+                "the checked-in requirement map must validate, got "
+                    + requirementDiagnostic);
         if (requirements.ok()) {
             expectEquals (static_cast<int> (requirements.value->size()), 127,
                           "the map must contain every matrix requirement exactly once");
@@ -3436,6 +3911,98 @@ public:
 
         const auto mapText = sourceRoot.getChildFile ("Tests/reference/requirement-map.json")
                                  .loadFileAsString();
+        beginTest ("PIT-003 and PIT-004 map ownership exactly follows approved rate-major policy order");
+        const auto mapPayload = juce::JSON::fromString (mapText);
+        const auto* mapRequirements = mapPayload.getDynamicObject()
+                                          ->getProperty ("requirements").getArray();
+        const auto mappedGateIds = [&] (const std::string_view requirementId) {
+            std::vector<std::string> ids;
+            if (mapRequirements == nullptr)
+                return ids;
+            const auto found = std::find_if (
+                mapRequirements->begin(), mapRequirements->end(),
+                [&] (const auto& requirement) {
+                    return requirement.getDynamicObject()
+                               ->getProperty ("id").toString().toStdString()
+                        == std::string { requirementId };
+                });
+            if (found == mapRequirements->end())
+                return ids;
+            const auto* gateIds = found->getDynamicObject()
+                                      ->getProperty ("gateIds").getArray();
+            if (gateIds != nullptr)
+                for (const auto& gateId : *gateIds)
+                    ids.push_back (gateId.toString().toStdString());
+            return ids;
+        };
+        constexpr std::array pit003Suffixes {
+            "boundary.f0-range32",
+            "boundary.c4-range2",
+            "range32",
+            "range16",
+            "range8",
+            "range4",
+            "range2",
+            "tune.minus2p5",
+            "tune.plus2p5",
+            "osc2.minus8",
+            "osc2.plus8",
+            "osc3.minus8",
+            "osc3.plus8",
+        };
+        constexpr std::array pit004PublishedSuffixes {
+            "bend.minus7",
+            "bend.plus7",
+        };
+        constexpr std::array pit004DerivedSuffixes {
+            "bend.minus3p5",
+            "bend.center",
+            "bend.plus3p5",
+        };
+        constexpr std::array acceptanceRates { 44100, 48000, 96000 };
+        std::vector<std::string> expectedPit003;
+        std::vector<std::string> expectedPit004;
+        for (const auto rate : acceptanceRates) {
+            for (const auto suffix : pit003Suffixes)
+                expectedPit003.push_back (
+                    "pit003.sr" + std::to_string (rate) + "." + suffix);
+            for (const auto suffix : pit004PublishedSuffixes)
+                expectedPit004.push_back (
+                    "pit004.sr" + std::to_string (rate) + "." + suffix);
+        }
+        for (const auto rate : acceptanceRates)
+            for (const auto suffix : pit004DerivedSuffixes)
+                expectedPit004.push_back (
+                    "pit004.sr" + std::to_string (rate) + "." + suffix);
+        expect (mappedGateIds ("PIT-003") == expectedPit003,
+                "PIT-003 must own the exact 39 rate-major derived policies");
+        expect (mappedGateIds ("PIT-004") == expectedPit004,
+                "PIT-004 must own the exact 15 rate-major endpoint and derived policies");
+        const auto allAcceptanceGates = [&] {
+            std::map<std::string, std::vector<std::string>> gates;
+            const auto add = [&] (const auto& section) {
+                for (const auto& gate : section)
+                    gates.emplace (gate.id, gate.requirements);
+            };
+            add (acceptance.value->published);
+            add (acceptance.value->derivedSoftware);
+            return gates;
+        }();
+        const auto expectReciprocalManifestPolicies =
+            [&] (const std::string& requirement,
+                 const std::vector<std::string>& expected) {
+            expect (std::all_of (
+                        expected.begin(), expected.end(), [&] (const auto& gateId) {
+                            const auto found = allAcceptanceGates.find (gateId);
+                            return found != allAcceptanceGates.end()
+                                && found->second
+                                       == std::vector<std::string> { requirement };
+                        }),
+                    requirement + " map IDs must reciprocally bind exact manifest policies");
+        };
+        expectReciprocalManifestPolicies ("PIT-003", expectedPit003);
+        expectReciprocalManifestPolicies ("PIT-004", expectedPit004);
+
         beginTest ("requirement map rejects unsupported statuses and unproven passes");
         expectMapDiagnostic (sourceRoot, *acceptance.value,
                              mapText.replaceFirstOccurrenceOf (
@@ -3758,6 +4325,9 @@ public:
         std::vector<GateMetricEvidence> authoritativeMetricEvidence {
             *registryEvidence.value,
         };
+        std::vector<GateMetricEvidence> completeAuthoritativeMetricEvidence {
+            *registryEvidence.value,
+        };
         const auto rendersRoot = candidateRoot.directory.getChildFile ("renders");
         for (const auto& indexedFixture : index.value->renderFixtures) {
             if (! indexedFixture.id.starts_with ("pit-"))
@@ -3801,10 +4371,36 @@ public:
                     "renders/" + fixture.value->id + "/metrics.json",
                     sha256File (artifactFile),
                 });
+                completeAuthoritativeMetricEvidence.push_back (
+                    authoritativeMetricEvidence.back());
+            }
+            for (const auto& gate : acceptance.value->published) {
+                if (! gate.renderMetric.has_value()
+                    || gate.renderMetric->fixtureId != fixture.value->id)
+                    continue;
+                const auto record = std::find_if (
+                    records.value->begin(), records.value->end(),
+                    [&] (const auto& item) {
+                        return item.provenance.requestId
+                            == gate.renderMetric->requestId;
+                    });
+                expect (record != records.value->end(),
+                        gate.id + " must resolve one published endpoint request");
+                if (record == records.value->end())
+                    return;
+                completeAuthoritativeMetricEvidence.push_back ({
+                    gate.id,
+                    *record,
+                    artifactFile,
+                    "renders/" + fixture.value->id + "/metrics.json",
+                    sha256File (artifactFile),
+                });
             }
         }
-        expectEquals (authoritativeMetricEvidence.size(), size_t { 10 },
-                      "one registry and nine bound pitch records are authoritative");
+        expectEquals (authoritativeMetricEvidence.size(), size_t { 58 },
+                      "one registry and 57 derived pitch records are authoritative");
+        expectEquals (completeAuthoritativeMetricEvidence.size(), size_t { 64 },
+                      "release verification requires all six published endpoint records");
 
         beginTest ("bound pitch evidence cannot substitute an equal-valued request");
         auto substitutedBinding = authoritativeMetricEvidence[1];
@@ -3887,7 +4483,7 @@ public:
         expectRequirement (*report.value, "PIT-001", Status::pass);
         expectRequirement (*report.value, "PIT-002", Status::pass);
         expectRequirement (*report.value, "PIT-003", Status::awaitingApprovedReference);
-        expectEquals (report.value->gateResults.size(), size_t { 110 });
+        expectEquals (report.value->gateResults.size(), size_t { 164 });
 
         beginTest ("report building validates and restores matrix order");
         auto reversedRequirements = *requirements.value;
@@ -3971,14 +4567,29 @@ public:
                           "requirement.artifact-hash");
 
         beginTest ("canonical reports are byte-identical and release enforcement is stable");
+        const auto completeEvaluated = evaluateAcceptance (
+            *acceptance.value, *smoothing.value, noEvidence, registry,
+            completeAuthoritativeMetricEvidence);
+        expect (completeEvaluated.ok()
+                    && completeEvaluated.value->size() == 164,
+                "release probes require the complete correct 164-gate evidence set");
+        if (! completeEvaluated.ok())
+            return;
+        const auto completeReport = buildRequirementReport (
+            sourceRoot, candidateRoot.directory, *requirements.value,
+            *completeEvaluated.value, *acceptance.value);
+        expect (completeReport.ok(),
+                "complete release-verification evidence report must build");
+        if (! completeReport.ok())
+            return;
         const TemporaryDirectory reportRoot { "model-d-requirement-report-root" };
         expect (reportRoot.isOwned(), "report root must be owned");
         if (! reportRoot.isOwned())
             return;
         const auto reportA = writeRequirementReport (
-            *report.value, reportRoot.directory.getChildFile ("candidate-a"));
+            *completeReport.value, reportRoot.directory.getChildFile ("candidate-a"));
         const auto reportB = writeRequirementReport (
-            *report.value, reportRoot.directory.getChildFile ("candidate-b"));
+            *completeReport.value, reportRoot.directory.getChildFile ("candidate-b"));
         expect (reportA.ok() && reportB.ok(), "two fresh report candidates must write");
         if (! reportA.ok() || ! reportB.ok())
             return;
@@ -3989,16 +4600,17 @@ public:
         const auto* writtenProvenance = writtenJson.getDynamicObject()
                                             ->getProperty ("provenance").getDynamicObject();
         expect (writtenGates != nullptr
-                    && writtenGates->size() == static_cast<int> (gateResults.size()),
+                    && writtenGates->size()
+                           == static_cast<int> (completeEvaluated.value->size()),
                 "canonical report must retain every static and dynamic gate result");
         expect (writtenProvenance != nullptr
                     && writtenProvenance->getProperty ("sourceTree").toString().toStdString()
-                           == report.value->sourceTree
+                           == completeReport.value->sourceTree
                     && writtenProvenance->getProperty ("sourceContent").toString().toStdString()
-                           == report.value->sourceContent
+                           == completeReport.value->sourceContent
                     && writtenProvenance->getProperty ("sourceDirty").isBool()
                     && static_cast<bool> (writtenProvenance->getProperty ("sourceDirty"))
-                           == report.value->sourceDirty,
+                           == completeReport.value->sourceDirty,
                 "canonical report must serialize exact build/source identity");
         expectDiagnostic (verifyReleaseReady (*reportA.value), "release.report-mismatch");
 
