@@ -387,10 +387,17 @@ LoadResult<Metrics> analyzeAudioClick (const AnalysisRequest& request)
     return selectMetric (std::move (metrics), request.metric);
 }
 
-LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
-{
-    const AnalyzerIdentity identity { "audio.pitch.v1", 1 };
-    const std::map<std::string, std::string> settings {
+struct PitchAnalyzerConfiguration {
+    AnalyzerIdentity identity;
+    double minimumFrequency;
+    double maximumFrequency;
+    bool decimate;
+    std::map<std::string, std::string> settings;
+};
+
+const PitchAnalyzerConfiguration pitchV1 {
+    { "audio.pitch.v1", 1 }, 20.0, 5000.0, false,
+    {
         { "algorithm", "normalized-autocorrelation-parabolic-v1" },
         { "ambiguity-separation", "0.02" },
         { "confidence-threshold", "0.80" },
@@ -398,15 +405,37 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
         { "minimum-periods", "4" },
         { "peak-tie-tolerance", "0.00001" },
         { "periodic-multiple-tolerance", "0.05" },
-    };
+    }
+};
+
+const PitchAnalyzerConfiguration pitchV2 {
+    { "audio.pitch.v2", 2 }, 4.0, 5000.0, true,
+    {
+        { "algorithm", "normalized-autocorrelation-parabolic-v2" },
+        { "ambiguity-separation", "0.02" },
+        { "confidence-threshold", "0.80" },
+        { "lag-range", "4Hz..5000Hz" },
+        { "minimum-periods", "4" },
+        { "peak-tie-tolerance", "0.00001" },
+        { "periodic-multiple-tolerance", "0.05" },
+    }
+};
+
+LoadResult<Metrics> analyzeAudioPitch (
+    const AnalysisRequest& request,
+    const PitchAnalyzerConfiguration& configuration)
+{
     const auto makeMetrics = [&] (const double frequency,
                                   const double midi,
                                   const double confidence,
                                   const bool finite) {
         return Metrics {
-            metric (identity, "frequency-hz", "Hz", frequency, 0.0, finite, settings),
-            metric (identity, "midi-semitones", "semitones", midi, 0.01, finite, settings),
-            metric (identity, "confidence", "ratio", confidence, 0.0, finite, settings),
+            metric (configuration.identity, "frequency-hz", "Hz", frequency, 0.0,
+                    finite, configuration.settings),
+            metric (configuration.identity, "midi-semitones", "semitones", midi, 0.01,
+                    finite, configuration.settings),
+            metric (configuration.identity, "confidence", "ratio", confidence, 0.0,
+                    finite, configuration.settings),
         };
     };
     const auto reject = [&] (std::string code, std::string message) {
@@ -416,7 +445,7 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
     };
 
     if (! std::isfinite (request.sampleRate) || request.sampleRate <= 0.0
-        || request.sampleRate / 5000.0
+        || request.sampleRate / configuration.maximumFrequency
                > static_cast<double> (std::numeric_limits<size_t>::max()))
         return reject ("analyzer.sample-rate",
                        "pitch analysis requires a finite positive sample rate");
@@ -439,6 +468,31 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
         }))
         return reject ("analyzer.non-finite",
                        "pitch analysis requires only finite audio samples");
+    const auto originalAudio = audio;
+
+    const auto decimation = configuration.decimate
+        ? std::max<size_t> (
+              1, static_cast<size_t> (std::floor (request.sampleRate / 12000.0)))
+        : size_t { 1 };
+    const auto analysisRate =
+        request.sampleRate / static_cast<double> (decimation);
+    std::vector<float> decimated;
+    if (decimation > 1) {
+        decimated.reserve (audio.size() / decimation);
+        for (size_t first = 0; first + decimation <= audio.size();
+             first += decimation) {
+            const auto sum = std::accumulate (
+                audio.begin() + static_cast<std::ptrdiff_t> (first),
+                audio.begin() + static_cast<std::ptrdiff_t> (first + decimation),
+                0.0);
+            decimated.push_back (
+                static_cast<float> (sum / static_cast<double> (decimation)));
+        }
+        audio = std::span<const float> { decimated };
+    }
+    if (audio.empty())
+        return reject ("analyzer.pitch-window",
+                       "pitch analysis requires at least four periods");
 
     const auto sampleCount = static_cast<double> (audio.size());
     const auto mean = std::accumulate (
@@ -463,9 +517,11 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
                        "pitch analysis requires signal above the silence threshold");
 
     const auto minimumLag = static_cast<size_t> (
-        std::max (2.0, std::floor (request.sampleRate / 5000.0)));
+        std::max (2.0, std::floor (
+            analysisRate / configuration.maximumFrequency)));
     const auto maximumLag = static_cast<size_t> (
-        std::min (std::floor (request.sampleRate / 20.0),
+        std::min (std::floor (
+                      analysisRate / configuration.minimumFrequency),
                   static_cast<double> (audio.size() / 4)));
     if (maximumLag <= minimumLag)
         return reject ("analyzer.pitch-window",
@@ -548,7 +604,7 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
         return reject ("analyzer.pitch-window",
                        "pitch correlation peak lies on the search boundary");
 
-    const auto selectedLag = interpolateLag (selected->lag);
+    auto selectedLag = interpolateLag (selected->lag);
     const auto recurrenceBase = std::find_if (
         peaks.begin(), peaks.end(), [&] (const auto& peak) {
             return peak.correlation >= 0.80
@@ -567,8 +623,74 @@ LoadResult<Metrics> analyzeAudioPitch (const AnalysisRequest& request)
         return reject ("analyzer.pitch-ambiguous",
                        "pitch analysis found competing non-periodic correlation peaks");
 
+    if (configuration.decimate && decimation > 1) {
+        const auto originalSampleCount = static_cast<double> (originalAudio.size());
+        const auto originalMean = std::accumulate (
+            originalAudio.begin(), originalAudio.end(), 0.0,
+            [] (const double sum, const float sample) {
+                return sum + static_cast<double> (sample);
+            }) / originalSampleCount;
+        std::vector<double> originalCentered;
+        originalCentered.reserve (originalAudio.size());
+        for (const auto sample : originalAudio)
+            originalCentered.push_back (
+                static_cast<double> (sample) - originalMean);
+
+        const auto refinementFirst = std::max<size_t> (
+            2, (selected->lag - 1) * decimation);
+        const auto refinementLast = std::min (
+            (selected->lag + 1) * decimation,
+            originalAudio.size() / 4);
+        std::vector<double> refinementCorrelation (
+            refinementLast - refinementFirst + 3, 0.0);
+        const auto refinementCorrelationAt = [&] (const size_t lag) -> double& {
+            return refinementCorrelation[lag - (refinementFirst - 1)];
+        };
+        for (auto lag = refinementFirst - 1; lag <= refinementLast + 1; ++lag) {
+            double cross = 0.0;
+            double leftSquares = 0.0;
+            double rightSquares = 0.0;
+            const auto limit = originalCentered.size() - lag;
+            for (size_t sample = 0; sample < limit; ++sample) {
+                const auto left = originalCentered[sample];
+                const auto right = originalCentered[sample + lag];
+                cross += left * right;
+                leftSquares += left * left;
+                rightSquares += right * right;
+            }
+            const auto normalization = std::sqrt (leftSquares * rightSquares);
+            if (normalization > 0.0 && std::isfinite (normalization))
+                refinementCorrelationAt (lag) =
+                    std::clamp (cross / normalization, -1.0, 1.0);
+        }
+        auto refinedPeak = refinementFirst;
+        auto refinedPeakCorrelation = -std::numeric_limits<double>::infinity();
+        for (auto lag = refinementFirst; lag <= refinementLast; ++lag) {
+            const auto current = refinementCorrelationAt (lag);
+            if (current > refinementCorrelationAt (lag - 1)
+                && current > refinementCorrelationAt (lag + 1)
+                && current > refinedPeakCorrelation) {
+                refinedPeak = lag;
+                refinedPeakCorrelation = current;
+            }
+        }
+        if (std::isfinite (refinedPeakCorrelation)) {
+            const auto left = refinementCorrelationAt (refinedPeak - 1);
+            const auto center = refinementCorrelationAt (refinedPeak);
+            const auto right = refinementCorrelationAt (refinedPeak + 1);
+            const auto denominator = left - 2.0 * center + right;
+            const auto correction = denominator == 0.0
+                                  ? 0.0 : 0.5 * (left - right) / denominator;
+            const auto originalSelectedLag =
+                static_cast<double> (refinedPeak)
+                + std::clamp (correction, -0.5, 0.5);
+            selectedLag =
+                originalSelectedLag / static_cast<double> (decimation);
+        }
+    }
+
     const auto center = correlation[selected->lag];
-    const auto frequency = request.sampleRate / selectedLag;
+    const auto frequency = analysisRate / selectedLag;
     const auto midi = 69.0 + 12.0 * std::log2 (frequency / 440.0);
     return selectMetric (
         makeMetrics (frequency, midi, center, true), request.metric);
@@ -584,6 +706,7 @@ AnalyzerRegistry AnalyzerRegistry::withFoundationAnalyzers()
         { "control.step.v1", 1 },
         { "audio.click.v1", 1 },
         { "audio.pitch.v1", 1 },
+        { "audio.pitch.v2", 2 },
     };
     return registry;
 }
@@ -611,7 +734,12 @@ LoadResult<std::vector<MetricResult>> AnalyzerRegistry::analyze (
         return analyzeControlStep (request);
     if (analyzerId == "audio.click.v1")
         return analyzeAudioClick (request);
-    return analyzeAudioPitch (request);
+    if (analyzerId == "audio.pitch.v1")
+        return analyzeAudioPitch (request, pitchV1);
+    if (analyzerId == "audio.pitch.v2")
+        return analyzeAudioPitch (request, pitchV2);
+    return failure<std::vector<MetricResult>> (
+        "analyzer.unknown", "analyzer identifier is not registered at this exact version");
 }
 
 juce::String metricResultsJson (const std::span<const MetricResult> metrics)

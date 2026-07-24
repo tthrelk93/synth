@@ -121,6 +121,8 @@ bool metricBelongsToAnalyzer (const std::string_view analyzer,
     if (analyzer == "audio.pitch.v1")
         return metric == "frequency-hz" || metric == "midi-semitones"
             || metric == "confidence";
+    if (analyzer == "audio.pitch.v2")
+        return metric == "midi-semitones";
     return false;
 }
 
@@ -1203,6 +1205,8 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
                 || (tap != "main" && tap != "phones")
                 || channel == nullptr || ! channel->isInt()
                 || static_cast<int> (*channel) < 0 || static_cast<int> (*channel) > 1
+                || (request.analyzer.id == "audio.pitch.v2"
+                    && (tap != "main" || static_cast<int> (*channel) != 0))
                 || request.analyzer.id == "control.step.v1")
                 return failure<RenderFixture> (
                     "fixture.analysis-input", "audio analysis requires an exact tap and channel");
@@ -1214,7 +1218,8 @@ LoadResult<RenderFixture> loadRenderFixture (const juce::File& sourceRoot,
             if (! readRequiredString (*requestInput, "parameterId", request.parameterId)
                 || ! readRequiredString (*requestInput, "domain", domain)
                 || (domain != "normalized" && domain != "physical")
-                || request.analyzer.id == "audio.click.v1")
+                || request.analyzer.id == "audio.click.v1"
+                || request.analyzer.id == "audio.pitch.v2")
                 return failure<RenderFixture> (
                     "fixture.analysis-input", "control analysis input is unsupported");
             const auto key = parameterKeyForId (request.parameterId);

@@ -1674,6 +1674,43 @@ public:
             }
         }
 
+        beginTest ("version two calibrates four-hertz pitch across sample rate");
+        const auto v2Identity = registry.find ("audio.pitch.v2");
+        expect (v2Identity.ok() && v2Identity.value->id == "audio.pitch.v2"
+                    && v2Identity.value->version == 2,
+                "audio.pitch.v2 must resolve only at version two");
+        constexpr std::array v2SampleRates { 44100.0, 48000.0, 96000.0 };
+        constexpr std::array v2MidiCoordinates { -7.0, 21.0, 45.0, 69.0, 84.0 };
+        for (const auto sampleRate : v2SampleRates) {
+            for (const auto midi : v2MidiCoordinates) {
+                const auto frequency =
+                    440.0 * std::exp2 ((midi - 69.0) / 12.0);
+                const auto sampleCount = static_cast<size_t> (
+                    std::ceil (6.0 * sampleRate / frequency));
+                const auto tone = makeTone (sampleRate, midi, sampleCount);
+                const auto analyzed = registry.analyze (
+                    "audio.pitch.v2",
+                    AnalysisRequest {
+                        .metric = "midi-semitones",
+                        .sampleRate = sampleRate,
+                        .audio = tone,
+                    });
+                expect (analyzed.ok() && analyzed.value.has_value()
+                            && analyzed.value->size() == 1,
+                        "v2 matrix tone must produce one selected metric");
+                if (analyzed.value.has_value() && analyzed.value->size() == 1) {
+                    const auto error =
+                        std::abs (analyzed.value->front().value - midi);
+                    logMessage ("pitch-v2-grid sample-rate="
+                                + juce::String { sampleRate, 0 }
+                                + " midi=" + juce::String { midi, 0 }
+                                + " error-semitones=" + juce::String { error, 9 });
+                    expect (error < 0.005,
+                            "v2 analytic error must remain below 0.005 semitone");
+                }
+            }
+        }
+
         beginTest ("strongest local peak preserves a weak fundamental under a dominant harmonic");
         constexpr double harmonicSampleRate = 48000.0;
         constexpr double fundamentalFrequency = 200.0;
@@ -1745,6 +1782,26 @@ public:
                     },
                     "pitch analyzer settings must be exact and explicit");
         }
+
+        beginTest ("version two reports its exact seven-setting contract");
+        const auto v2Complete = registry.analyze (
+            "audio.pitch.v2",
+            AnalysisRequest { .sampleRate = 48000.0, .audio = concertA });
+        expect (v2Complete.ok() && v2Complete.value.has_value()
+                    && v2Complete.value->size() == 3,
+                "a periodic tone must report all three version-two pitch metrics");
+        if (v2Complete.value.has_value())
+            expect (v2Complete.value->front().settings
+                        == std::map<std::string, std::string> {
+                            { "algorithm", "normalized-autocorrelation-parabolic-v2" },
+                            { "ambiguity-separation", "0.02" },
+                            { "confidence-threshold", "0.80" },
+                            { "lag-range", "4Hz..5000Hz" },
+                            { "minimum-periods", "4" },
+                            { "peak-tie-tolerance", "0.00001" },
+                            { "periodic-multiple-tolerance", "0.05" },
+                        },
+                    "version-two pitch settings must contain exactly seven entries");
 
         beginTest ("fixture pitch analysis propagates the exact render sample rate");
         RenderFixture fixture;
@@ -1904,10 +1961,10 @@ public:
             constexpr std::array composedExpected {
                 std::pair<std::string_view, double> { "osc1-composed", 72.5 },
                 std::pair<std::string_view, double> {
-                    "osc2-composed", 51.863137138648348
+                    "osc2-composed", 51.5
                 },
                 std::pair<std::string_view, double> {
-                    "osc3-composed", 87.343587129994475
+                    "osc3-composed", 87.0
                 },
             };
             verifyFixture ("pit-002-composed-pitch-v1", composedExpected);
@@ -1945,6 +2002,30 @@ public:
             "analyzer.pitch-ambiguous");
         expectDiagnostic (registry.analyze (
             "audio.pitch.v1", AnalysisRequest { .sampleRate = 48000.0, .audio = nonFinite }),
+            "analyzer.non-finite");
+
+        beginTest ("version two pitch rejection diagnostics remain stable");
+        const auto v2BoundaryFrequency = 12000.0 / std::floor (12000.0 / 5000.0);
+        const auto v2BoundaryTone = makeTone (
+            48000.0, 69.0 + 12.0 * std::log2 (v2BoundaryFrequency / 440.0), 4096);
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2", AnalysisRequest { .sampleRate = 0.0, .audio = concertA }),
+            "analyzer.sample-rate");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2", AnalysisRequest { .sampleRate = 48000.0, .audio = silence }),
+            "analyzer.pitch-silence");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2", AnalysisRequest { .sampleRate = 48000.0, .audio = shortTone }),
+            "analyzer.pitch-window");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2",
+            AnalysisRequest { .sampleRate = 48000.0, .audio = v2BoundaryTone }),
+            "analyzer.pitch-window");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2", AnalysisRequest { .sampleRate = 48000.0, .audio = ambiguous }),
+            "analyzer.pitch-ambiguous");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2", AnalysisRequest { .sampleRate = 48000.0, .audio = nonFinite }),
             "analyzer.non-finite");
     }
 
@@ -2297,6 +2378,60 @@ public:
             rightAudioRequest, controlRequest);
         expectFixtureValid (sourceRoot, validText);
         expectFixtureValid (sourceRoot, controlText);
+
+        beginTest ("version two pitch render requests require exact bindings");
+        const auto v2PitchRequest = R"JSON({"requestId": "main-pitch-v2", "version": 1,
+     "analyzer": {"id": "audio.pitch.v2", "version": 2},
+     "metric": "midi-semitones",
+     "input": {"kind": "audio", "tap": "main", "channel": 0},
+     "event": {"originSample": 0, "windowSamples": 2048}})JSON";
+        const auto v2PitchText = validText.replaceFirstOccurrenceOf (
+            rightAudioRequest, v2PitchRequest);
+        expectFixtureValid (sourceRoot, v2PitchText);
+        expectFixtureDiagnostic (
+            sourceRoot,
+            v2PitchText.replaceFirstOccurrenceOf (
+                R"("id": "audio.pitch.v2", "version": 2)",
+                R"("id": "audio.pitch.v2", "version": 1)"),
+            "fixture.analysis-analyzer");
+        expectFixtureDiagnostic (
+            sourceRoot,
+            v2PitchText.replaceFirstOccurrenceOf (
+                R"("metric": "midi-semitones")",
+                R"("metric": "frequency-hz")"),
+            "fixture.analysis-metric");
+        expectFixtureDiagnostic (
+            sourceRoot,
+            v2PitchText.replaceFirstOccurrenceOf (
+                v2PitchRequest,
+                juce::String { v2PitchRequest }.replaceFirstOccurrenceOf (
+                    R"("tap": "main", "channel": 0)",
+                    R"("tap": "phones", "channel": 0)")),
+            "fixture.analysis-input");
+        expectFixtureDiagnostic (
+            sourceRoot,
+            v2PitchText.replaceFirstOccurrenceOf (
+                v2PitchRequest,
+                juce::String { v2PitchRequest }.replaceFirstOccurrenceOf (
+                    R"("tap": "main", "channel": 0)",
+                    R"("tap": "main", "channel": 1)")),
+            "fixture.analysis-input");
+        expectFixtureDiagnostic (
+            sourceRoot,
+            v2PitchText.replaceFirstOccurrenceOf (
+                v2PitchRequest,
+                juce::String { v2PitchRequest }.replaceFirstOccurrenceOf (
+                    R"("originSample": 0, "windowSamples": 2048)",
+                    R"("originSample": 1, "windowSamples": 2047)")),
+            "fixture.analysis-event");
+        expectFixtureDiagnostic (
+            sourceRoot,
+            v2PitchText.replaceFirstOccurrenceOf (
+                v2PitchRequest,
+                juce::String { v2PitchRequest }.replaceFirstOccurrenceOf (
+                    R"("originSample": 0, "windowSamples": 2048)",
+                    R"("originSample": 0)")),
+            "fixture.analysis-event");
 
         beginTest ("control analysis endpoints come from restored state and ordered automation");
         expectFixtureDiagnostic (sourceRoot, controlText.replaceFirstOccurrenceOf (

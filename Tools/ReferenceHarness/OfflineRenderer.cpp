@@ -666,7 +666,8 @@ std::optional<std::string_view> analyzerMetricUnit (
             return "dB";
         if (metric == "finite-count")
             return "count";
-    } else if (analyzer == "audio.pitch.v1") {
+    } else if (analyzer == "audio.pitch.v1"
+               || analyzer == "audio.pitch.v2") {
         if (metric == "frequency-hz")
             return "Hz";
         if (metric == "midi-semitones")
@@ -686,11 +687,12 @@ LoadResult<bool> validateRenderMetricBindings (
     const auto validateSection = [&] (
         const std::vector<GateDefinition>& gates) -> std::optional<Diagnostic> {
         for (const auto& gate : gates) {
-            if (gate.analyzer.id == "audio.pitch.v1"
+            if ((gate.analyzer.id == "audio.pitch.v1"
+                 || gate.analyzer.id == "audio.pitch.v2")
                 && ! gate.renderMetric.has_value())
                 return Diagnostic {
                     "acceptance.metric-binding",
-                    "audio.pitch.v1 gates require an exact render metric binding",
+                    "audio.pitch gates require an exact render metric binding",
                 };
             if (! gate.renderMetric.has_value())
                 continue;
@@ -846,6 +848,7 @@ LoadResult<ValidatedInputs> validateInputs (const juce::File& indexPath,
     const auto analyzers = AnalyzerRegistry::withFoundationAnalyzers();
     for (const auto id : {
              "signal.stats.v1", "control.step.v1", "audio.click.v1", "audio.pitch.v1",
+             "audio.pitch.v2",
          }) {
         const auto analyzer = analyzers.find (id);
         if (! analyzer.ok())
