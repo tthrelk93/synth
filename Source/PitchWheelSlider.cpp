@@ -14,7 +14,7 @@ PitchWheelSlider::PitchWheelSlider() {
     setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     setColour(juce::Slider::trackColourId, accentColour.withAlpha(0.55f));
     setColour(juce::Slider::thumbColourId, accentColour.withAlpha(0.9f));
-    setRange(-5.0, 5.0, 0.01);
+    setRange(-7.0, 7.0, 0.01);
     setValue(0.0);
 
     // Set the custom look and feel

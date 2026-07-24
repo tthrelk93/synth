@@ -323,11 +323,11 @@ private:
 
     float sanitizeParameterValue (ParameterRegistry::Key key, float value) const noexcept;
     float composeMusicalFrequency (
-        float noteFrequency,
+        int midiNote,
         int rangeIndex,
         int masterTuneIndex,
         int oscillatorOffsetIndex,
-        double pitchWheelRatio,
+        double pitchWheelNormalized,
         double modulationRatio,
         size_t oscillatorIndex) noexcept;
     ParameterSnapshot buildTypedSnapshot (

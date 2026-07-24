@@ -5,6 +5,7 @@
 #include "ParameterSnapshotCapture.h"
 
 #include "PitchDomain.h"
+#include "PitchWheelSlider.h"
 
 #include "ParameterBinding.h"
 
@@ -3898,6 +3899,12 @@ void testParameterBindingContract (TestContext& test)
                      && pitchReset < pitchEnd,
                  "pitch wheel spring-back value must remain inside its single drag gesture");
 
+    PitchWheelSlider pitchWheel;
+    test.expect (pitchWheel.getMinimum() == -7.0
+                     && pitchWheel.getMaximum() == 7.0
+                     && pitchWheel.getInterval() == 0.01,
+                 "pitch wheel component must display the centered seven-semitone range");
+
     struct ParameterEventListener final : juce::AudioProcessorParameter::Listener
     {
         void parameterValueChanged (int, float) override { events.emplace_back ("value"); }
@@ -3956,9 +3963,12 @@ void testParameterBindingContract (TestContext& test)
     testSliderMapping (ParameterRegistry::Key::filterCutoff, -5.0, 5.0, 0.01,
                        DisplayMapping::componentRange, 1.0f, 5.0, -5.0, 0.0f,
                        "cutoff binding must preserve -5 through +5 display");
-    testSliderMapping (ParameterRegistry::Key::pitchWheelValue, -5.0, 5.0, 0.01,
-                       DisplayMapping::componentRange, 0.5f, 0.0, 5.0, 1.0f,
-                       "pitch wheel binding must preserve -5 through +5 display");
+    testSliderMapping (ParameterRegistry::Key::pitchWheelValue, -7.0, 7.0, 0.01,
+                       DisplayMapping::componentRange, 0.5f, 0.0, 7.0, 1.0f,
+                       "Pitch Wheel binding must preserve center and positive endpoint");
+    testSliderMapping (ParameterRegistry::Key::pitchWheelValue, -7.0, 7.0, 0.01,
+                       DisplayMapping::componentRange, 0.0f, -7.0, 0.0, 0.5f,
+                       "Pitch Wheel binding must preserve negative endpoint and center");
     testSliderMapping (ParameterRegistry::Key::filterEmphasis, 0.0, 10.0, 1.0,
                        DisplayMapping::componentRange, 10.0f, 10.0, 3.0, 3.0f,
                        "panel-index binding must preserve exact 0 through 10 steps");
@@ -4154,8 +4164,8 @@ double renderProcessorPitch (const int oscillator,
                              std::uint64_t* invalidDiagnosticDelta = nullptr)
 {
     constexpr double sampleRate = 48000.0;
-    constexpr int totalSamples = 16384;
-    constexpr int discardedSamples = 4096;
+    constexpr int totalSamples = 65536;
+    constexpr int discardedSamples = 8192;
 
     MoogMiniAudioProcessor processor;
     setParameter (processor, "osc1OnOff", oscillator == 1 ? 1.0f : 0.0f, test);
@@ -4216,6 +4226,26 @@ double renderProcessorPitch (const int oscillator,
 
 void testPitchDomainContract (TestContext& test)
 {
+    bool midiCoordinatesExact = true;
+    bool adjacentMidiRatiosExact = true;
+    PitchDomain::Checked<PitchDomain::Hertz> previousMidiHz;
+    for (int midi = 17; midi <= 60; ++midi) {
+        const auto note = PitchDomain::midiNote (midi);
+        const auto noteHz = note.valid ? PitchDomain::toHertz (note.value)
+                                       : PitchDomain::Checked<PitchDomain::Hertz> {};
+        midiCoordinatesExact = midiCoordinatesExact
+            && note.valid && note.value.value == midi - 69 && noteHz.valid;
+        if (previousMidiHz.valid)
+            adjacentMidiRatiosExact = adjacentMidiRatiosExact
+                && std::abs (noteHz.value.value / previousMidiHz.value.value
+                             - std::exp2 (1.0 / 12.0)) < 1.0e-12;
+        previousMidiHz = noteHz;
+    }
+    test.expect (midiCoordinatesExact,
+                 "MIDI 17 through 60 must retain exact semitone coordinates");
+    test.expect (adjacentMidiRatiosExact,
+                 "all 43 adjacent MIDI notes must retain equal-tempered semitone ratios");
+
     constexpr std::array expectedOffsets {
         -8.0, -7.0, -6.0, -5.0, -4.0, -3.0, -2.0, -1.0, 0.0,
          1.0,  2.0,  3.0,  4.0,  5.0,  6.0,  7.0, 8.0
@@ -4313,6 +4343,29 @@ void testPitchDomainContract (TestContext& test)
                             PitchDomain::range (3).value).valid,
                  "invalid wheel and calibration inputs must reject");
 
+    const auto neutralRange = PitchDomain::range (3);
+    const auto neutralTune = PitchDomain::masterTune (5);
+    const auto neutralOffset = PitchDomain::oscillatorOffset (8);
+    const auto neutralWheel = PitchDomain::pitchWheel (0.5);
+    const auto neutralCalibration = PitchDomain::calibration (
+        PitchDomain::CalibrationProfile::baseline, neutralRange.value);
+    bool neutralMidiCompositionsValid = true;
+    for (int midi = 0; midi <= 127; ++midi) {
+        const auto note = PitchDomain::midiNote (midi);
+        const auto composedNeutral = PitchDomain::compose ({
+            note.value, neutralRange.value.semitones, neutralTune.value,
+            neutralOffset.value, neutralWheel.value, neutralCalibration.value,
+            PitchDomain::Semitones { 0.0 }
+        });
+        neutralMidiCompositionsValid = neutralMidiCompositionsValid
+            && note.valid && neutralRange.valid && neutralTune.valid
+            && neutralOffset.valid && neutralWheel.valid && neutralCalibration.valid
+            && composedNeutral.valid && std::isfinite (composedNeutral.hertz.value)
+            && composedNeutral.hertz.value > 0.0;
+    }
+    test.expect (neutralMidiCompositionsValid,
+                 "MIDI 0 through 127 must compose to finite positive neutral frequencies");
+
     constexpr std::array expectedMasterTune {
         -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5
     };
@@ -4347,46 +4400,75 @@ void testPitchDomainContract (TestContext& test)
     test.expect (ratio.valid
                      && std::abs (std::exp2 (ratio.value.value / 12.0) - 1.25) < 1.0e-12,
                  "positive compatibility ratios must round-trip");
-    test.expect (! PitchDomain::oscillatorOffset (-1).valid
+    test.expect (! PitchDomain::midiNote (-1).valid
+                     && ! PitchDomain::midiNote (128).valid
+                     && ! PitchDomain::range (-1).valid
+                     && ! PitchDomain::range (6).valid
+                     && ! PitchDomain::masterTune (-1).valid
+                     && ! PitchDomain::oscillatorOffset (-1).valid
                      && ! PitchDomain::oscillatorOffset (17).valid
                      && ! PitchDomain::masterTune (11).valid
+                     && ! PitchDomain::pitchWheel (std::numeric_limits<double>::infinity()).valid
                      && ! PitchDomain::ratioToSemitones (0.0).valid
                      && ! PitchDomain::fromHertz (
                             std::numeric_limits<double>::infinity()).valid,
-                 "invalid pitch inputs must reject without a fabricated value");
+                 "invalid note, range, tune, offset, wheel, and ratio inputs must reject");
 
-    const auto osc1Center = renderProcessorPitch (1, 8, 69, test);
-    const auto osc2Minus8 = renderProcessorPitch (2, 0, 69, test);
-    const auto osc2Center = renderProcessorPitch (2, 8, 69, test);
-    const auto osc2Plus8 = renderProcessorPitch (2, 16, 69, test);
-    const auto osc3Minus8 = renderProcessorPitch (3, 0, 69, test);
-    const auto osc3Center = renderProcessorPitch (3, 8, 69, test);
-    const auto osc3Plus8 = renderProcessorPitch (3, 16, 69, test);
-    const auto semitoneRatio = std::exp2 (8.0 / 12.0);
-    test.expect (std::abs (osc2Minus8 / osc1Center - 1.0 / semitoneRatio) < 0.02
-                     && std::abs (osc2Center / osc1Center - 1.0) < 0.02
-                     && std::abs (osc2Plus8 / osc1Center - semitoneRatio) < 0.02,
-                 "Oscillator 2 output selector must be centered at zero");
-    test.expect (std::abs (osc3Minus8 / osc1Center - 1.0 / semitoneRatio) < 0.02
-                     && std::abs (osc3Center / osc1Center - 1.0) < 0.02
-                     && std::abs (osc3Plus8 / osc1Center - semitoneRatio) < 0.02,
-                 "Oscillator 3 output selector must be centered at zero");
+    constexpr std::array wheelOutputs {
+        std::pair { 0.0f, -7.0 },
+        std::pair { 0.25f, -3.5 },
+        std::pair { 0.5f, 0.0 },
+        std::pair { 0.75f, 3.5 },
+        std::pair { 1.0f, 7.0 },
+    };
+    for (const auto& [normalized, bend] : wheelOutputs) {
+        const auto rendered = renderProcessorPitch (
+            1, 8, 45, test, 3, 5, normalized);
+        const auto expected =
+            440.0 * std::exp2 ((45.0 + bend - 69.0) / 12.0);
+        test.expect (std::abs (rendered / expected - 1.0) < 0.02,
+                     "processor output must follow each governed wheel anchor");
+    }
 
     const auto composedProcessorPitch =
         renderProcessorPitch (2, 5, 64, test, 2, 3, 0.75f);
-    const auto expectedComposedMidi =
-        64.0 - 12.0 - 1.0 - 3.0 + 12.0 * std::log2 (1.25);
+    const auto expectedComposedMidi = 64.0 - 12.0 - 1.0 - 3.0 + 3.5;
     const auto expectedComposedFrequency =
         440.0 * std::exp2 ((expectedComposedMidi - 69.0) / 12.0);
     test.expect (
         std::abs (composedProcessorPitch / expectedComposedFrequency - 1.0) < 0.02,
-        "nonzero processor pitch must compose note, range, tune, offset, and bend exactly once");
+        "processor pitch must apply the exact linear semitone bend once");
+
+    struct RepresentativeOscillatorCase {
+        int oscillator;
+        int offsetIndex;
+        int midiNote;
+        int rangeIndex;
+        int masterTuneIndex;
+        float normalizedWheel;
+        double expectedMidi;
+    };
+    constexpr std::array representativeOscillatorCases {
+        RepresentativeOscillatorCase { 1, 8, 64, 2, 3, 0.75f, 54.5 },
+        RepresentativeOscillatorCase { 2, 5, 64, 2, 3, 0.75f, 51.5 },
+        RepresentativeOscillatorCase { 3, 11, 50, 4, 8, 0.25f, 63.0 },
+    };
+    for (const auto& representative : representativeOscillatorCases) {
+        const auto rendered = renderProcessorPitch (
+            representative.oscillator, representative.offsetIndex,
+            representative.midiNote, test, representative.rangeIndex,
+            representative.masterTuneIndex, representative.normalizedWheel);
+        const auto expected = 440.0 * std::exp2 (
+            (representative.expectedMidi - 69.0) / 12.0);
+        test.expect (std::abs (rendered / expected - 1.0) < 0.02,
+                     "each oscillator must compose its representative nonzero pitch factors");
+    }
 
     std::uint64_t invalidDiagnosticDelta = 0;
     const auto invalidFallbackPitch = renderProcessorPitch (
         2, 8, 69, test, 3, 5, 0.5f, true, &invalidDiagnosticDelta);
     test.expect (std::isfinite (invalidFallbackPitch)
-                     && std::abs (invalidFallbackPitch / osc2Center - 1.0) < 0.02
+                     && std::abs (invalidFallbackPitch / 440.0 - 1.0) < 0.02
                      && invalidDiagnosticDelta == 1,
                  "invalid processor pitch input must use the declared fallback and diagnose once");
 
