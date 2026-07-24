@@ -4161,7 +4161,8 @@ double renderProcessorPitch (const int oscillator,
                              const int masterTuneIndex = 5,
                              const float pitchWheel = 0.5f,
                              const bool invalidateMasterTune = false,
-                             std::uint64_t* invalidDiagnosticDelta = nullptr)
+                             std::uint64_t* invalidDiagnosticDelta = nullptr,
+                             const bool oscillator3KeyboardControl = true)
 {
     constexpr double sampleRate = 48000.0;
     constexpr int totalSamples = 65536;
@@ -4195,7 +4196,8 @@ double renderProcessorPitch (const int oscillator,
     setParameter (processor, "oscModSwitch", 0.0f, test);
     setParameter (processor, "noiseOnOffSwitch", 0.0f, test);
     setParameter (processor, "extInputVolSwitch", 0.0f, test);
-    setParameter (processor, "osc3CtrlMode", 1.0f, test);
+    setParameter (processor, "osc3CtrlMode", oscillator3KeyboardControl ? 1.0f : 0.0f,
+                  test);
 
     if (invalidateMasterTune)
         rawParameterForTest (processor, ParameterRegistry::Key::tune)
@@ -4471,6 +4473,48 @@ void testPitchDomainContract (TestContext& test)
                      && std::abs (invalidFallbackPitch / 440.0 - 1.0) < 0.02
                      && invalidDiagnosticDelta == 1,
                  "invalid processor pitch input must use the declared fallback and diagnose once");
+
+    MoogMiniAudioProcessor emptyMidiOsc3Processor;
+    setParameter (emptyMidiOsc3Processor, "osc1OnOff", 0.0f, test);
+    setParameter (emptyMidiOsc3Processor, "osc2OnOff", 0.0f, test);
+    setParameter (emptyMidiOsc3Processor, "osc3OnOff", 1.0f, test);
+    setParameter (emptyMidiOsc3Processor, "osc3Waveform", 0.0f, test);
+    setParameter (emptyMidiOsc3Processor, "osc3Range", 3.0f / 5.0f, test);
+    setParameter (emptyMidiOsc3Processor, "tune", 0.5f, test);
+    setParameter (emptyMidiOsc3Processor, "osc3Freq", 0.5f, test);
+    setParameter (emptyMidiOsc3Processor, "pitchWheelValue", 0.5f, test);
+    setParameter (emptyMidiOsc3Processor, "osc3Vol", 1.0f, test);
+    setParameter (emptyMidiOsc3Processor, "outputVolKnob", 1.0f, test);
+    setParameter (emptyMidiOsc3Processor, "loudnessSustainLevelKnob", 1.0f, test);
+    setParameter (emptyMidiOsc3Processor, "filterCutoff", 1.0f, test);
+    setParameter (emptyMidiOsc3Processor, "oscModSwitch", 0.0f, test);
+    setParameter (emptyMidiOsc3Processor, "noiseOnOffSwitch", 0.0f, test);
+    setParameter (emptyMidiOsc3Processor, "extInputVolSwitch", 0.0f, test);
+    setParameter (emptyMidiOsc3Processor, "osc3CtrlMode", 1.0f, test);
+    constexpr int emptyMidiBlockSize = 128;
+    emptyMidiOsc3Processor.setRateAndBufferSizeDetails (48000.0, emptyMidiBlockSize);
+    emptyMidiOsc3Processor.prepareToPlay (48000.0, emptyMidiBlockSize);
+    juce::AudioBuffer<float> emptyMidiOsc3Buffer (
+        emptyMidiOsc3Processor.getTotalNumOutputChannels(), emptyMidiBlockSize);
+    emptyMidiOsc3Buffer.clear();
+    juce::MidiBuffer emptyMidi;
+    const auto emptyMidiDiagnosticBefore =
+        emptyMidiOsc3Processor.getInvalidParameterValueCount();
+    emptyMidiOsc3Processor.processBlock (emptyMidiOsc3Buffer, emptyMidi);
+    const auto emptyMidiDiagnosticDelta =
+        emptyMidiOsc3Processor.getInvalidParameterValueCount() - emptyMidiDiagnosticBefore;
+    test.expect (isFinite (emptyMidiOsc3Buffer) && emptyMidiDiagnosticDelta == 1,
+                 "empty-MIDI keyboard-controlled Oscillator 3 must diagnose invalid pitch once");
+    emptyMidiOsc3Processor.releaseResources();
+
+    const auto osc3KeyboardDisabledPitch = renderProcessorPitch (
+        3, 11, 45, test, 3, 5, 1.0f, false, nullptr, false);
+    const auto expectedOsc3KeyboardDisabledPitch =
+        440.0 * std::exp2 (3.0 / 12.0);
+    test.expect (std::isfinite (osc3KeyboardDisabledPitch)
+                     && std::abs (osc3KeyboardDisabledPitch
+                                  / expectedOsc3KeyboardDisabledPitch - 1.0) < 0.02,
+                 "keyboard-control-disabled Oscillator 3 must ignore note and Pitch Wheel input");
 
     const auto processorSource =
         legacyFixtureFile ("Source/PluginProcessor.cpp").loadFileAsString();

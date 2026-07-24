@@ -329,7 +329,8 @@ private:
         int oscillatorOffsetIndex,
         double pitchWheelNormalized,
         double modulationRatio,
-        size_t oscillatorIndex) noexcept;
+        size_t oscillatorIndex,
+        bool& invalidMusicalCompositionDiagnosed) noexcept;
     ParameterSnapshot buildTypedSnapshot (
         const std::array<float, ParameterRegistry::parameterCount>& values,
         StateContract::ContourContract contract,

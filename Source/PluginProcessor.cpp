@@ -97,7 +97,8 @@ float MoogMiniAudioProcessor::composeMusicalFrequency (
     const int oscillatorOffsetIndex,
     const double pitchWheelNormalized,
     const double modulationRatio,
-    const size_t oscillatorIndex) noexcept
+    const size_t oscillatorIndex,
+    bool& invalidMusicalCompositionDiagnosed) noexcept
 {
     const auto note = PitchDomain::midiNote (midiNote);
     const auto range = PitchDomain::range (rangeIndex);
@@ -124,13 +125,19 @@ float MoogMiniAudioProcessor::composeMusicalFrequency (
         .modulation = modulation.value,
     }) : PitchDomain::Result {};
     if (! result.valid) {
-        invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+        if (! invalidMusicalCompositionDiagnosed) {
+            invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+            invalidMusicalCompositionDiagnosed = true;
+        }
         return oscillatorIndex < lastValidMusicalFrequency.size()
                  ? lastValidMusicalFrequency[oscillatorIndex] : 440.0f;
     }
     const auto value = static_cast<float> (result.hertz.value);
     if (! std::isfinite (value) || value <= 0.0f) {
-        invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+        if (! invalidMusicalCompositionDiagnosed) {
+            invalidParameterValueCount.fetch_add (1, std::memory_order_relaxed);
+            invalidMusicalCompositionDiagnosed = true;
+        }
         return lastValidMusicalFrequency[oscillatorIndex];
     }
     lastValidMusicalFrequency[oscillatorIndex] = value;
@@ -556,6 +563,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                            ? externalInput.getReadPointer(0) : nullptr;
     const float* inputRight = externalInput.getNumChannels() > 1
                             ? externalInput.getReadPointer(1) : inputLeft;
+    bool invalidMusicalCompositionDiagnosed = false;
 
     for (int sampleIndex = 0; sampleIndex < buffer.getNumSamples(); ++sampleIndex)
     {
@@ -636,7 +644,8 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                 osc3SampleRaw = osc3.processNextSampleAtFrequency (
                     composeMusicalFrequency (
                         osc3MidiNote, rangeSelectionOsc3, tuneSelectionOsc1,
-                        freqSelectionOsc3, osc3PitchWheelNormalized, 1.0, 2));
+                        freqSelectionOsc3, osc3PitchWheelNormalized, 1.0, 2,
+                        invalidMusicalCompositionDiagnosed));
             } else {
                 osc3SampleRaw = osc3.processNextSample(0.0f, osc3CtrlMode);
             }
@@ -665,7 +674,8 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                 osc1Sample = osc1.processNextSampleAtFrequency (
                     composeMusicalFrequency (
                         currentNoteNumber, rangeSelectionOsc1, tuneSelectionOsc1, 8,
-                        static_cast<double> (pitchWheelValue), legacyModulationRatio, 0));
+                        static_cast<double> (pitchWheelValue), legacyModulationRatio, 0,
+                        invalidMusicalCompositionDiagnosed));
             } else {
                 osc1Sample = osc1.processNextSample(oscModAmount, false);
             }
@@ -681,7 +691,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
                     composeMusicalFrequency (
                         currentNoteNumber, rangeSelectionOsc2, tuneSelectionOsc1,
                         freqSelectionOsc2, static_cast<double> (pitchWheelValue),
-                        legacyModulationRatio, 1));
+                        legacyModulationRatio, 1, invalidMusicalCompositionDiagnosed));
             } else {
                 osc2Sample = osc2.processNextSample(oscModAmount, false);
             }
