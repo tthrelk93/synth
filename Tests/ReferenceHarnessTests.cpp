@@ -4348,6 +4348,43 @@ public:
                     indexedFixture.id + " bound evidence must materialize");
             if (! files.ok())
                 return;
+            if (fixture.value->id.starts_with ("pit-003-pit-004-pitch-matrix-")) {
+                for (const auto adjacentRequest : {
+                         std::string_view { "note-adjacent-lower" },
+                         std::string_view { "note-adjacent-upper" },
+                     }) {
+                    const auto recordCount = std::count_if (
+                        records.value->begin(), records.value->end(),
+                        [&] (const auto& record) {
+                            return record.provenance.requestId == adjacentRequest;
+                        });
+                    const auto requestIsBound = [&] {
+                        for (const auto* section : {
+                                 &acceptance.value->hardSoftware,
+                                 &acceptance.value->published,
+                                 &acceptance.value->derivedSoftware,
+                                 &acceptance.value->measuredHardware,
+                                 &acceptance.value->performance,
+                             })
+                            if (std::any_of (
+                                    section->begin(), section->end(),
+                                    [&] (const auto& gate) {
+                                        return gate.renderMetric.has_value()
+                                            && gate.renderMetric->fixtureId == fixture.value->id
+                                            && gate.renderMetric->requestId == adjacentRequest;
+                                    }))
+                                return true;
+                        return false;
+                    }();
+                    expectEquals (
+                        static_cast<int> (recordCount), 1,
+                        fixture.value->id + " " + std::string { adjacentRequest }
+                            + " must remain in the complete render metrics artifact");
+                    expect (! requestIsBound,
+                            fixture.value->id + " " + std::string { adjacentRequest }
+                                + " must remain review-only and absent from gate bindings");
+                }
+            }
             const auto artifactFile = rendersRoot.getChildFile (
                 fixture.value->id).getChildFile ("metrics.json");
             for (const auto& gate : acceptance.value->derivedSoftware) {
@@ -4582,6 +4619,56 @@ public:
                 "complete release-verification evidence report must build");
         if (! completeReport.ok())
             return;
+        expectEquals (completeReport.value->requirements.size(), size_t { 127 });
+        expectEquals (completeReport.value->gateResults.size(), size_t { 164 });
+        expect (! completeReport.value->releaseReady,
+                "complete software evidence must preserve the open release boundary");
+        expectRequirement (
+            *completeReport.value, "PIT-003", Status::awaitingApprovedReference);
+        expectRequirement (*completeReport.value, "PIT-004", Status::pass);
+        const auto requirementStatusCount = [&] (const Status status) {
+            return static_cast<size_t> (std::count_if (
+                completeReport.value->requirements.begin(),
+                completeReport.value->requirements.end(),
+                [status] (const auto& requirement) {
+                    return requirement.status == status;
+                }));
+        };
+        expectEquals (requirementStatusCount (Status::pass), size_t { 17 });
+        expectEquals (requirementStatusCount (Status::notRun), size_t { 91 });
+        expectEquals (
+            requirementStatusCount (Status::awaitingApprovedReference), size_t { 19 });
+        expectEquals (requirementStatusCount (Status::fail), size_t { 0 });
+        std::vector<std::string> expectedPitchGateIds = expectedPit003;
+        expectedPitchGateIds.insert (
+            expectedPitchGateIds.end(), expectedPit004.begin(), expectedPit004.end());
+        expectEquals (expectedPitchGateIds.size(), size_t { 54 });
+        for (const auto& gateId : expectedPitchGateIds) {
+            const auto gate = std::find_if (
+                completeReport.value->gateResults.begin(),
+                completeReport.value->gateResults.end(),
+                [&] (const auto& candidate) {
+                    return candidate.id == gateId;
+                });
+            const auto lowercaseHash =
+                gate != completeReport.value->gateResults.end()
+                && gate->artifactSha256.size() == 64
+                && std::all_of (
+                    gate->artifactSha256.begin(), gate->artifactSha256.end(),
+                    [] (const auto character) {
+                        return (character >= '0' && character <= '9')
+                            || (character >= 'a' && character <= 'f');
+                    });
+            expect (
+                gate != completeReport.value->gateResults.end()
+                    && gate->status == Status::pass
+                    && gate->reasonCode == "acceptance.metric-pass"
+                    && gate->artifactPath.starts_with ("candidate/renders/")
+                    && gate->artifactPath.ends_with ("/metrics.json")
+                    && lowercaseHash,
+                gateId + " must pass through one complete render metrics artifact "
+                         "with a lowercase SHA-256");
+        }
         const TemporaryDirectory reportRoot { "model-d-requirement-report-root" };
         expect (reportRoot.isOwned(), "report root must be owned");
         if (! reportRoot.isOwned())
@@ -4692,9 +4779,9 @@ public:
             juce::File::findFiles, true, "*");
         const auto candidateFilesB = cliB.findChildFiles (
             juce::File::findFiles, true, "*");
-        expectEquals (candidateFilesA.size(), 32,
+        expectEquals (candidateFilesA.size(), 50,
                       "candidate A must contain the exact governed inventory");
-        expectEquals (candidateFilesB.size(), 32,
+        expectEquals (candidateFilesB.size(), 50,
                       "candidate B must contain the exact governed inventory");
         for (const auto& fileA : candidateFilesA) {
             const auto relative = fileA.getRelativePathFrom (cliA);
@@ -4751,11 +4838,179 @@ public:
 
         beginTest ("release verification rejects coordinated report forgery");
         expectDiagnostic (verifyReleaseReady (cliReportA), "release.not-ready");
-        const auto expectReportMutation = [&] (juce::var mutation, const juce::String& name) {
+        const auto expectReportMutation = [&] (
+            juce::var mutation,
+            const juce::String& name,
+            const std::string_view diagnostic = "release.report-mismatch") {
             const auto file = cliA.getChildFile (name + ".json");
             file.replaceWithText (canonicalJson (mutation), false, false, "\n");
-            expectDiagnostic (verifyReleaseReady (file), "release.report-mismatch");
+            expectDiagnostic (verifyReleaseReady (file), diagnostic);
         };
+        const auto findReportGate = [] (
+            juce::var& payload,
+            const std::string_view id) -> juce::DynamicObject* {
+            auto* gates = payload.getDynamicObject()->getProperty ("gates").getArray();
+            const auto found = std::find_if (
+                gates->begin(), gates->end(),
+                [id] (const auto& gate) {
+                    return gate.getDynamicObject()->getProperty ("id").toString().toStdString()
+                        == id;
+                });
+            return found == gates->end() ? nullptr : found->getDynamicObject();
+        };
+        const auto findReportRequirement = [] (
+            juce::var& payload,
+            const std::string_view id) -> juce::DynamicObject* {
+            auto* rows = payload.getDynamicObject()->getProperty ("requirements").getArray();
+            const auto found = std::find_if (
+                rows->begin(), rows->end(),
+                [id] (const auto& row) {
+                    return row.getDynamicObject()->getProperty ("id").toString().toStdString()
+                        == id;
+                });
+            return found == rows->end() ? nullptr : found->getDynamicObject();
+        };
+
+        auto outOfAllowanceV2 = juce::JSON::fromString (cliReportA.loadFileAsString());
+        auto* outOfAllowanceGate = findReportGate (
+            outOfAllowanceV2, "pit003.sr44100.range32");
+        expect (outOfAllowanceGate != nullptr,
+                "v2 value probe requires an actual passing PIT-003 gate");
+        if (outOfAllowanceGate != nullptr) {
+            auto* metric = outOfAllowanceGate->getProperty ("metric").getDynamicObject();
+            expect (metric != nullptr, "v2 value probe requires an actual metric payload");
+            if (metric != nullptr)
+                metric->setProperty (
+                    "value", static_cast<double> (metric->getProperty ("value")) + 1.0);
+            expectReportMutation (
+                outOfAllowanceV2, "out-of-allowance-v2", "release.gate-evidence");
+        }
+
+        auto exchangedAnalyzers = juce::JSON::fromString (cliReportA.loadFileAsString());
+        auto* v1Gate = findReportGate (exchangedAnalyzers, "pit001.osc2.minus8");
+        auto* v2Gate = findReportGate (
+            exchangedAnalyzers, "pit003.sr44100.osc2.minus8");
+        expect (v1Gate != nullptr && v2Gate != nullptr,
+                "analyzer exchange probe requires actual passing v1 and v2 gates");
+        if (v1Gate != nullptr && v2Gate != nullptr) {
+            auto* v1Metric = v1Gate->getProperty ("metric").getDynamicObject();
+            auto* v2Metric = v2Gate->getProperty ("metric").getDynamicObject();
+            expect (v1Metric != nullptr && v2Metric != nullptr,
+                    "analyzer exchange probe requires both actual metric payloads");
+            if (v1Metric != nullptr && v2Metric != nullptr) {
+                const auto v1Analyzer = v1Metric->getProperty ("analyzer").clone();
+                const auto v2Analyzer = v2Metric->getProperty ("analyzer").clone();
+                v1Metric->setProperty ("analyzer", v2Analyzer);
+                v2Metric->setProperty ("analyzer", v1Analyzer);
+                expectReportMutation (
+                    exchangedAnalyzers, "exchanged-v1-v2-analyzers",
+                    "release.gate-evidence");
+            }
+        }
+
+        const auto expectCandidateJsonMutation =
+            [&]<typename Mutation> (
+                const juce::String& relativePath,
+                const juce::String& name,
+                Mutation mutation,
+                const std::string_view diagnostic) {
+                const auto candidate = reportRoot.directory.getChildFile (name);
+                expect (cliA.copyDirectoryTo (candidate),
+                        name + " candidate mutation fixture must copy");
+                const auto artifact = candidate.getChildFile (relativePath);
+                auto payload = juce::JSON::fromString (artifact.loadFileAsString());
+                expect (! payload.isVoid(), name + " candidate artifact must parse");
+                if (payload.isVoid())
+                    return;
+                mutation (payload);
+                expect (artifact.replaceWithText (
+                            canonicalJson (payload), false, false, "\n"),
+                        name + " candidate artifact mutation must write");
+                expectDiagnostic (
+                    verifyReleaseReady (
+                        candidate.getChildFile ("requirements-report.json")),
+                    diagnostic);
+            };
+        constexpr auto pitch44100Metrics =
+            "renders/pit-003-pit-004-pitch-matrix-44100-v1/metrics.json";
+        expectCandidateJsonMutation (
+            pitch44100Metrics, "changed-v2-sample-rate",
+            [] (auto& payload) {
+                payload.getDynamicObject()->getProperty ("records").getArray()
+                    ->getReference (0).getDynamicObject()
+                    ->getProperty ("provenance").getDynamicObject()
+                    ->setProperty ("sampleRate", 48000.0);
+            },
+            "release.report-artifact");
+
+        const auto movedMetricsCandidate =
+            reportRoot.directory.getChildFile ("moved-pitch-metrics");
+        expect (cliA.copyDirectoryTo (movedMetricsCandidate),
+                "moved pitch metrics candidate fixture must copy");
+        const auto originalMetrics =
+            movedMetricsCandidate.getChildFile (pitch44100Metrics);
+        expect (originalMetrics.moveFileTo (
+                    originalMetrics.getSiblingFile ("metrics-moved.json")),
+                "present pitch metrics artifact must move independently");
+        expectDiagnostic (
+            verifyReleaseReady (
+                movedMetricsCandidate.getChildFile ("requirements-report.json")),
+            "release.report-mismatch");
+
+        constexpr auto pitch44100Render =
+            "renders/pit-003-pit-004-pitch-matrix-44100-v1/render.json";
+        expectCandidateJsonMutation (
+            pitch44100Render, "changed-native-baseline-state-hash",
+            [] (auto& payload) {
+                payload.getDynamicObject()->getProperty ("reproducibility")
+                    .getDynamicObject()->getProperty ("inputHashes")
+                    .getDynamicObject()->setProperty (
+                        "state",
+                        "0000000000000000000000000000000000000000000000000000000000000000");
+            },
+            "release.report-artifact");
+
+        auto falsePit003Pass = juce::JSON::fromString (cliReportA.loadFileAsString());
+        auto* falsePit003Row = findReportRequirement (falsePit003Pass, "PIT-003");
+        expect (falsePit003Row != nullptr,
+                "false PIT-003 pass probe requires the actual awaiting row");
+        if (falsePit003Row != nullptr) {
+            falsePit003Row->setProperty ("status", "pass");
+            falsePit003Row->setProperty (
+                "reasons", juce::Array<juce::var> { "requirement.gates-pass" });
+            auto* counts = falsePit003Pass.getDynamicObject()
+                               ->getProperty ("counts").getDynamicObject();
+            counts->setProperty ("awaiting-approved-reference", 18);
+            counts->setProperty ("pass", 18);
+            expectReportMutation (
+                falsePit003Pass, "false-pit003-pass", "release.report-mismatch");
+        }
+
+        auto falseReleaseReady = juce::JSON::fromString (cliReportA.loadFileAsString());
+        falseReleaseReady.getDynamicObject()->setProperty ("releaseReady", true);
+        expectReportMutation (
+            falseReleaseReady, "false-release-ready", "release.report-mismatch");
+
+        auto coordinatedPromotion = juce::JSON::fromString (cliReportA.loadFileAsString());
+        auto* coordinatedPit003 = findReportRequirement (
+            coordinatedPromotion, "PIT-003");
+        expect (coordinatedPit003 != nullptr,
+                "coordinated promotion probe requires the actual awaiting PIT-003 row");
+        if (coordinatedPit003 != nullptr) {
+            coordinatedPit003->setProperty ("status", "pass");
+            coordinatedPit003->setProperty (
+                "reasons", juce::Array<juce::var> { "requirement.gates-pass" });
+            auto* counts = coordinatedPromotion.getDynamicObject()
+                               ->getProperty ("counts").getDynamicObject();
+            counts->setProperty ("awaiting-approved-reference", 18);
+            counts->setProperty ("pass", 18);
+            coordinatedPromotion.getDynamicObject()->setProperty (
+                "releaseReady", true);
+            expectReportMutation (
+                coordinatedPromotion, "coordinated-pit003-release-promotion",
+                "release.report-mismatch");
+        }
+
         auto wrongCounts = juce::JSON::fromString (cliReportA.loadFileAsString());
         wrongCounts.getDynamicObject()->getProperty ("counts").getDynamicObject()
             ->setProperty ("pass", 127);
