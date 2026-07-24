@@ -1983,6 +1983,7 @@ public:
                 expectEquals (
                     static_cast<int> (fixture.analysisRequests.size()),
                     static_cast<int> (pitchMatrixCases.size()));
+                expectEquals (static_cast<int> (fixture.automation.size()), 544);
                 expectEquals (static_cast<int> (fixture.midi.size()), 40);
 
                 for (size_t caseIndex = 0;
@@ -2019,7 +2020,7 @@ public:
                         [&] (const auto& event) { return event.sample == segmentStart; });
                     expectEquals (
                         static_cast<int> (segmentAutomationCount),
-                        expected.oscillator == 1 ? 24 : 25,
+                        expected.oscillator == 1 ? 26 : 27,
                         context + " segment automation count must be exact");
                     expectAutomation (
                         fixture, segmentStart, ParameterRegistry::Key::osc1OnOff,
@@ -2056,6 +2057,14 @@ public:
                     expectAutomation (
                         fixture, segmentStart, ParameterRegistry::Key::filterEmphasis, 0.0,
                         context + " filter emphasis");
+                    expectAutomation (
+                        fixture, segmentStart,
+                        ParameterRegistry::Key::filterAttackTimeKnob, 0.0,
+                        context + " filter attack");
+                    expectAutomation (
+                        fixture, segmentStart,
+                        ParameterRegistry::Key::filterDecayTimeKnob, 0.0,
+                        context + " filter decay");
                     expectAutomation (
                         fixture, segmentStart,
                         ParameterRegistry::Key::loudnessAttackTimeKnob, 0.0,
@@ -2108,15 +2117,29 @@ public:
                         static_cast<double> (expected.tuneIndex) / 10.0,
                         context + " analysis anchor");
 
+                    auto firstAutomationSequence =
+                        std::numeric_limits<std::uint32_t>::max();
+                    auto lastAutomationSequence = std::uint32_t { 0 };
+                    for (const auto& event : fixture.automation) {
+                        if (event.sample != segmentStart)
+                            continue;
+                        firstAutomationSequence =
+                            std::min (firstAutomationSequence, event.sequence);
+                        lastAutomationSequence =
+                            std::max (lastAutomationSequence, event.sequence);
+                    }
+                    const auto onIndex = caseIndex == 0 ? size_t { 0 }
+                                                        : caseIndex * 2;
                     if (caseIndex == 0) {
                         expect (fixture.midi[0].sample == segmentStart
                                     && fixture.midi[0].bytes
                                            == std::vector<std::uint8_t> {
-                                               144, static_cast<std::uint8_t> (expected.midi), 100 },
-                                context + " first note-on must follow automation");
+                                               144, static_cast<std::uint8_t> (expected.midi), 100 }
+                                    && lastAutomationSequence
+                                           < fixture.midi[onIndex].sequence,
+                                context + " first note-on must follow every automation event");
                     } else {
                         const auto offIndex = caseIndex * 2 - 1;
-                        const auto onIndex = caseIndex * 2;
                         expect (fixture.midi[offIndex].sample == segmentStart
                                     && fixture.midi[offIndex].bytes
                                            == std::vector<std::uint8_t> {
@@ -2129,8 +2152,12 @@ public:
                                            == std::vector<std::uint8_t> {
                                                144, static_cast<std::uint8_t> (expected.midi), 100 }
                                     && fixture.midi[offIndex].sequence
+                                           < firstAutomationSequence
+                                    && lastAutomationSequence
                                            < fixture.midi[onIndex].sequence,
-                                context + " previous note-off must precede current note-on");
+                                context
+                                    + " previous note-off must precede every automation event "
+                                      "and current note-on must follow them");
                     }
                 }
                 if (fixture.midi.size() == 40)
@@ -2167,6 +2194,8 @@ public:
                     static_cast<int> (expected.size()));
 
                 std::optional<juce::String> canonicalMetricBytes;
+                std::optional<std::map<std::string, std::string>>
+                    canonicalRenderHashes;
                 std::vector<MetricEvidenceRecord> canonicalRecords;
                 for (int repeat = 0; repeat < 2; ++repeat) {
                     const auto rendered = renderFixture (*loaded.value);
@@ -2175,28 +2204,37 @@ public:
                     if (! rendered.value.has_value())
                         continue;
                     expectEquals (static_cast<int> (rendered.value->size()), 3);
-                    const auto& canonicalRender = rendered.value->front();
-                    if (repeat == 0
-                        && fixtureId.starts_with (
-                            "pit-003-pit-004-pitch-matrix-"))
-                        logMessage (
-                            std::string { "partition-invariance fixture=" }
-                            + std::string { fixtureId }
-                            + " main="
-                            + canonicalRender.reproducibility.outputHashes.at ("main")
-                            + " phones="
-                            + canonicalRender.reproducibility.outputHashes.at ("phones")
-                            + " control="
-                            + canonicalRender.reproducibility.outputHashes.at ("control")
-                            + " event="
-                            + canonicalRender.reproducibility.outputHashes.at ("event"));
                     for (const auto& result : *rendered.value) {
-                        for (const auto hashName : { "main", "phones", "control", "event" })
-                            expect (result.reproducibility.outputHashes.at (hashName)
-                                        == canonicalRender.reproducibility.outputHashes.at (
-                                            hashName),
-                                    std::string { fixtureId } + " " + hashName
-                                        + " bytes must be block-partition invariant");
+                        const auto renderHashes =
+                            std::map<std::string, std::string> {
+                                { "main",
+                                  result.reproducibility.outputHashes.at ("main") },
+                                { "phones",
+                                  result.reproducibility.outputHashes.at ("phones") },
+                                { "control",
+                                  result.reproducibility.outputHashes.at ("control") },
+                                { "event",
+                                  result.reproducibility.outputHashes.at ("event") },
+                            };
+                        if (canonicalRenderHashes.has_value()) {
+                            for (const auto hashName : {
+                                     "main", "phones", "control", "event" })
+                                expect (renderHashes.at (hashName)
+                                            == canonicalRenderHashes->at (hashName),
+                                        std::string { fixtureId } + " " + hashName
+                                            + " bytes must be partition- and repeat-invariant");
+                        } else {
+                            canonicalRenderHashes = renderHashes;
+                            if (fixtureId.starts_with (
+                                    "pit-003-pit-004-pitch-matrix-"))
+                                logMessage (
+                                    std::string { "partition-repeat-invariance fixture=" }
+                                    + std::string { fixtureId }
+                                    + " main=" + renderHashes.at ("main")
+                                    + " phones=" + renderHashes.at ("phones")
+                                    + " control=" + renderHashes.at ("control")
+                                    + " event=" + renderHashes.at ("event"));
+                        }
                         const std::span<const RenderResult> singlePattern {
                             &result, 1
                         };
@@ -2266,10 +2304,10 @@ public:
                                     && found->metric.finite,
                                 std::string { requestId }
                                     + " must produce a finite MIDI-semitone metric");
-                        expectWithinAbsoluteError (
-                            found->metric.value, expectedMidi, 0.01,
-                            std::string { requestId }
-                                + " must match its governed pitch coordinate");
+                        expect (error < 0.01,
+                                std::string { requestId }
+                                    + " must be strictly within 0.01 semitone of its governed "
+                                      "pitch coordinate");
                     }
                 }
             };

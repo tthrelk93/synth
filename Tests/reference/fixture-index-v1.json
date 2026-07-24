@@ -91,19 +91,19 @@
     {
       "id": "pit-003-pit-004-pitch-matrix-44100-v1",
       "relativePath": "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-44100-v1.json",
-      "sha256": "d0f6b748d860d23beaf50e0bda6f88b1fa63173b4e0826165dd6658d9a9451a6",
+      "sha256": "7f5f62bfc7799a1a16b89bb4bfb98b684b505b25080c1cc4fd764bf664ed133e",
       "requirements": ["PIT-003", "PIT-004"]
     },
     {
       "id": "pit-003-pit-004-pitch-matrix-48000-v1",
       "relativePath": "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-48000-v1.json",
-      "sha256": "a17f93c947e863a090b1e8e5dbba1d7f8a24650254dc6017045fed3abfcfa094",
+      "sha256": "49863b9875d4b7aec6a541e27a60e942ef495c39ca36348ecd9eb4e38f781394",
       "requirements": ["PIT-003", "PIT-004"]
     },
     {
       "id": "pit-003-pit-004-pitch-matrix-96000-v1",
       "relativePath": "Tests/reference/fixtures/pit-003-pit-004-pitch-matrix-96000-v1.json",
-      "sha256": "6781afbe71d30c7df63136552d0e4c57f606e85c8f0f6339a1ca56b21f20fc3f",
+      "sha256": "11e60f4810f7563e6f139420c2635e9bdbadb62f9182d02e49950174c7ee4e79",
       "requirements": ["PIT-003", "PIT-004"]
     }
   ],
