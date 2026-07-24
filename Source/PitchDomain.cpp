@@ -45,6 +45,25 @@ Checked<Semitones> oscillatorOffset (const int index) noexcept
              : rejected<Semitones>();
 }
 
+Checked<Semitones> pitchWheel (const double normalizedValue) noexcept
+{
+    if (! std::isfinite (normalizedValue)
+        || normalizedValue < 0.0 || normalizedValue > 1.0)
+        return {};
+    return { Semitones { 14.0 * (normalizedValue - 0.5) }, true };
+}
+
+Checked<Semitones> calibration (
+    const CalibrationProfile profile,
+    const RangeContribution selectedRange) noexcept
+{
+    if (profile != CalibrationProfile::baseline
+        || selectedRange.mode != RangeMode::musical
+        || ! std::isfinite (selectedRange.semitones.value))
+        return {};
+    return { Semitones { 0.0 }, true };
+}
+
 Checked<Semitones> ratioToSemitones (const double ratio) noexcept
 {
     if (! std::isfinite (ratio) || ratio <= 0.0)

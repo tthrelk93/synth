@@ -4258,6 +4258,61 @@ void testPitchDomainContract (TestContext& test)
     test.expect (low.valid && low.value.mode == PitchDomain::RangeMode::lowFrequency,
                  "LO must remain an explicit special mode");
 
+    constexpr std::array wheelAnchors {
+        std::pair { 0.0, -7.0 },
+        std::pair { 0.25, -3.5 },
+        std::pair { 0.5, 0.0 },
+        std::pair { 0.75, 3.5 },
+        std::pair { 1.0, 7.0 },
+    };
+    for (const auto& [normalized, semitones] : wheelAnchors) {
+        const auto bend = PitchDomain::pitchWheel (normalized);
+        test.expect (bend.valid && bend.value.value == semitones,
+                     "Pitch Wheel anchor must use the exact centered linear map");
+    }
+
+    bool denseWheelContract = true;
+    double previous = -std::numeric_limits<double>::infinity();
+    for (int point = 0; point <= 1000; ++point) {
+        const auto normalized = static_cast<double> (point) / 1000.0;
+        const auto bend = PitchDomain::pitchWheel (normalized);
+        const auto mirror = PitchDomain::pitchWheel (1.0 - normalized);
+        denseWheelContract = denseWheelContract
+            && bend.valid && mirror.valid
+            && bend.value.value == 14.0 * (normalized - 0.5)
+            && std::abs (bend.value.value + mirror.value.value) < 1.0e-12
+            && bend.value.value >= previous;
+        previous = bend.value.value;
+    }
+    test.expect (denseWheelContract,
+                 "Pitch Wheel must be linear, monotonic, centered, and symmetric");
+
+    bool baselineMusicalCalibration = true;
+    for (int rangeIndex = 1; rangeIndex <= 5; ++rangeIndex) {
+        const auto selectedRange = PitchDomain::range (rangeIndex);
+        const auto calibration = PitchDomain::calibration (
+            PitchDomain::CalibrationProfile::baseline, selectedRange.value);
+        baselineMusicalCalibration = baselineMusicalCalibration
+            && selectedRange.valid && calibration.valid
+            && calibration.value.value == 0.0;
+    }
+    const auto lowRange = PitchDomain::range (0);
+    test.expect (baselineMusicalCalibration,
+                 "baseline calibration must be exact zero for all musical ranges");
+    test.expect (lowRange.valid
+                     && ! PitchDomain::calibration (
+                            PitchDomain::CalibrationProfile::baseline,
+                            lowRange.value).valid,
+                 "baseline calibration must reject LO");
+    test.expect (! PitchDomain::pitchWheel (-0.001).valid
+                     && ! PitchDomain::pitchWheel (1.001).valid
+                     && ! PitchDomain::pitchWheel (
+                            std::numeric_limits<double>::quiet_NaN()).valid
+                     && ! PitchDomain::calibration (
+                            static_cast<PitchDomain::CalibrationProfile> (255),
+                            PitchDomain::range (3).value).valid,
+                 "invalid wheel and calibration inputs must reject");
+
     constexpr std::array expectedMasterTune {
         -2.5, -2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0, 2.5
     };
