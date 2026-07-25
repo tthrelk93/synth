@@ -28,14 +28,16 @@ diagnostics, strongest-peak correction, scheduling clarification, and exact
 claim boundary. The [PIT-003/PIT-004 evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md)
 records baseline calibration and LO rejection, preserved v1 and new v2
 analyzer contracts, all 54 cross-rate measured errors, published source
-authority, repeat-equal 50-file candidates, honest requirement reduction, and
-the retained non-claims.
+authority, the historical repeat-equal Task 7 candidates, honest requirement
+reduction, and the retained non-claims. Its 2026-07-25 correction records the
+independently reviewed musical-glide and bounded-v2 repair plus the fresh
+exact-head candidate.
 
 | ID | Status | Durable result / remaining boundary |
 |---|---|---|
 | PIT-001 | pass | Typed selector mapping is exactly `-8...+8`; six bound processor-output gates and all 34 governed selector records pass. |
-| PIT-002 | pass | The musical path composes typed semitone contributions through one authority and converts once; three bound composed-pitch gates pass. Modulation, glide, and LO compatibility behavior remains explicit. Static-term scheduling/caching is not claimed here. |
-| PIT-003 | awaiting-approved-reference | All 39 five-musical-range software gates pass across 44.1/48/96 kHz within `0.01` semitone. Baseline calibration is exact zero for musical ranges and rejects LO. Approved LO/hardware calibration is absent, so PIT-003 is not pass. |
+| PIT-002 | pass | The musical path composes checked instantaneous glide position plus typed range/tune/offset/bend/calibration/modulation contributions through one authority and converts once; three bound composed-pitch gates pass. LO and keyboard-disabled Oscillator 3 compatibility behavior remains explicit. Static-term scheduling/caching is not claimed here. |
+| PIT-003 | awaiting-approved-reference | All 39 five-musical-range software gates pass across 44.1/48/96 kHz within `0.01` semitone; the current maximum is `0.005411181877115`. Baseline calibration is exact zero for musical ranges and rejects LO. Approved LO/hardware calibration is absent, so PIT-003 is not pass. |
 | PIT-004 | pass | Production maps normalized wheel position as `14 * (position - 0.5)` semitones. Center, intermediate symmetry, and published ±7 endpoints pass 15 governed gates across 44.1/48/96 kHz. |
 | PIT-005 | not-started | Nonzero audio-rate modulation semantics and approved sideband/safety evidence are not implemented. |
 | PIT-006 | not-started | Published time-per-octave glide endpoints and measured taper are not implemented. |
@@ -50,17 +52,26 @@ explicit compatibility approval; no schema migration is performed.
 
 - The canonical musical path now bypasses legacy setters, maps the Oscillator
   2/3 selector through `index - 8`, and composes pitch through `PitchDomain`.
-  The five musical ranges use exact-zero baseline software calibration. The
-  deliberately preserved LO compatibility path rejects musical calibration
-  and remains pending approved reference evidence.
+  Oscillators 1/2 and keyboard-controlled Oscillator 3 derive their note term
+  from checked instantaneous glide frequency; all static terms remain single
+  contributions. Keyboard-disabled Oscillator 3 remains reference-based and
+  wheel-neutral. The five musical ranges use exact-zero baseline software
+  calibration. The deliberately preserved LO compatibility path rejects
+  musical calibration and remains pending approved reference evidence.
 - `audio.pitch.v1` now chooses the globally strongest parabolically
   interpolated local peak, using earliest lag only inside a `0.00001`
   numerical tie. A weak 200 Hz fundamental with a ten-times-stronger 400 Hz
   harmonic reports the fundamental within `0.000010641` semitone.
 - `audio.pitch.v2` preserves all v1 settings except its explicit v2 identity
-  and 4 Hz lower boundary. Its bounded decimation/refinement path passes the
-  synthetic grid at maximum error `0.001699433` semitone and the governed
-  matrix at maximum error `0.007773584344040` semitone.
+  and 4 Hz lower boundary. Its overflow-safe pure planner structurally caps
+  exact coarse plus conservative refinement work at `64000000` pairs, uses
+  the largest deterministic safe tail subwindow, preserves the full
+  configured band when feasible, and returns `analyzer.work-budget` when the
+  minimum full-band/four-period request cannot fit. A tied maximum-boundary
+  peak is accepted only when it is a periodic multiple of the selected
+  interior fundamental. The synthetic grid maximum remains `0.001699433`
+  semitone; the current governed matrix maximum is
+  `0.005411181877115` semitone.
 - `MoogMiniAudioProcessor::processBlock` now maps Pitch Wheel as
   `14 * (normalized - 0.5)` semitones, centered at zero with published
   `-7/+7` endpoints.
@@ -195,6 +206,26 @@ Compare tuner readings for all A/C notes across ranges, center/end fine tune, be
 ## Completion-report evidence
 
 Include selector/range tables; pitch traces in semitones/cents/hertz; pitch-wheel symmetry results; glide sample-index plots for every transition; block-partition hashes; invalid-input tests; exponent counters/benchmarks; reference-capture manifest or `awaiting-approved-reference` status; and any legacy-pitch compatibility evidence.
+
+## 2026-07-25 whole-branch repair correction
+
+Initial Task 7 documentation head
+`457ceebbda0d85fda39042557f52ee46252ba096` remains historical. Repair commit
+`cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064` makes musical Oscillators 1/2 and
+keyboard-controlled Oscillator 3 consume checked instantaneous glide
+frequency, leaves keyboard-disabled Oscillator 3 reference-based and
+wheel-neutral, hardens v2 boundary recurrence classification, and enforces the
+`64000000`-pair work plan. Range-zero wheel outputs at `0`, `0.5`, and `1`
+prove relative bend once, musical-calibration bypass, and zero diagnostics
+without claiming an LO base map.
+
+The strict all-target repair build passed with tests, validators, and
+warnings-as-errors enabled; focused verification passed 9/9, full serial CTest
+passed 23/23 in `740.16` seconds, and independent review returned READY with
+zero findings. PIT-003 remains `awaiting-approved-reference`, PIT-004 remains
+`pass`, and PIT-005...008 remain open. Task 8 packaging is still prospective;
+the stale Agent 11 ZIP must be replaced only after the documentation repair
+commit.
 
 ## Primary technical references
 

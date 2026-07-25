@@ -2,6 +2,8 @@
 
 Date: 2026-07-24
 
+Updated: 2026-07-25 after independent whole-branch repair review
+
 Status: PIT-003's five-musical-range software matrix is complete, but PIT-003
 remains `awaiting-approved-reference` because LO and hardware calibration are
 absent. PIT-004 passes its derived and published software gates. Workstream 04
@@ -41,11 +43,15 @@ PIT-003 is therefore not `pass`. The global acceptance manifest remains
 | Fixture review correction | `edf42530a8686d68903e2a7efbf0d76f0ce3193f` |
 | Published/hash acceptance authority | `7027a7ba384fb60d02404e235c3a2e8ec1ec7caf` |
 | Final implementation and honest requirement reduction | `71ec81ac6e6ae1b9d2431df3113882587e242362` |
+| Initial Task 7 documentation closeout | `457ceebbda0d85fda39042557f52ee46252ba096` |
+| Whole-branch repair | `cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064` |
 
-The documentation-closeout commit contains this file and cannot name itself
-without recursion. Its exact commit/tree/content identity, rebuilt candidate,
-release replay, final no-Git build, and final full-suite result are retained in
-the ignored Task 7 execution report.
+The repair commit has tree
+`e6f8a98b051e2a0e27552664082c57823fa8db03` and source-content identity
+`ffbfc36c45b097f4ed4718098497269b5f796b4df1facbfa27feb8447e9a9b6f`.
+The documentation commit containing this correction cannot name itself without
+recursion. Task 8 remains open and must rebuild the stale Agent 11 ZIP from
+that later exact documentation head.
 
 ## RED and GREEN chronology
 
@@ -59,6 +65,20 @@ Every task first demonstrated the missing or incorrect behavior.
 | 4 | Fixture RED saw five rather than eight fixtures, missing IDs, and seven contract failures. Integration RED exposed 44.1 kHz range-2 at `41.136...` and ambiguous 48/96 kHz C4. The 96 kHz F0 refinement reduced errors of `0.016227474630` then `0.013324391527` before the accepted `0.007773584344`. Review RED exposed 183 failures caused by two missing resets. | The four fixture/reference slices passed 4/4; review pitch passed in `14.24` seconds and the final immutable hashes matched. |
 | 5 | Manifest RED saw 13 derived and zero published gates instead of 61/6; 29 focused subtests and requirement reciprocity rejected the missing policy. | Manifest/pitch/requirement passed 3/3 in `642.75` seconds; analyzer passed in `83.34` and requirement in `591.64`. |
 | 6 | The valid clean RED failed only the expected requirement projection after `3728.73` seconds. An earlier dirty-source execution and a test-only null dereference were excluded from RED evidence. | Requirement passed in `3504.71` seconds; an independent parent replay also passed after the READY checkpoint. |
+
+The table above is the original 2026-07-24 Task 1–6 chronology. It remains
+historical evidence. The 2026-07-25 repair added these RED/GREEN results:
+
+- the old processor failed all three musical glide cases before Oscillators 1,
+  2, and keyboard-controlled Oscillator 3 were changed to compose from the
+  checked instantaneous glide frequency;
+- an exact 480-sample aperiodic period repeated 16 times at 48 kHz was rejected
+  at valid 100 Hz because the tied maximum lag was 1920;
+- the pure v2 work-planner API was initially absent and failed compilation;
+- the repaired pitch-domain slice passed 1/1 in `2.40` seconds, the reference
+  pitch slice passed 1/1 in `14.43` seconds, the nine-test focused slice passed
+  9/9 in `107.76` seconds, and the Requirement contract passed first in
+  `505.47` seconds and finally in `492.34` seconds.
 
 ## Production wheel and calibration contract
 
@@ -82,10 +102,19 @@ The 1001-point production grid is finite, linear, monotonic, and symmetric.
 The processor composes the wheel contribution once in the shared semitone
 domain and the editor displays the same `-7...+7` contract.
 
+Musical Oscillators 1 and 2 and keyboard-controlled Oscillator 3 now derive
+their note coordinate from the checked instantaneous glide frequency. Their
+range, tune, oscillator offset, wheel, exact-zero calibration, and modulation
+terms remain single contributions. Keyboard-disabled Oscillator 3 remains
+reference-based and wheel-neutral. The existing glide trajectory itself is
+unchanged; PIT-006/PIT-007 remain open.
+
 Baseline calibration returns exact zero semitones for 32′, 16′, 8′, 4′, and
 2′. It rejects LO, unknown ranges, and non-finite inputs. The preserved LO path
 bypasses musical baseline calibration and applies only the typed wheel
 contribution through `exp2`; it does not invent a calibrated LO base frequency.
+Range-zero processor outputs at wheel `0`, `0.5`, and `1` prove the relative
+bend once, calibration bypass, and zero diagnostic delta.
 
 ## Versioned analyzer contract
 
@@ -114,11 +143,19 @@ peak-tie-tolerance=0.00001
 periodic-multiple-tolerance=0.05
 ```
 
-V2 applies boxcar decimation only when the safely computed original
-correlation work exceeds `64000000`, using
-`floor(sampleRate / 12000)`. A decimated result receives bounded
-original-rate refinement. V2 gives configured-boundary diagnostics
-precedence. None of those changes alter the v1 path.
+V2 uses the overflow-safe pure `planPitchV2AnalysisWork` planner. It counts
+exact coarse-correlation work plus a conservative original-rate refinement
+upper bound and structurally caps the total at `64000000` sample pairs. It
+uses the largest deterministic safe tail subwindow when the full request is
+larger than the cap, preserves the full configured 4 Hz...5 kHz band whenever
+feasible, and returns `analyzer.work-budget` when even the minimum full-band,
+four-period request cannot fit.
+
+V2 accepts a tied maximum-boundary peak only when that boundary is a periodic
+multiple of the selected interior fundamental. A selected configured boundary
+and a nonperiodic boundary competitor still reject with the stable boundary
+diagnostic. V1 does not use the planner and retains its prior settings,
+numerical results, and diagnostics.
 
 The v2 synthetic grid's maximum absolute error is `0.001699433` semitone at
 44.1 kHz / MIDI 84, below its `0.005` synthetic-calibration limit.
@@ -137,7 +174,8 @@ The unchanged PIT-002 fixture remains
 `63a2a95b9caee4799d814abe647e4c2433b82eb59fddebf502f38f68864e12ee`.
 The three new index entries own PIT-003/PIT-004 in ascending sample-rate order
 and bind the exact fixture hashes above. Manual source, version, page `80`,
-and source SHA are mandatory for the two published endpoint gates.
+and source SHA are mandatory for the six published endpoint gates, two at
+each of the three sample rates.
 
 ## All 54 governed pitch errors
 
@@ -148,7 +186,7 @@ Every row uses `audio.pitch.v2`, analyzer version `2`, metric
 
 | Gate | Expected | Measured | Absolute error |
 |---|---:|---:|---:|
-| `pit003.sr44100.boundary.f0-range32` | -7.000000000000000 | -6.999442442901543 | 0.000557557098457 |
+| `pit003.sr44100.boundary.f0-range32` | -7.000000000000000 | -6.999440638721389 | 0.000559361278611 |
 | `pit003.sr44100.boundary.c4-range2` | 84.000000000000000 | 84.000288698720041 | 0.000288698720041 |
 | `pit003.sr44100.range32` | 21.000000000000000 | 20.999175753617525 | 0.000824246382475 |
 | `pit003.sr44100.range16` | 33.000000000000000 | 32.999678307701622 | 0.000321692298378 |
@@ -174,7 +212,7 @@ The maximum 44.1 kHz error is `0.000824246382475` semitone at
 
 | Gate | Expected | Measured | Absolute error |
 |---|---:|---:|---:|
-| `pit003.sr48000.boundary.f0-range32` | -7.000000000000000 | -7.000583748560825 | 0.000583748560825 |
+| `pit003.sr48000.boundary.f0-range32` | -7.000000000000000 | -7.000583798272334 | 0.000583798272334 |
 | `pit003.sr48000.boundary.c4-range2` | 84.000000000000000 | 83.999794739507280 | 0.000205260492720 |
 | `pit003.sr48000.range32` | 21.000000000000000 | 20.999385393037343 | 0.000614606962657 |
 | `pit003.sr48000.range16` | 33.000000000000000 | 33.001977988989594 | 0.001977988989594 |
@@ -200,7 +238,7 @@ The maximum 48 kHz error is `0.001977988989594` semitone at
 
 | Gate | Expected | Measured | Absolute error |
 |---|---:|---:|---:|
-| `pit003.sr96000.boundary.f0-range32` | -7.000000000000000 | -6.992226415655960 | 0.007773584344040 |
+| `pit003.sr96000.boundary.f0-range32` | -7.000000000000000 | -6.996897256257849 | 0.003102743742151 |
 | `pit003.sr96000.boundary.c4-range2` | 84.000000000000000 | 83.999977507379839 | 0.000022492620161 |
 | `pit003.sr96000.range32` | 21.000000000000000 | 21.005411181877115 | 0.005411181877115 |
 | `pit003.sr96000.range16` | 33.000000000000000 | 33.001946175994426 | 0.001946175994426 |
@@ -219,12 +257,14 @@ The maximum 48 kHz error is `0.001977988989594` semitone at
 | `pit004.sr96000.bend.plus3p5` | 48.500000000000000 | 48.500123945507049 | 0.000123945507049 |
 | `pit004.sr96000.bend.plus7` | 52.000000000000000 | 51.999783343802179 | 0.000216656197821 |
 
-The maximum 96 kHz and overall error is `0.007773584344040` semitone at
-`pit003.sr96000.boundary.f0-range32`. All 54 errors are below `0.01`.
+The maximum 96 kHz and overall error is `0.005411181877115` semitone at
+`pit003.sr96000.range32`. All 54 errors are below `0.01`.
 
 ## Authoritative candidates and report truth
 
-The clean final implementation commit produced:
+### Initial Task 7 candidates (historical)
+
+The initial clean implementation commit produced:
 
 ```text
 /private/tmp/model-d-pitch-candidates.GUJovf/candidate-a
@@ -236,6 +276,31 @@ file-content tree hash is
 `67cf6bc79d7cad6e4a54e068e9715e74c64a9cea914fc8600a86fa301d2517c1`;
 both `requirements-report.json` files hash to
 `5ae7986de4d53e828e807ad4123b59e5106ee388e774c8e61ae19a60a1ccff1a`.
+
+Those candidates recorded source commit
+`71ec81ac6e6ae1b9d2431df3113882587e242362`, source tree
+`c64b5599ef0f74ce69afc69454a155fc8c9b6673`, and content identity
+`ad1138aaab7dc02bf349e3c300b8a84e2415be76d57fb28d12042e517074b478`.
+Their 44.1, 48, and 96 kHz metric hashes were respectively
+`ec772d7564805e12b9d30d79034ed051e16b81302aa87764a69a03b56fb854ee`,
+`f58443a5a1bf50fed0f80b6d8dec11832c737736ce9c3af29bb6bfe8b5e2e8ec`,
+and `34df8f7e91fc42f6e7bd62b23d40af95943cd422a96491c2fd12ece7d9028170`.
+The 2026-07-25 repair supersedes these candidate identities without changing
+their historical result.
+
+### 2026-07-25 repair candidate (current)
+
+The clean repair binary produced:
+
+```text
+/private/tmp/model-d-whole-repair-candidate.4ELHcJ/candidate
+```
+
+It contains exactly 50 regular files. Its file-content tree hash, computed
+with the established sorted relative-path/content command, is
+`7aabc329947b3924141e516c8a293c96721a3db0cd93675bf33b7879de5ca2da`.
+Its `requirements-report.json` SHA-256 is
+`11962bb9eabcf3b64c913cdf0fa231194fa1a8113efd204fcaf29b89328769aa`.
 
 The exact inventory is two root files, `metrics.json` and
 `requirements-report.json`, plus these six files under each render:
@@ -253,17 +318,17 @@ pit-003-pit-004-pitch-matrix-48000-v1
 pit-003-pit-004-pitch-matrix-96000-v1
 ```
 
-The candidate records source commit `71ec81ac6e6ae1b9d2431df3113882587e242362`,
-source tree `c64b5599ef0f74ce69afc69454a155fc8c9b6673`, content identity
-`ad1138aaab7dc02bf349e3c300b8a84e2415be76d57fb28d12042e517074b478`,
-clean source, Darwin arm64 Release, AppleClang `14.0.3.14030022`, and JUCE
-`3af3ce009f6a02f6fa651008fffb5b41743a9fab`.
+The current candidate records source commit
+`cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064`, source tree
+`e6f8a98b051e2a0e27552664082c57823fa8db03`, content identity
+`ffbfc36c45b097f4ed4718098497269b5f796b4df1facbfa27feb8447e9a9b6f`,
+and clean source.
 
 | Governed render metric artifact | SHA-256 |
 |---|---|
-| 44.1 kHz `metrics.json` | `ec772d7564805e12b9d30d79034ed051e16b81302aa87764a69a03b56fb854ee` |
-| 48 kHz `metrics.json` | `f58443a5a1bf50fed0f80b6d8dec11832c737736ce9c3af29bb6bfe8b5e2e8ec` |
-| 96 kHz `metrics.json` | `34df8f7e91fc42f6e7bd62b23d40af95943cd422a96491c2fd12ece7d9028170` |
+| 44.1 kHz `metrics.json` | `0e422e5929e4a9b62cfec55f96e5507a92f84c4a7aa56cf190d6ad5ef754eda1` |
+| 48 kHz `metrics.json` | `6bb952acdcc3c0b96691b702141072674f9cd7d2ec8488ba59f8c1e2c2c7a996` |
+| 96 kHz `metrics.json` | `72420dae72d69c65ad2b03d8e3b67c0954c71c4d0126a7227378018c0c600a6f` |
 
 The report has exactly 127 requirements and 164 gates:
 
@@ -287,9 +352,8 @@ release-not-ready: BLD-006 not-run requirement.not-run
 
 ## Clean verification matrix
 
-The authoritative path-with-spaces Release build used tests on, validators on,
-warnings-as-errors on, and exact JUCE
-`3af3ce009f6a02f6fa651008fffb5b41743a9fab`.
+The initial Task 7 path-with-spaces Release verification is retained as
+historical evidence:
 
 - strict all-target build passed in `206.41` seconds;
 - full serial CTest passed 23/23 in `4424.73` seconds;
@@ -311,16 +375,52 @@ not registered in the current 23-test inventory; no pass is invented for those
 absent names. Full CTest covers the live aggregate authority contracts and the
 registered legacy/state/contour tests.
 
+The 2026-07-25 repair was rebuilt with tests, validators, and
+warnings-as-errors enabled. The strict all-target build passed. The final full
+serial CTest passed 23/23 with zero failures in `740.16` seconds, including the
+final Requirement contract in `492.34` seconds. Independent whole-branch
+review returned READY with zero findings.
+
 The ten frozen fixture/parameter/state/contour paths are byte-identical to
 `ab88a2197d7b0809d9554709594d62cabaaca88b`; the frozen diff is empty. The
 manual and immutable fixture/index hashes match the table above.
 
-At clean implementation commit `71ec81a`, `git archive HEAD` extracted to
+Historically, clean implementation commit `71ec81a` extracted to
 `/private/tmp/model-d-pitch-extract.dUEkZZ` without `.git`. Release configure
 passed in `42.97` seconds with tests off, validators off, warnings-as-errors
-on, and exact JUCE; the all-target production build passed in `162.11`
-seconds. Exact documentation-head verification is retained in the ignored
-Task 7 report because recording that identity here would be self-referential.
+on, and the all-target production build passed in `162.11` seconds.
+
+For the current repair, `git archive` extracted without `.git` to
+`/private/tmp/model-d-whole-repair-extract.1kcXu9`; exact configure and
+all-target build passed with tests off, validators off, and
+warnings-as-errors on.
+
+## 2026-07-25 whole-branch repair correction
+
+This entry supersedes only the current Task 7 snapshot. It does not rewrite
+the historical Task 1–7 measurements above.
+
+- prior documentation head:
+  `457ceebbda0d85fda39042557f52ee46252ba096`;
+- repair commit/tree/content:
+  `cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064`,
+  `e6f8a98b051e2a0e27552664082c57823fa8db03`,
+  `ffbfc36c45b097f4ed4718098497269b5f796b4df1facbfa27feb8447e9a9b6f`;
+- musical Oscillators 1/2 and keyboard-controlled Oscillator 3 now follow
+  checked instantaneous glide frequency with every static term applied once;
+  keyboard-disabled Oscillator 3 remains reference-based and wheel-neutral;
+- v2 accepts only periodic-multiple maximum-boundary ties, structurally caps
+  coarse plus refinement work at `64000000` pairs, and reports
+  `analyzer.work-budget` when the minimum full-band request cannot fit;
+- only three of 54 governed gate values changed; the current overall maximum
+  is `0.005411181877115` at `pit003.sr96000.range32`;
+- current candidate/report/metric hashes are the repair hashes above;
+- the report remains 127 requirements / 164 gates at 17 pass / 91 not-run /
+  19 awaiting-approved-reference / 0 fail with `releaseReady=false`;
+- release replay remains exit `3`, zero stdout bytes, and exact stderr
+  `release-not-ready: BLD-006 not-run requirement.not-run`; and
+- the stale Agent 11 ZIP is not authoritative. Task 8 remains prospective and
+  must replace it only after this documentation correction is committed.
 
 ## Explicit retained work
 

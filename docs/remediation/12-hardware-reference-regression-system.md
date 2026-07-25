@@ -29,7 +29,7 @@ record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness
 | ID | Status | F0 result / remaining acceptance |
 |---|---|---|
 | TST-001 | in-progress | Eight deterministic state/MIDI/automation fixtures produce 48 hashed per-render artifacts plus one root metric artifact and one report, for 50 candidate files total. Workstream 04 now owns five pitch fixtures and 24 governed indexed inputs; preset/audio-input and later owner-fixture coverage remains open. |
-| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, preserved `audio.pitch.v1`, and new `audio.pitch.v2` pass synthetic, finite-extreme, and owner-fixture contracts. V2's synthetic maximum error is `0.001699433` semitone and its governed cross-rate maximum is `0.007773584344040`; the complete owner-analyzer catalog remains open. |
+| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, preserved `audio.pitch.v1`, and new `audio.pitch.v2` pass synthetic, finite-extreme, owner-fixture, periodic-boundary, and structural work-budget contracts. V2's synthetic maximum error is `0.001699433` semitone and its current governed cross-rate maximum is `0.005411181877115`; the complete owner-analyzer catalog remains open. |
 | TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
 | TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
 | TST-005 | in-progress | Missing hardware provenance remains visible as `awaiting-approved-reference`; no hardware capture campaign or reference-instrument record has run. |
@@ -193,10 +193,10 @@ integer-recurrence contract.
 It does not approve the global manifest, close any TST requirement, or supply
 hardware, host, listening, or release evidence.
 
-The later [PIT-003/PIT-004 pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md)
-adds three immutable rate fixtures, preserved v1 plus `audio.pitch.v2`, 54
-derived/published gates, mandatory manual-source hashing, and repeat-equal
-50-file candidates. The resulting 127-row/164-gate report is
+The initial [PIT-003/PIT-004 pitch matrix closeout](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md)
+added three immutable rate fixtures, preserved v1 plus `audio.pitch.v2`, 54
+derived/published gates, mandatory manual-source hashing, and historical
+repeat-equal 50-file candidates. The resulting 127-row/164-gate report was
 17 pass / 91 not-run / 19 awaiting / 0 fail and remains non-release-ready.
 PIT-004 passes; PIT-003 remains `awaiting-approved-reference` because no
 approved LO/hardware calibration campaign has run. This extension changes no
@@ -243,6 +243,39 @@ serialization, candidate validation, and authoritative replay. Missing,
 placeholder, unsupported, or forged metadata rejects. These readiness and
 reproducibility fields do not approve the globally draft acceptance manifest
 or change any requirement, hardware, host, listening, or release status.
+
+## 2026-07-25 Workstream 04 whole-branch repair correction
+
+Repair commit `cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064` supersedes the
+current Task 7 analyzer/candidate snapshot at prior documentation head
+`457ceebbda0d85fda39042557f52ee46252ba096`; the original Task 7 measurements
+remain historical in the linked evidence.
+
+`audio.pitch.v2` now uses an overflow-safe pure planner that counts exact
+coarse correlation work plus a conservative refinement upper bound and
+structurally caps both at `64000000` pairs. It selects the largest
+deterministic safe tail subwindow while retaining the full 4 Hz...5 kHz band
+when feasible and returns `analyzer.work-budget` when even the minimum
+full-band/four-period request cannot fit. A tied maximum-boundary peak is
+accepted only as a periodic multiple of the selected interior fundamental;
+selected or nonperiodic boundary competitors continue to reject. V1 is
+unchanged.
+
+The fresh 50-file repair candidate has file-content tree hash
+`7aabc329947b3924141e516c8a293c96721a3db0cd93675bf33b7879de5ca2da`
+and report SHA-256
+`11962bb9eabcf3b64c913cdf0fa231194fa1a8113efd204fcaf29b89328769aa`.
+Only three of 54 gate values drifted; the current overall maximum is
+`0.005411181877115` at `pit003.sr96000.range32`. The report remains 127
+requirements / 164 gates at 17 pass / 91 not-run / 19
+awaiting-approved-reference / 0 fail with `releaseReady=false`; release replay
+still exits `3` with empty stdout and exact BLD-006 stderr. Strict all-target
+build and full serial CTest passed 23/23 in `740.16` seconds, the no-Git
+archive build passed, and independent review returned READY with zero findings.
+
+This correction changes no TST status and does not approve the global
+manifest. Task 8 remains open; the Agent 11 ZIP must be regenerated after the
+documentation repair commit.
 
 ## Primary technical references
 

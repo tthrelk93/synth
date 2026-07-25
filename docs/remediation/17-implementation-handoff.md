@@ -10,16 +10,16 @@ Allowed requirement statuses are `not-started`, `in-progress`, `blocked`, `fail`
 
 | Field | Current value |
 |---|---|
-| Prepared | 2026-07-24 |
-| Current owner | Workstream 04 PIT-005 successor |
+| Prepared | 2026-07-25 |
+| Current owner | Workstream 04 Task 8 packaging successor, then PIT-005 |
 | Roadmap phase | F1 — processor seam freeze in progress |
 | Workstream | 04 — PIT-001/PIT-002/PIT-004 pass; PIT-003 has complete five-musical-range software evidence and remains `awaiting-approved-reference` for LO/hardware calibration. PIT-005...008 remain open. Workstream 12 TST-001–009, PAR-002/004/006/007, and BLD-006/011/012 remain open owner/pre-release tracks. |
-| Overall status | Typed semitone production math, exact-zero musical calibration, explicit LO rejection, preserved `audio.pitch.v1`, new 4 Hz `audio.pitch.v2`, three cross-rate fixtures, 54 reciprocal matrix gates, published ±7-semitone wheel endpoints, deterministic 50-file candidates, and authoritative replay close PIT-004 and the software portion of PIT-003. Static scheduling/caching remains PIT-008. The harness has eight render fixtures, five core analyzers, and 24 governed indexed inputs. The honest 127-row/164-gate report is 17 pass / 91 not-run / 19 awaiting / 0 fail and not release-ready; the manifest is globally `draft`, and release verification exits `3` at BLD-006. |
+| Overall status | Typed semitone production math, checked instantaneous glide composition for all keyboard-controlled musical oscillators, exact-zero musical calibration, explicit LO rejection, preserved `audio.pitch.v1`, structurally bounded 4 Hz `audio.pitch.v2`, three cross-rate fixtures, 54 reciprocal matrix gates, published ±7-semitone wheel endpoints, a fresh exact-head 50-file repair candidate, and authoritative replay close PIT-004 and the software portion of PIT-003. Static scheduling/caching remains PIT-008. The harness has eight render fixtures, five core analyzers, and 24 governed indexed inputs. The honest 127-row/164-gate report is 17 pass / 91 not-run / 19 awaiting / 0 fail and not release-ready; the manifest is globally `draft`, and release verification exits `3` at BLD-006. |
 | Repository | `/Users/agentt/.openclaw/workspace/Developer/synth` |
 | Planning baseline | Agent 01 started from `main` at `c30038d1ee39e7e06f4fcf64605defd51b3cdae2` and created `codex/workstream-02-build` before file edits. |
-| Source prompt | The approved Workstream 04 PIT-003/PIT-004 design/implementation plan, Tasks 1–7 execution reports, [pitch foundation evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md), and authoritative [pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md). |
-| Successor package | Task 8 must build the exact untracked successor ZIP from the documentation closeout commit and preserve every predecessor archive. |
-| First action | Implement PIT-005 next in roadmap order: define semitone/octave audio-rate modulation plus finite, positive, Nyquist-safe frequency and approved sideband gates. Do not treat the separately retained PIT-003 LO/hardware reference gap as software pass. |
+| Source prompt | The approved Workstream 04 PIT-003/PIT-004 design/implementation plan, Tasks 1–7 execution reports, the 2026-07-25 whole-branch repair/review record, [pitch foundation evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md), and authoritative [pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md). |
+| Successor package | Task 8 must replace the stale Agent 11 ZIP with an exact untracked successor ZIP from the documentation repair commit and preserve every predecessor archive. |
+| First action | After Task 8 replaces the stale package, implement PIT-005 next in roadmap order: define semitone/octave audio-rate modulation plus finite, positive, Nyquist-safe frequency and approved sideband gates. Preserve checked live-glide composition and do not treat the separately retained PIT-003 LO/hardware reference gap as software pass. |
 | First unmet gate | PIT-003 still lacks approved LO/hardware calibration evidence. The next engineering requirement is PIT-005; PIT-006...008, PAR-002/004/006/007, TST-001...009, and BLD-006/011/012 remain open. |
 | Next owner if incomplete | Workstream 04 continuation; preserve all open BLD/PAR/TST release obligations and the draft acceptance status. |
 | Next owner if complete | Workstream 05 in roadmap order only after Workstream 04 owner-plan requirements pass. |
@@ -73,8 +73,8 @@ candidate/report truth, and retained non-claims.
 | Requirement | Status | Durable evidence | Blocker or next action |
 |---|---|---|---|
 | PIT-001 | pass | The full table, all 16 adjacent ratios, six bound processor-output gates, and all 34 selector requests prove exact `-8...+8` semitone mapping. | Preserve the typed selector table and reciprocal evidence bindings. |
-| PIT-002 | pass | Three bound composed-pitch gates plus a nonzero no-double-application processor contract prove the one-domain musical path while compatibility behavior remains explicit. | Preserve one typed semitone composition and one final hertz conversion; do not claim PIT-008 scheduling/caching. |
-| PIT-003 | awaiting-approved-reference | All 39 five-musical-range software gates pass at 44.1/48/96 kHz; baseline calibration is exact zero for musical ranges and rejects LO. | Keep non-pass until approved LO/hardware calibration provenance and gates exist; do not infer a fixed LO base. |
+| PIT-002 | pass | Three bound composed-pitch gates plus nonzero no-double-application and live-glide processor contracts prove the one-domain musical path. Musical Oscillators 1/2 and keyboard-controlled Oscillator 3 consume checked instantaneous glide frequency; keyboard-disabled Oscillator 3 remains reference-based and wheel-neutral. | Preserve one typed semitone composition and one final hertz conversion; do not claim PIT-006/PIT-007 trajectory changes or PIT-008 scheduling/caching. |
+| PIT-003 | awaiting-approved-reference | All 39 five-musical-range software gates pass at 44.1/48/96 kHz; the current overall maximum is `0.005411181877115`. Baseline calibration is exact zero for musical ranges and rejects LO. | Keep non-pass until approved LO/hardware calibration provenance and gates exist; do not infer a fixed LO base. |
 | PIT-004 | pass | Production uses `14 * (normalized - 0.5)` semitones; 15 center/intermediate/published-endpoint gates pass across all three rates. | Preserve the centered symmetric ±7 semitone authority and source-hash binding. |
 | PIT-005 | not-started | Nonzero modulation semantics remain the legacy compatible ratio. | Define semitone/octave modulation and safety/sideband gates. |
 | PIT-006 | not-started | Published time-per-octave glide and measured taper are absent. | Implement only after governed derived/published/measurement inputs exist. |
@@ -90,7 +90,7 @@ fresh serial verification, honest report, and exact reproduction commands.
 | Requirement | Status | Durable F0 evidence | Blocker or next action |
 |---|---|---|---|
 | TST-001 | in-progress | Eight fixtures produce 48 deterministic hashed per-render artifacts plus one root registry metric artifact and one report, for 50 candidate files total. | Add preset/audio-input and later owner-workstream fixtures; expand clean-machine policy evidence. |
-| TST-002 | in-progress | Five versioned core analyzers pass synthetic, finite-extreme, immutable render, and block-equivalence contracts. Preserved `audio.pitch.v1` and new `audio.pitch.v2` are governed; v2 synthetic maximum error is `0.001699433` semitone. | Add spectrum/contour/filter/saturation/latency owner analyzers and later hardware profiles. |
+| TST-002 | in-progress | Five versioned core analyzers pass synthetic, finite-extreme, immutable-render, block-equivalence, periodic-boundary, and structural work-budget contracts. `audio.pitch.v1` is unchanged; v2 retains its `0.001699433` synthetic maximum and has a current governed maximum of `0.005411181877115`. | Add spectrum/contour/filter/saturation/latency owner analyzers and later hardware profiles. |
 | TST-003 | in-progress | Immutable index, candidate-only generation, exact hashing, and overwrite rejection pass. | Exercise the approved golden regeneration and independent-review workflow. |
 | TST-004 | in-progress | Classification and authority rules are executable; listening cannot waive numerical gates. | Populate and review all later evidence classes without changing authority boundaries. |
 | TST-005 | in-progress | Hardware absence remains explicitly awaiting approved reference. | Run an approved, fully provenance-bound hardware campaign. |
@@ -104,12 +104,12 @@ fresh serial verification, honest report, and exact reproduction commands.
 | Category | Details |
 |---|---|
 | Starting branch/commit | PIT-003/PIT-004 implementation ran on `codex/workstream-04-pit-003-pit-004-implementation` from approved base `ab88a2197d7b0809d9554709594d62cabaaca88b`; design and plan are `b970d6992293fbae44f79865926951e4f39dea24` and `6dbf7b08551ca19c9683002da1400b39e96da521`. |
-| Ending commit/working tree | Final implementation is `71ec81ac6e6ae1b9d2431df3113882587e242362`. The documentation closeout is the commit containing this snapshot; its exact identity and final reruns are stored in the ignored Task 7 report to avoid tracked self-reference. Task 8 owns the successor ZIP; no push is part of Task 7. |
+| Ending commit/working tree | Initial Task 7 documentation closed at `457ceebbda0d85fda39042557f52ee46252ba096`; whole-branch repair is `cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064`, tree `e6f8a98b051e2a0e27552664082c57823fa8db03`, content `ffbfc36c45b097f4ed4718098497269b5f796b4df1facbfa27feb8447e9a9b6f`. The documentation repair is the commit containing this snapshot. Task 8 remains open and owns replacement of the stale successor ZIP; no push is part of this closeout. |
 | Pre-existing changes | The isolated task worktree began clean. Ignored Task 1–7 reports and bounded `/private/tmp` build/candidate/evidence trees remain outside the tracked closeout. |
-| Implementation files changed | Commits `eac4ce3` through `71ec81a` add typed centered wheel/baseline calibration, processor integration, `audio.pitch.v2`, three immutable fixtures, exact published/derived policies, reciprocal requirement reduction, and their review corrections. The ten frozen parameter/state/contour paths are byte-identical to `ab88a219`; the PIT-002 fixture is unchanged. |
-| Planning files changed | The roadmap, matrix, Workstream 04/12 plans, approved implementation plan, this current snapshot, new matrix evidence, and dated PIT-001/PIT-002 supersession note agree that PIT-003 awaits LO/hardware reference, PIT-004 passes, PIT-005...008 remain open, and the product is non-release-ready. Existing handoff history remains byte-for-byte unchanged; a new entry is appended. |
-| Artifacts/evidence produced | [PIT-003/PIT-004 pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md), 24 governed indexed inputs, eight render fixtures, repeat-equal 50-file candidates, 164 gates, and the ignored Task 7 exact-head report. |
-| Temporary scaffolding | Authoritative build `/private/tmp/model-d-pit003-pit004-sdd.ZZ24Fm/Release build with spaces`, candidates `/private/tmp/model-d-pitch-candidates.GUJovf`, evidence logs `/private/tmp/model-d-task7-evidence.XoIvVi`, and no-Git extracts are bounded under `/private/tmp`; they contain no credentials/settings/recovery inputs and are not tracked or packaged. |
+| Implementation files changed | Commits `eac4ce3` through `71ec81a` add typed centered wheel/baseline calibration, processor integration, `audio.pitch.v2`, three immutable fixtures, exact published/derived policies, reciprocal requirement reduction, and their initial review corrections. Repair `cf5fb99` makes keyboard-controlled musical paths consume checked live glide, hardens v2 periodic-boundary classification, and adds the overflow-safe `64000000`-pair planner. The ten frozen parameter/state/contour paths are byte-identical to `ab88a219`; the PIT-002 fixture is unchanged. |
+| Planning files changed | The roadmap, matrix, Workstream 04/12 plans, approved implementation plan, this current snapshot, and matrix evidence record the 2026-07-25 repair while retaining the original Task 7 chronology. They agree that PIT-003 awaits LO/hardware reference, PIT-004 passes, PIT-005...008 remain open, and the product is non-release-ready. A new history entry is appended; Task 8 stays open. |
+| Artifacts/evidence produced | [PIT-003/PIT-004 pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md), 24 governed indexed inputs, eight render fixtures, a fresh exact-head 50-file repair candidate with tree hash `7aabc329947b3924141e516c8a293c96721a3db0cd93675bf33b7879de5ca2da`, 164 gates, and the ignored whole-branch repair report. |
+| Temporary scaffolding | Authoritative build `/private/tmp/model-d-pit003-pit004-sdd.ZZ24Fm/Release build with spaces`, current candidate `/private/tmp/model-d-whole-repair-candidate.4ELHcJ/candidate`, and no-Git extract `/private/tmp/model-d-whole-repair-extract.1kcXu9` are bounded under `/private/tmp`; they contain no credentials/settings/recovery inputs and are not tracked or packaged. |
 
 ## Verification ledger
 
@@ -148,6 +148,7 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
 | 2026-07-23; Workstream 04 PIT-001/PIT-002 implementation; macOS Darwin arm64 Release | Typed-math, processor-output, pitch-analyzer, governed-fixture, binding, artifact, source, report, and release-replay RED/GREEN contracts; five focused reference categories; CLI validate/two runs/release verify; binding/evidence/report mutation suite | Commits `b977afd` through `6cf4699` pass their focused suites. Two 32-file candidates compare byte-identical; PIT-001/PIT-002 alone pass through nine bound gates; the report is 127 rows/110 gates at 16/92/19/0; release verify truthfully exits `3` at BLD-006. The exact documentation-head full/label/tamper/archive matrix is retained in the ignored Task 6 report. | [PIT-001/PIT-002 pitch foundation evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md) | PIT-001, PIT-002, TST-001–008 |
 | 2026-07-23; Workstream 04 final-review correction; macOS Darwin arm64 Release | Harmonic-rich RED/GREEN; five production/compatibility contracts; all five reference contracts; frozen-source and diff guards | At base `22d5e28`, the 200 Hz/0.075 plus 400 Hz/0.75 regression fails at `12.003704997` semitones. Commit `b04fe5a` passes it at `0.000010641`; production hardening covers the full tune table, adjacent ratios, nonzero single application, and invalid fallback. Focused production and reference slices pass 5/5 each. Exact closeout-head build/labels/CLI/probes/package are recorded after this tracked closeout in the ignored final-review fix report. | [PIT-001/PIT-002 pitch foundation evidence](evidence/workstream-04/pit-001-pit-002-pitch-foundation.md) | PIT-001, PIT-002, PIT-008, TST-002 |
 | 2026-07-24; Workstream 04 PIT-003/PIT-004; macOS Darwin arm64 Release | Typed wheel/calibration, processor, v2 analyzer, cross-rate fixtures, source-hash policy, requirement-reduction, mutation, strict build, full/label/focused CTest, candidate/release, frozen-byte, and no-Git archive verification | Commits `eac4ce3` through `71ec81a` pass their RED/GREEN contracts. Strict build passes; full CTest passes 23/23; all seven labels and the exact eight-test focused selection pass. Two 50-file candidates compare byte-identical; all 54 gates pass within `0.01` semitone. The report is 127 rows/164 gates at 17/91/19/0; PIT-003 remains awaiting approved reference, PIT-004 passes, and release verify exits `3` at BLD-006. Clean implementation-head no-Git configure/build passes. Exact documentation-head facts remain in the ignored Task 7 report. | [PIT-003/PIT-004 pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md) | PIT-003, PIT-004, TST-001–008 |
+| 2026-07-25; Workstream 04 whole-branch repair; macOS Darwin arm64 Release | Musical-glide, LO output, v2 periodic-boundary, pure planner/work-budget RED/GREEN; strict all-target build; nine-test focused slice; Requirement; full serial CTest; exact candidate/release replay; frozen ten-path diff; no-Git archive build; independent review | Repair `cf5fb99` passes pitch domain 1/1 in `2.40` seconds, reference pitch 1/1 in `14.43` seconds, focused 9/9 in `107.76` seconds, final Requirement 1/1 in `492.34` seconds, strict all-target build, and full serial CTest 23/23 in `740.16` seconds. The fresh 50-file candidate/report is source-exact; all 54 gates pass with current maximum `0.005411181877115`; report truth remains 17/91/19/0 over 127/164; release verify remains exact exit `3` at BLD-006; no-Git configure/build passes; reviewer returns READY with zero findings. | [PIT-003/PIT-004 pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md) | PIT-002, PIT-003, PIT-004, TST-002, TST-007 |
 
 ## Decisions, assumptions, and blockers
 
@@ -182,6 +183,19 @@ Record exact commands and concise outcomes. Link full logs/reports rather than p
   the compatibility decision; the validated schema is preserved without a
   migration.
 - A shared mutable build directory cannot safely host concurrent full CTest runs because standalone lifecycle/identity tests intentionally manipulate common staged output. All final acceptance is serial; the earlier overlap collision was reproduced and serial reruns passed without a production-code workaround.
+- The 2026-07-25 repair restores live-glide consumption for musical
+  Oscillators 1/2 and keyboard-controlled Oscillator 3 without changing the
+  glide equation or claiming PIT-006/PIT-007. Keyboard-disabled Oscillator 3
+  remains reference-based and wheel-neutral; LO remains relative,
+  wheel-governed, calibration-bypassing, and uncalibrated.
+- `audio.pitch.v2` now has a pure overflow-safe planner whose coarse plus
+  conservative refinement total cannot exceed `64000000` pairs. It preserves
+  the configured band when feasible, rejects impossible minimum work with
+  `analyzer.work-budget`, and ignores a tied maximum boundary only when it is
+  a periodic multiple of the selected interior fundamental. V1 is unchanged.
+- The initial Task 7 Agent 11 ZIP is stale after repair `cf5fb99`. Task 8
+  remains open and must replace it from the documentation repair commit; no
+  tracked Task 8 checkbox is promoted by this correction.
 
 ## Successor handoff package protocol
 
@@ -222,9 +236,11 @@ add RED audio-rate modulation coverage, define its semitone/octave authority,
 and require finite, positive, Nyquist-safe frequency plus approved sideband
 evidence. Preserve the typed semitone authority, exact `relativePath`
 fixture-index schema, `audio.pitch.v1` compatibility, `audio.pitch.v2`
-identity, every parameter ID and normalized value, v2 state/contour
-compatibility, candidate-only output, and evidence authority. Do not begin
-PIT-006...008 or Workstream 05 by silently narrowing their gates.
+identity and structural work planner, checked instantaneous musical-glide
+composition, keyboard-disabled Oscillator 3 reference behavior, every
+parameter ID and normalized value, v2 state/contour compatibility,
+candidate-only output, and evidence authority. Do not begin PIT-006...008 or
+Workstream 05 by silently narrowing their gates.
 
 In parallel, later DSP owners must supply PAR-006's non-`none` trajectories and
 approved hardware-dependent response evidence. Designated-host validation may
@@ -554,6 +570,90 @@ without additional owner action and the required passing evidence.
 - **First unmet gate:** PIT-003 approved LO/hardware calibration evidence remains the first incomplete pitch-evidence gate; PIT-005 is the next engineering requirement.
 - **Exact resumption point:** open `04-pitch-tuning-glide-modulation.md`; begin PIT-005 RED coverage for semitone/octave modulation, finite positive Nyquist-safe frequency, and approved sideband evidence. Preserve PIT-003 non-pass status and every typed/analyzer/evidence compatibility boundary.
 - **Next phase/workstream:** remain in Workstream 04 / F1 through PIT-005...008 and the retained PIT-003 reference gate; do not start Workstream 05 by narrowing owner-plan acceptance.
+
+### 2026-07-25 — Whole-branch pitch repair and documentation correction
+
+- **From / to:** Workstream 04 independent repair / Task 8 packaging
+  successor, then PIT-005 successor.
+- **Branch and commits:** repaired prior documentation head
+  `457ceebbda0d85fda39042557f52ee46252ba096` on
+  `codex/workstream-04-pit-003-pit-004-implementation`; implementation repair
+  is `cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064`, tree
+  `e6f8a98b051e2a0e27552664082c57823fa8db03`, source content
+  `ffbfc36c45b097f4ed4718098497269b5f796b4df1facbfa27feb8447e9a9b6f`;
+  the documentation correction is the commit containing this entry.
+- **Pre-existing changes preserved:** the bundled manual, all immutable
+  fixtures/index inputs, ten frozen parameter/state/contour paths, original
+  Task 7 measurements, and every earlier handoff entry remain historical and
+  unchanged in meaning. No source/test/fixture/JSON file changes in this
+  documentation commit.
+- **Phase/workstream/status:** F1 / Workstream 04 remains in progress.
+  PIT-001/PIT-002/PIT-004 remain pass; PIT-003 remains
+  `awaiting-approved-reference`; PIT-005...008 and parallel pre-release tracks
+  remain open. The manifest remains `draft` and the product remains
+  non-release-ready.
+- **Requirements:** no status changes. Musical Oscillators 1/2 and
+  keyboard-controlled Oscillator 3 now compose from checked instantaneous
+  glide frequency with every static term once; keyboard-disabled Oscillator 3
+  remains reference-based and wheel-neutral. Range-zero output anchors prove
+  relative bend once, calibration bypass, and zero diagnostics without
+  supplying an LO calibration.
+- **Implementation changes:** repair `cf5fb99` restores musical live-glide
+  consumption; accepts a tied v2 maximum boundary only when it is a periodic
+  multiple of the selected interior fundamental; and adds the overflow-safe
+  pure v2 planner that caps exact coarse plus conservative refinement work at
+  `64000000` pairs, selects the largest deterministic safe tail, preserves the
+  full band when feasible, and returns `analyzer.work-budget` when minimum
+  full-band/four-period work cannot fit. V1 is unchanged.
+- **Planning changes:** synchronized the current roadmap, traceability
+  summaries, Workstream 04/12 owner plans, implementation plan, pitch-matrix
+  evidence, current snapshot, verification ledger, exact resumption point,
+  and this append-only entry. Historical Task 7 timing and candidate facts are
+  labeled rather than erased. All five Task 8 checkboxes remain open.
+- **Commands and results:** RED failed all three musical glide cases, rejected
+  the exact 480-sample repeated-period 100 Hz signal because of tied maximum
+  lag 1920, and failed compilation because the planner API was absent. GREEN
+  passed pitch domain 1/1 in `2.40` seconds, reference pitch 1/1 in `14.43`
+  seconds, focused 9/9 in `107.76` seconds, Requirement 1/1 finally in
+  `492.34` seconds, strict all-target build, and full serial CTest 23/23 in
+  `740.16` seconds. Exact no-Git configure/build passed at
+  `/private/tmp/model-d-whole-repair-extract.1kcXu9`; independent review
+  returned READY with zero findings.
+- **Artifacts:** current candidate
+  `/private/tmp/model-d-whole-repair-candidate.4ELHcJ/candidate` contains 50
+  files; tree hash is
+  `7aabc329947b3924141e516c8a293c96721a3db0cd93675bf33b7879de5ca2da`;
+  report SHA is
+  `11962bb9eabcf3b64c913cdf0fa231194fa1a8113efd204fcaf29b89328769aa`.
+  Metric hashes are
+  `0e422e5929e4a9b62cfec55f96e5507a92f84c4a7aa56cf190d6ad5ef754eda1`,
+  `6bb952acdcc3c0b96691b702141072674f9cd7d2ec8488ba59f8c1e2c2c7a996`,
+  and `72420dae72d69c65ad2b03d8e3b67c0954c71c4d0126a7227378018c0c600a6f`.
+- **Decisions and assumptions:** only three of 54 governed values drifted;
+  the current maximum is the unchanged `pit003.sr96000.range32` value
+  `0.005411181877115`. The report remains 127/164 at 17/91/19/0 with
+  `releaseReady=false`. Release replay remains exit `3`, zero stdout bytes,
+  and exact stderr
+  `release-not-ready: BLD-006 not-run requirement.not-run`. The published
+  endpoint count is six, two at each rate.
+- **Blockers and known defects:** no whole-branch repair finding remains.
+  PIT-003 still needs approved LO/hardware evidence; PIT-005...008 and all
+  named BLD/PAR/TST/host/listening/distribution/release obligations remain
+  non-pass.
+- **Temporary work/cleanup:** repair build, candidate, archive extract, and
+  ignored reports are bounded under `/private/tmp` or `.superpowers/sdd`;
+  none is tracked or packaged by this documentation task.
+- **Successor package:** the existing Agent 11 ZIP is stale. Task 8 must
+  replace it from the exact documentation repair commit; this entry does not
+  build, verify, delete, or overwrite any ZIP.
+- **First unmet gate:** PIT-003 approved LO/hardware calibration remains the
+  first incomplete pitch-evidence gate; PIT-005 is the next engineering
+  requirement.
+- **Exact resumption point:** commit the documentation-only correction, then
+  execute open Task 8 against that exact head. After packaging, begin PIT-005
+  RED coverage while preserving the repaired live-glide and v2 work-budget
+  boundaries.
+- **Next phase/workstream:** remain in Workstream 04 / F1.
 
 ## Required template for every later handoff entry
 

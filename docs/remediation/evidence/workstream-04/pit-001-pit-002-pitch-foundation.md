@@ -20,6 +20,20 @@ hashes, report counts, and metrics below are preserved as dated historical
 Task 5 evidence. They are not the current acceptance policy and must not be
 used to regenerate or reinterpret the immutable fixture.
 
+## 2026-07-25 live-glide correction
+
+The historical claim boundary below describes this original PIT-001/PIT-002
+slice. Whole-branch repair
+`cf5fb99ba1b0cc2626a4d9de7a65bbf5fc9a7064` subsequently corrected musical
+glide consumption without changing the immutable PIT-002 fixture or its
+expected values. Musical Oscillators 1/2 and keyboard-controlled Oscillator 3
+now compose from checked instantaneous glide frequency with every static term
+once; keyboard-disabled Oscillator 3 remains reference-based and
+wheel-neutral. The glide equation/trajectory remains outside this evidence
+slice under PIT-006/PIT-007, and static scheduling/caching remains PIT-008.
+Current repair results and status are in the
+[PIT-003/PIT-004 evidence](pit-003-pit-004-pitch-matrix.md#2026-07-25-whole-branch-repair-correction).
+
 ## Claim boundary
 
 This evidence closes only:
