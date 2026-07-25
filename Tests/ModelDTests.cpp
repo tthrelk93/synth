@@ -4162,11 +4162,11 @@ double renderProcessorPitch (const int oscillator,
                              const float pitchWheel = 0.5f,
                              const bool invalidateMasterTune = false,
                              std::uint64_t* invalidDiagnosticDelta = nullptr,
-                             const bool oscillator3KeyboardControl = true)
+                             const bool oscillator3KeyboardControl = true,
+                             const int totalSamples = 65536,
+                             const int discardedSamples = 8192)
 {
     constexpr double sampleRate = 48000.0;
-    constexpr int totalSamples = 65536;
-    constexpr int discardedSamples = 8192;
 
     MoogMiniAudioProcessor processor;
     setParameter (processor, "osc1OnOff", oscillator == 1 ? 1.0f : 0.0f, test);
@@ -4224,6 +4224,107 @@ double renderProcessorPitch (const int oscillator,
     processor.releaseResources();
     return static_cast<double> (crossings) * sampleRate
          / static_cast<double> (totalSamples - discardedSamples);
+}
+
+double estimatePositiveCrossingFrequency (const juce::AudioBuffer<float>& buffer,
+                                          const int firstSample,
+                                          const int endSample)
+{
+    int crossings = 0;
+    const auto* samples = buffer.getReadPointer (0);
+    for (int sample = firstSample + 1; sample < endSample; ++sample)
+        if (samples[sample - 1] <= 0.0f && samples[sample] > 0.0f)
+            ++crossings;
+    return static_cast<double> (crossings) * 48000.0
+         / static_cast<double> (endSample - firstSample);
+}
+
+struct GlidePitchObservation {
+    double source = 0.0;
+    double intermediate = 0.0;
+    double converged = 0.0;
+    std::uint64_t invalidDiagnosticDelta = 0;
+};
+
+GlidePitchObservation renderProcessorGlide (
+    const int oscillator,
+    const int rangeIndex,
+    const int offsetIndex,
+    const int masterTuneIndex,
+    const float pitchWheel,
+    const bool oscillator3KeyboardControl,
+    TestContext& test)
+{
+    constexpr double sampleRate = 48000.0;
+    constexpr int sourceSamples = 65536;
+    constexpr int glideSamples = 192000;
+
+    MoogMiniAudioProcessor processor;
+    setParameter (processor, "osc1OnOff", oscillator == 1 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc2OnOff", oscillator == 2 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc3OnOff", oscillator == 3 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc1Waveform", 0.0f, test);
+    setParameter (processor, "osc2Waveform", 0.0f, test);
+    setParameter (processor, "osc3Waveform", 0.0f, test);
+    setParameter (processor, "osc1Range", static_cast<float> (rangeIndex) / 5.0f,
+                  test);
+    setParameter (processor, "osc2Range", static_cast<float> (rangeIndex) / 5.0f,
+                  test);
+    setParameter (processor, "osc3Range", static_cast<float> (rangeIndex) / 5.0f,
+                  test);
+    setParameter (processor, "tune", static_cast<float> (masterTuneIndex) / 10.0f,
+                  test);
+    setParameter (processor, "osc2Freq",
+                  static_cast<float> (oscillator == 2 ? offsetIndex : 8) / 16.0f,
+                  test);
+    setParameter (processor, "osc3Freq",
+                  static_cast<float> (oscillator == 3 ? offsetIndex : 8) / 16.0f,
+                  test);
+    setParameter (processor, "pitchWheelValue", pitchWheel, test);
+    setParameter (processor, "osc1Vol", oscillator == 1 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc2Vol", oscillator == 2 ? 1.0f : 0.0f, test);
+    setParameter (processor, "osc3Vol", oscillator == 3 ? 1.0f : 0.0f, test);
+    setParameter (processor, "outputVolKnob", 1.0f, test);
+    setParameter (processor, "loudnessSustainLevelKnob", 1.0f, test);
+    setParameter (processor, "filterCutoff", 1.0f, test);
+    setParameter (processor, "ctrlGlideKnob", 1.0f, test);
+    setParameter (processor, "glideSwitch", 0.0f, test);
+    setParameter (processor, "oscModSwitch", 0.0f, test);
+    setParameter (processor, "noiseOnOffSwitch", 0.0f, test);
+    setParameter (processor, "extInputVolSwitch", 0.0f, test);
+    setParameter (processor, "osc3CtrlMode", oscillator3KeyboardControl ? 1.0f : 0.0f,
+                  test);
+
+    processor.setRateAndBufferSizeDetails (sampleRate, glideSamples);
+    processor.prepareToPlay (sampleRate, glideSamples);
+    const auto diagnosticBefore = processor.getInvalidParameterValueCount();
+
+    juce::AudioBuffer<float> source (
+        processor.getTotalNumOutputChannels(), sourceSamples);
+    source.clear();
+    juce::MidiBuffer sourceMidi;
+    sourceMidi.addEvent (juce::MidiMessage::noteOn (1, 45, 1.0f), 0);
+    processor.processBlock (source, sourceMidi);
+
+    setParameter (processor, "glideSwitch", 1.0f, test);
+    juce::AudioBuffer<float> glide (
+        processor.getTotalNumOutputChannels(), glideSamples);
+    glide.clear();
+    juce::MidiBuffer targetMidi;
+    targetMidi.addEvent (juce::MidiMessage::noteOn (1, 57, 1.0f), 0);
+    processor.processBlock (glide, targetMidi);
+
+    GlidePitchObservation result {
+        .source = estimatePositiveCrossingFrequency (
+            source, sourceSamples - 32768, sourceSamples),
+        .intermediate = estimatePositiveCrossingFrequency (glide, 4096, 32768),
+        .converged = estimatePositiveCrossingFrequency (
+            glide, glideSamples - 32768, glideSamples),
+        .invalidDiagnosticDelta =
+            processor.getInvalidParameterValueCount() - diagnosticBefore,
+    };
+    processor.releaseResources();
+    return result;
 }
 
 void testPitchDomainContract (TestContext& test)
@@ -4515,6 +4616,85 @@ void testPitchDomainContract (TestContext& test)
                      && std::abs (osc3KeyboardDisabledPitch
                                   / expectedOsc3KeyboardDisabledPitch - 1.0) < 0.02,
                  "keyboard-control-disabled Oscillator 3 must ignore note and Pitch Wheel input");
+
+    struct GlideCase {
+        int oscillator;
+        int rangeIndex;
+        int offsetIndex;
+        int masterTuneIndex;
+        float wheel;
+        double sourceMidi;
+        double targetMidi;
+    };
+    constexpr std::array glideCases {
+        GlideCase { 1, 3, 8, 7, 0.75f, 49.5, 61.5 },
+        GlideCase { 2, 2, 11, 7, 0.75f, 40.5, 52.5 },
+        GlideCase { 3, 4, 6, 7, 0.75f, 59.5, 71.5 },
+    };
+    for (const auto& glideCase : glideCases) {
+        const auto observed = renderProcessorGlide (
+            glideCase.oscillator, glideCase.rangeIndex, glideCase.offsetIndex,
+            glideCase.masterTuneIndex, glideCase.wheel, true, test);
+        const auto sourceFrequency =
+            440.0 * std::exp2 ((glideCase.sourceMidi - 69.0) / 12.0);
+        const auto targetFrequency =
+            440.0 * std::exp2 ((glideCase.targetMidi - 69.0) / 12.0);
+        std::cout << "processor-glide oscillator=" << glideCase.oscillator
+                  << " source-hz=" << observed.source
+                  << " intermediate-hz=" << observed.intermediate
+                  << " converged-hz=" << observed.converged << '\n';
+        test.expect (
+            std::abs (observed.source / sourceFrequency - 1.0) < 0.02,
+            "musical oscillator source pitch must apply static pitch terms exactly once");
+        test.expect (
+            observed.intermediate > sourceFrequency * 1.05
+                && observed.intermediate < targetFrequency * 0.90,
+            "musical oscillator glide must expose a pitch strictly between source and target");
+        test.expect (
+            std::abs (observed.converged / targetFrequency - 1.0) < 0.02,
+            "musical oscillator glide must converge to the composed target pitch");
+        test.expect (
+            observed.invalidDiagnosticDelta == 0,
+            "valid musical oscillator glide must not emit invalid-composition diagnostics");
+    }
+
+    const auto keyboardDisabledGlide = renderProcessorGlide (
+        3, 3, 6, 7, 1.0f, false, test);
+    const auto keyboardDisabledFrequency =
+        440.0 * std::exp2 ((69.0 + 1.0 - 2.0 - 69.0) / 12.0);
+    test.expect (
+        std::abs (keyboardDisabledGlide.source / keyboardDisabledFrequency - 1.0)
+                < 0.02
+            && std::abs (keyboardDisabledGlide.intermediate
+                         / keyboardDisabledFrequency - 1.0) < 0.02
+            && std::abs (keyboardDisabledGlide.converged
+                         / keyboardDisabledFrequency - 1.0) < 0.02
+            && keyboardDisabledGlide.invalidDiagnosticDelta == 0,
+        "keyboard-control-disabled Oscillator 3 must remain reference-based throughout note glide");
+
+    constexpr std::array lowFrequencyWheelCases {
+        std::pair { 0.0f, -7.0 },
+        std::pair { 0.5f, 0.0 },
+        std::pair { 1.0f, 7.0 },
+    };
+    for (const auto& [normalizedWheel, bend] : lowFrequencyWheelCases) {
+        std::uint64_t diagnosticDelta = 0;
+        const auto rendered = renderProcessorPitch (
+            1, 8, 127, test, 0, 5, normalizedWheel, false, &diagnosticDelta,
+            true, 262144, 8192);
+        const auto expected =
+            440.0 * std::exp2 ((127.0 + bend - 69.0) / 12.0) / 256.0;
+        std::cout << "processor-lo wheel=" << normalizedWheel
+                  << " observed-hz=" << rendered
+                  << " expected-hz=" << expected
+                  << " diagnostic-delta=" << diagnosticDelta << '\n';
+        test.expect (
+            std::abs (rendered / expected - 1.0) < 0.01,
+            "LO processor output must apply relative Pitch Wheel bend exactly once");
+        test.expect (
+            diagnosticDelta == 0,
+            "LO processor output must bypass unsupported musical calibration without diagnostics");
+    }
 
     const auto processorSource =
         legacyFixtureFile ("Source/PluginProcessor.cpp").loadFileAsString();

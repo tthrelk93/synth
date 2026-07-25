@@ -2276,6 +2276,61 @@ public:
                         },
                     "version-two pitch settings must contain exactly seven entries");
 
+        beginTest ("version two work planning enforces the exact pair budget");
+        const auto ceilingPlan = planPitchV2AnalysisWork (5'760'000, 44100.0);
+        expect (ceilingPlan.valid
+                    && ceilingPlan.inputSamples == 5'760'000
+                    && ceilingPlan.analysisSamples == 57'326
+                    && ceilingPlan.decimation == 3
+                    && ceilingPlan.decimatedSamples == 19'108
+                    && ceilingPlan.minimumLag == 2
+                    && ceilingPlan.maximumLag == 3'675
+                    && ceilingPlan.coarsePairIterations == 63'482'682
+                    && ceilingPlan.refinementPairUpperBound == 515'934
+                    && ceilingPlan.totalPairUpperBound == 63'998'616
+                    && ceilingPlan.totalPairUpperBound <= pitchAnalysisPairBudget,
+                "loader-ceiling v2 work plan must select the exact largest safe subwindow");
+        const auto onePastBoundaryPlan =
+            planPitchV2AnalysisWork (57'327, 44100.0);
+        expect (onePastBoundaryPlan.valid
+                    && onePastBoundaryPlan.analysisSamples == 57'326
+                    && onePastBoundaryPlan.totalPairUpperBound == 63'998'616,
+                "one sample beyond the exact v2 work boundary must be truncated");
+        const auto saturatedPlan = planPitchV2AnalysisWork (
+            std::numeric_limits<size_t>::max(), 44100.0);
+        const auto nonFinitePlan = planPitchV2AnalysisWork (
+            5'760'000, std::numeric_limits<double>::quiet_NaN());
+        expect (saturatedPlan.valid
+                    && saturatedPlan.analysisSamples == 57'326
+                    && saturatedPlan.totalPairUpperBound <= pitchAnalysisPairBudget
+                    && ! nonFinitePlan.valid,
+                "v2 work planning must saturate overflow and reject non-finite rates");
+
+        beginTest ("version two completes a bounded end-to-end request above threshold");
+        const auto aboveThresholdTone = makeTone (48000.0, 45.0, 100000);
+        const auto aboveThreshold = registry.analyze (
+            "audio.pitch.v2",
+            AnalysisRequest {
+                .metric = "midi-semitones",
+                .sampleRate = 48000.0,
+                .audio = aboveThresholdTone,
+            });
+        expect (aboveThreshold.ok() && aboveThreshold.value.has_value()
+                    && aboveThreshold.value->size() == 1
+                    && std::abs (aboveThreshold.value->front().value - 45.0) < 0.005,
+                "above-threshold v2 analysis must complete within the governed work plan");
+
+        beginTest ("version two rejects a full-band request that cannot fit the work budget");
+        const auto impossibleBudgetTone = makeTone (22050.0, 69.0, 22048);
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2",
+            AnalysisRequest {
+                .metric = "midi-semitones",
+                .sampleRate = 22050.0,
+                .audio = impossibleBudgetTone,
+            }),
+            "analyzer.work-budget");
+
         beginTest ("fixture pitch analysis propagates the exact render sample rate");
         RenderFixture fixture;
         fixture.id = "pitch-sample-rate-propagation";
@@ -2953,6 +3008,37 @@ public:
         const auto v2BoundaryFrequency = 12000.0 / std::floor (12000.0 / 5000.0);
         const auto v2BoundaryTone = makeTone (
             48000.0, 69.0 + 12.0 * std::log2 (v2BoundaryFrequency / 440.0), 4096);
+        const auto exactV2MinimumBoundaryFrequency =
+            48000.0 / std::floor (48000.0 / 5000.0);
+        const auto exactV2MinimumBoundaryTone = makeTone (
+            48000.0,
+            69.0 + 12.0 * std::log2 (
+                exactV2MinimumBoundaryFrequency / 440.0),
+            4096);
+        std::vector<float> aperiodicPeriod (480);
+        std::uint32_t aperiodicState = 0x4d6f6f67u;
+        for (auto& sample : aperiodicPeriod) {
+            aperiodicState = aperiodicState * 1664525u + 1013904223u;
+            sample = static_cast<float> (
+                static_cast<double> (aperiodicState) / 4294967295.0 - 0.5);
+        }
+        std::vector<float> sixteenPeriodRecurrence (480 * 16);
+        for (size_t sample = 0; sample < sixteenPeriodRecurrence.size(); ++sample)
+            sixteenPeriodRecurrence[sample] =
+                aperiodicPeriod[sample % aperiodicPeriod.size()];
+        const auto interiorFundamental = registry.analyze (
+            "audio.pitch.v2",
+            AnalysisRequest {
+                .metric = "frequency-hz",
+                .sampleRate = 48000.0,
+                .audio = sixteenPeriodRecurrence,
+            });
+        expect (interiorFundamental.ok()
+                    && interiorFundamental.value.has_value()
+                    && interiorFundamental.value->size() == 1
+                    && std::abs (interiorFundamental.value->front().value - 100.0)
+                           < 0.01,
+                "a tied maximum-lag periodic multiple must not reject an interior fundamental");
         expectDiagnostic (registry.analyze (
             "audio.pitch.v2", AnalysisRequest { .sampleRate = 0.0, .audio = concertA }),
             "analyzer.sample-rate");
@@ -2965,6 +3051,13 @@ public:
         expectDiagnostic (registry.analyze (
             "audio.pitch.v2",
             AnalysisRequest { .sampleRate = 48000.0, .audio = v2BoundaryTone }),
+            "analyzer.pitch-window");
+        expectDiagnostic (registry.analyze (
+            "audio.pitch.v2",
+            AnalysisRequest {
+                .sampleRate = 48000.0,
+                .audio = exactV2MinimumBoundaryTone,
+            }),
             "analyzer.pitch-window");
         expectDiagnostic (registry.analyze (
             "audio.pitch.v2", AnalysisRequest { .sampleRate = 48000.0, .audio = ambiguous }),

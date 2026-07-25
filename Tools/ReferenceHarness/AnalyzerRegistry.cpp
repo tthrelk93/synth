@@ -8,6 +8,127 @@
 #include <numeric>
 
 namespace ReferenceHarness {
+
+PitchAnalysisWorkPlan planPitchV2AnalysisWork (
+    const std::size_t inputSamples,
+    const double sampleRate) noexcept
+{
+    PitchAnalysisWorkPlan rejected;
+    rejected.inputSamples = inputSamples;
+    if (! std::isfinite (sampleRate) || sampleRate <= 0.0
+        || sampleRate / 5000.0
+               > static_cast<double> (std::numeric_limits<std::size_t>::max())
+        || sampleRate / 4.0
+               > static_cast<double> (std::numeric_limits<std::size_t>::max()))
+        return rejected;
+
+    const auto saturatingMultiply = [] (const std::uint64_t left,
+                                        const std::uint64_t right) {
+        return right != 0
+                    && left > std::numeric_limits<std::uint64_t>::max() / right
+                 ? std::numeric_limits<std::uint64_t>::max()
+                 : left * right;
+    };
+    const auto saturatingAdd = [] (const std::uint64_t left,
+                                   const std::uint64_t right) {
+        return left > std::numeric_limits<std::uint64_t>::max() - right
+                 ? std::numeric_limits<std::uint64_t>::max()
+                 : left + right;
+    };
+    const auto originalMaximumLag = std::min (
+        static_cast<std::size_t> (std::floor (sampleRate / 4.0)),
+        inputSamples / 4);
+    const auto originalWork = saturatingMultiply (
+        static_cast<std::uint64_t> (inputSamples),
+        static_cast<std::uint64_t> (originalMaximumLag));
+    const auto decimation =
+        originalWork > pitchAnalysisPairBudget
+          ? std::max<std::size_t> (
+                1, static_cast<std::size_t> (
+                       std::floor (sampleRate / 12000.0)))
+          : std::size_t { 1 };
+    const auto analysisRate =
+        sampleRate / static_cast<double> (decimation);
+    const auto minimumLag = static_cast<std::size_t> (
+        std::max (2.0, std::floor (analysisRate / 5000.0)));
+    const auto configuredMaximumLag = static_cast<std::size_t> (
+        std::floor (analysisRate / 4.0));
+
+    const auto evaluate = [&] (const std::size_t analysisSamples) {
+        PitchAnalysisWorkPlan plan {
+            .valid = true,
+            .inputSamples = inputSamples,
+            .analysisSamples = analysisSamples,
+            .decimation = decimation,
+            .decimatedSamples = analysisSamples / decimation,
+            .minimumLag = minimumLag,
+        };
+        plan.maximumLag = std::min (
+            configuredMaximumLag, plan.decimatedSamples / 4);
+        if (plan.maximumLag <= plan.minimumLag)
+            return plan;
+
+        const auto firstLag = plan.minimumLag - 1;
+        const auto lastLag = plan.maximumLag + 1;
+        const auto lagCount = lastLag - firstLag + 1;
+        const auto allPairs = saturatingMultiply (
+            static_cast<std::uint64_t> (plan.decimatedSamples),
+            static_cast<std::uint64_t> (lagCount));
+        auto sumFactor = static_cast<std::uint64_t> (firstLag + lastLag);
+        auto countFactor = static_cast<std::uint64_t> (lagCount);
+        if (countFactor % 2u == 0u)
+            countFactor /= 2u;
+        else
+            sumFactor /= 2u;
+        const auto skippedPairs = saturatingMultiply (sumFactor, countFactor);
+        plan.coarsePairIterations =
+            allPairs >= skippedPairs ? allPairs - skippedPairs : 0;
+        if (decimation > 1) {
+            const auto refinementLagCount =
+                saturatingAdd (
+                    saturatingMultiply (
+                        2u, static_cast<std::uint64_t> (decimation)),
+                    3u);
+            plan.refinementPairUpperBound = saturatingMultiply (
+                refinementLagCount,
+                static_cast<std::uint64_t> (analysisSamples));
+        }
+        plan.totalPairUpperBound = saturatingAdd (
+            plan.coarsePairIterations, plan.refinementPairUpperBound);
+        return plan;
+    };
+
+    const auto minimumFullBandDecimatedSamples = saturatingMultiply (
+        4u, static_cast<std::uint64_t> (configuredMaximumLag));
+    const auto minimumFullBandSamples = saturatingMultiply (
+        minimumFullBandDecimatedSamples,
+        static_cast<std::uint64_t> (decimation));
+    if (minimumFullBandSamples <= inputSamples
+        && (minimumFullBandSamples
+                > std::numeric_limits<std::size_t>::max()
+            || evaluate (
+                   static_cast<std::size_t> (minimumFullBandSamples))
+                       .totalPairUpperBound > pitchAnalysisPairBudget))
+        return rejected;
+
+    const auto fullPlan = evaluate (inputSamples);
+    if (fullPlan.totalPairUpperBound <= pitchAnalysisPairBudget)
+        return fullPlan;
+
+    std::size_t first = 0;
+    std::size_t last = inputSamples;
+    while (first < last) {
+        const auto midpoint = first + (last - first) / 2
+                            + (last - first) % 2;
+        if (evaluate (midpoint).totalPairUpperBound
+                <= pitchAnalysisPairBudget)
+            first = midpoint;
+        else
+            last = midpoint - 1;
+    }
+    return evaluate (first);
+}
+
 namespace {
 
 template <typename T>
@@ -468,24 +589,20 @@ LoadResult<Metrics> analyzeAudioPitch (
         }))
         return reject ("analyzer.non-finite",
                        "pitch analysis requires only finite audio samples");
+    size_t decimation = 1;
+    if (configuration.decimate) {
+        const auto workPlan =
+            planPitchV2AnalysisWork (audio.size(), request.sampleRate);
+        if (! workPlan.valid)
+            return reject (
+                "analyzer.work-budget",
+                "pitch analysis cannot preserve the configured frequency band within the normalized-correlation work budget");
+        // A bounded tail retains the latest steady-state evidence from the
+        // caller's selected event window without consulting expected truth.
+        audio = audio.last (workPlan.analysisSamples);
+        decimation = workPlan.decimation;
+    }
     const auto originalAudio = audio;
-
-    constexpr size_t originalCorrelationPairBudget = 64'000'000;
-    const auto boundedOriginalMaximumLag = static_cast<size_t> (
-        std::min (std::floor (
-                      request.sampleRate / configuration.minimumFrequency),
-                  static_cast<double> (originalAudio.size() / 4)));
-    const auto originalCorrelationPairWork =
-        boundedOriginalMaximumLag != 0
-            && originalAudio.size()
-                   > std::numeric_limits<size_t>::max() / boundedOriginalMaximumLag
-        ? std::numeric_limits<size_t>::max()
-        : originalAudio.size() * boundedOriginalMaximumLag;
-    const auto decimation = configuration.decimate
-            && originalCorrelationPairWork > originalCorrelationPairBudget
-        ? std::max<size_t> (
-              1, static_cast<size_t> (std::floor (request.sampleRate / 12000.0)))
-        : size_t { 1 };
     const auto analysisRate =
         request.sampleRate / static_cast<double> (decimation);
     std::vector<float> decimated;
@@ -605,16 +722,6 @@ LoadResult<Metrics> analyzeAudioPitch (
             return interpolatedPeak (left.lag) < interpolatedPeak (right.lag);
         });
     const auto strongestInterpolatedPeak = interpolatedPeak (strongestPeak->lag);
-    const auto configuredBoundary = std::find_if (
-        peaks.begin(), peaks.end(), [&] (const auto& peak) {
-            return (peak.lag == minimumLag || peak.lag == maximumLag)
-                && peak.correlation >= 0.80
-                && interpolatedPeak (peak.lag)
-                       >= strongestInterpolatedPeak - peakTieTolerance;
-        });
-    if (configuration.decimate && configuredBoundary != peaks.end())
-        return reject ("analyzer.pitch-window",
-                       "pitch correlation peak lies on the search boundary");
     const auto selected = std::find_if (peaks.begin(), peaks.end(), [&] (const auto& peak) {
         return interpolatedPeak (peak.lag)
             >= strongestInterpolatedPeak - peakTieTolerance;
@@ -627,6 +734,38 @@ LoadResult<Metrics> analyzeAudioPitch (
                        "pitch correlation peak lies on the search boundary");
 
     auto selectedLag = interpolateLag (selected->lag);
+    const auto recurrenceBelowMinimumLag =
+        configuration.decimate
+        && std::adjacent_find (
+               peaks.begin(), peaks.end(), [&] (const auto& left, const auto& right) {
+                   return left.correlation >= 0.80 && right.correlation >= 0.80
+                       && std::abs (left.correlation - strongest->correlation) <= 0.02
+                       && std::abs (right.correlation - strongest->correlation) <= 0.02
+                       && right.lag - left.lag < minimumLag;
+               }) != peaks.end();
+    if (recurrenceBelowMinimumLag)
+        return reject (
+            "analyzer.pitch-window",
+            "pitch recurrence fundamental lies below the configured lag range");
+
+    const auto periodicMultipleOfSelected = [&] (const auto& peak) {
+        const auto ratio = interpolateLag (peak.lag) / selectedLag;
+        const auto multiple = std::max (1.0, std::round (ratio));
+        return std::abs (ratio - multiple) <= 0.05;
+    };
+    const auto configuredBoundary = std::find_if (
+        peaks.begin(), peaks.end(), [&] (const auto& peak) {
+            return (peak.lag == minimumLag || peak.lag == maximumLag)
+                && peak.correlation >= 0.80
+                && interpolatedPeak (peak.lag)
+                       >= strongestInterpolatedPeak - peakTieTolerance;
+        });
+    if (configuration.decimate && configuredBoundary != peaks.end()
+        && ! periodicMultipleOfSelected (*configuredBoundary))
+        return reject (
+            "analyzer.pitch-window",
+            "pitch correlation boundary competitor is not a periodic recurrence");
+
     const auto recurrenceBase = std::find_if (
         peaks.begin(), peaks.end(), [&] (const auto& peak) {
             return peak.correlation >= 0.80

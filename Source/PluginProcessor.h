@@ -15,6 +15,7 @@
 #include "LadderFilter.h"
 #include "ModWheel.h"
 #include "ParameterRegistry.h"
+#include "PitchDomain.h"
 #include "StateContract.h"
 
 //==============================================================================
@@ -323,7 +324,7 @@ private:
 
     float sanitizeParameterValue (ParameterRegistry::Key key, float value) const noexcept;
     float composeMusicalFrequency (
-        int midiNote,
+        PitchDomain::Checked<PitchDomain::Semitones> note,
         int rangeIndex,
         int masterTuneIndex,
         int oscillatorOffsetIndex,

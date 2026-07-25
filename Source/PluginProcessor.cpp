@@ -91,7 +91,7 @@ MoogMiniAudioProcessor::~MoogMiniAudioProcessor()
 }
 
 float MoogMiniAudioProcessor::composeMusicalFrequency (
-    const int midiNote,
+    const PitchDomain::Checked<PitchDomain::Semitones> note,
     const int rangeIndex,
     const int masterTuneIndex,
     const int oscillatorOffsetIndex,
@@ -100,7 +100,6 @@ float MoogMiniAudioProcessor::composeMusicalFrequency (
     const size_t oscillatorIndex,
     bool& invalidMusicalCompositionDiagnosed) noexcept
 {
-    const auto note = PitchDomain::midiNote (midiNote);
     const auto range = PitchDomain::range (rangeIndex);
     const auto masterTune = PitchDomain::masterTune (masterTuneIndex);
     const auto oscillatorOffset = PitchDomain::oscillatorOffset (oscillatorOffsetIndex);
@@ -473,6 +472,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         + (keyboardCtrlSwitch2Value ? (2.0f / 3.0f) : 0.0f);
     const float referenceFrequency = static_cast<float>(
         juce::MidiMessage::getMidiNoteInHertz(referenceNote));
+    const auto referencePitchCoordinate = PitchDomain::midiNote (referenceNote);
     
     
     for (const auto midiMessage : midiMessages)
@@ -618,6 +618,11 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         }
         // Apply pitch wheel without accumulating drift.
         float effectiveFrequency = currentGlideFrequency * pitchWheelRatio;
+        const auto glidePitchCoordinate =
+            currentNoteNumber >= 0
+              ? PitchDomain::fromHertz (
+                    static_cast<double> (currentGlideFrequency))
+              : PitchDomain::Checked<PitchDomain::Semitones> {};
 
         const bool osc1UsesMusicalPitch =
             rangeSelectionOsc1 >= 1 && rangeSelectionOsc1 <= 5;
@@ -638,12 +643,13 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
         float osc3SampleRaw = 0.0f;
         if (osc3OnOff || filterModSwitchValue || oscModSwitchValue) {
             if (osc3UsesMusicalPitch) {
-                const auto osc3MidiNote = osc3CtrlMode ? currentNoteNumber : referenceNote;
+                const auto osc3PitchCoordinate =
+                    osc3CtrlMode ? glidePitchCoordinate : referencePitchCoordinate;
                 const auto osc3PitchWheelNormalized =
                     osc3CtrlMode ? static_cast<double> (pitchWheelValue) : 0.5;
                 osc3SampleRaw = osc3.processNextSampleAtFrequency (
                     composeMusicalFrequency (
-                        osc3MidiNote, rangeSelectionOsc3, tuneSelectionOsc1,
+                        osc3PitchCoordinate, rangeSelectionOsc3, tuneSelectionOsc1,
                         freqSelectionOsc3, osc3PitchWheelNormalized, 1.0, 2,
                         invalidMusicalCompositionDiagnosed));
             } else {
@@ -673,7 +679,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             if (osc1UsesMusicalPitch) {
                 osc1Sample = osc1.processNextSampleAtFrequency (
                     composeMusicalFrequency (
-                        currentNoteNumber, rangeSelectionOsc1, tuneSelectionOsc1, 8,
+                        glidePitchCoordinate, rangeSelectionOsc1, tuneSelectionOsc1, 8,
                         static_cast<double> (pitchWheelValue), legacyModulationRatio, 0,
                         invalidMusicalCompositionDiagnosed));
             } else {
@@ -689,7 +695,7 @@ void MoogMiniAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juc
             if (osc2UsesMusicalPitch) {
                 osc2Sample = osc2.processNextSampleAtFrequency (
                     composeMusicalFrequency (
-                        currentNoteNumber, rangeSelectionOsc2, tuneSelectionOsc1,
+                        glidePitchCoordinate, rangeSelectionOsc2, tuneSelectionOsc1,
                         freqSelectionOsc2, static_cast<double> (pitchWheelValue),
                         legacyModulationRatio, 1, invalidMusicalCompositionDiagnosed));
             } else {
