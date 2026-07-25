@@ -28,14 +28,14 @@ record is the [F0 harness foundation evidence](evidence/workstream-12/f0-harness
 
 | ID | Status | F0 result / remaining acceptance |
 |---|---|---|
-| TST-001 | in-progress | Five deterministic state/MIDI/automation fixtures produce 30 hashed per-render artifacts plus one root metric artifact and one report, for 32 candidate files total. The two Workstream 04 fixtures add 37 governed pitch requests; preset/audio-input and later owner-fixture coverage remains open. |
-| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, and `audio.pitch.v1` pass synthetic, finite-extreme, and owner-fixture contracts. The pitch analyzer's grid maximum error is `0.000419994` semitone, and its weak-fundamental/ten-times-stronger-harmonic error is `0.000010641`; the complete owner-analyzer catalog remains open. |
+| TST-001 | in-progress | Eight deterministic state/MIDI/automation fixtures produce 48 hashed per-render artifacts plus one root metric artifact and one report, for 50 candidate files total. Workstream 04 now owns five pitch fixtures and 24 governed indexed inputs; preset/audio-input and later owner-fixture coverage remains open. |
+| TST-002 | in-progress | `signal.stats.v1`, `control.step.v1`, `audio.click.v1`, preserved `audio.pitch.v1`, and new `audio.pitch.v2` pass synthetic, finite-extreme, and owner-fixture contracts. V2's synthetic maximum error is `0.001699433` semitone and its governed cross-rate maximum is `0.007773584344040`; the complete owner-analyzer catalog remains open. |
 | TST-003 | in-progress | Frozen indexed inputs, candidate-only writes, exact hashes, and overwrite rejection are executable. An approved golden regeneration and two-reviewer freeze has not been exercised. |
 | TST-004 | in-progress | Gate classifications and authority boundaries are executable and listening cannot waive numerical status. Later populated evidence classes remain open. |
 | TST-005 | in-progress | Missing hardware provenance remains visible as `awaiting-approved-reference`; no hardware capture campaign or reference-instrument record has run. |
-| TST-006 | in-progress | The machine-readable manifest remains globally `draft`; four derived PAR-006 policies plus nine bound PIT-001/PIT-002 policies are approved. Published, measured-hardware, performance, and later owner-DSP evidence remains incomplete. |
-| TST-007 | in-progress | The map exactly covers 127 requirements and the 110-gate canonical report/release verifier is authoritative. The honest report is 16 pass / 92 not-run / 19 awaiting / 0 fail and not release-ready. |
-| TST-008 | in-progress | F0 proves repeat equality across three block partitions and records state/build provenance on Darwin arm64. The full sample-rate/reset/platform/architecture/host matrix remains open. |
+| TST-006 | in-progress | The machine-readable manifest remains globally `draft`; 61 derived and six published policies include 54 exact PIT-003/PIT-004 gates with mandatory source hashes. Measured-hardware, performance, and later owner-DSP evidence remains incomplete. |
+| TST-007 | in-progress | The map exactly covers 127 requirements and the 164-gate canonical report/release verifier is authoritative. The honest report is 17 pass / 91 not-run / 19 awaiting / 0 fail and not release-ready. |
+| TST-008 | in-progress | F0 proves repeat equality across three block partitions and records state/build provenance on Darwin arm64; Workstream 04 adds exact 44.1/48/96 kHz fixture coverage. The full reset/platform/architecture/host matrix remains open. |
 | TST-009 | in-progress | The status model prevents listening from replacing numerical gates. No blinded, randomized, level-matched listening campaign has run. |
 
 ## Original pre-remediation code evidence
@@ -192,6 +192,15 @@ to a `0.00001` numerical tie, while retaining the existing ambiguity and
 integer-recurrence contract.
 It does not approve the global manifest, close any TST requirement, or supply
 hardware, host, listening, or release evidence.
+
+The later [PIT-003/PIT-004 pitch matrix evidence](evidence/workstream-04/pit-003-pit-004-pitch-matrix.md)
+adds three immutable rate fixtures, preserved v1 plus `audio.pitch.v2`, 54
+derived/published gates, mandatory manual-source hashing, and repeat-equal
+50-file candidates. The resulting 127-row/164-gate report is
+17 pass / 91 not-run / 19 awaiting / 0 fail and remains non-release-ready.
+PIT-004 passes; PIT-003 remains `awaiting-approved-reference` because no
+approved LO/hardware calibration campaign has run. This extension changes no
+TST status and does not approve the global manifest.
 
 ## Second senior-review remediation
 

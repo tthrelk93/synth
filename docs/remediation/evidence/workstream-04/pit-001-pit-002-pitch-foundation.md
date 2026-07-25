@@ -5,6 +5,21 @@ Date: 2026-07-23
 Status: PIT-001 and PIT-002 pass. Workstream 04 and the product remain
 incomplete and non-release-ready.
 
+## 2026-07-24 acceptance-policy supersession
+
+The [PIT-003/PIT-004 closeout](pit-003-pit-004-pitch-matrix.md) corrected only
+the acceptance interpretation of the immutable PIT-002 fixture. The current
+authoritative expected composed-pitch results are exactly `72.5`, `51.5`, and
+`87.0` semitones for Oscillators 1, 2, and 3. The immutable fixture bytes and
+their SHA-256
+`63a2a95b9caee4799d814abe647e4c2433b82eb59fddebf502f38f68864e12ee`
+did not change.
+
+The original `51.863137138648348` and `87.343587129994475` values, candidate
+hashes, report counts, and metrics below are preserved as dated historical
+Task 5 evidence. They are not the current acceptance policy and must not be
+used to regenerate or reinterpret the immutable fixture.
+
 ## Claim boundary
 
 This evidence closes only:
